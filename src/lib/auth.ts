@@ -59,7 +59,8 @@ export function setAdminCookie(sessionId: string) {
   cookieStore.set('admin-session', sessionId, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
+    path: '/plebiscite',
     maxAge: 24 * 60 * 60 // 24 hours
   });
 }
@@ -113,7 +114,8 @@ export function setVoterCookie(sessionId: string, plebisciteSlug: string) {
   cookieStore.set(`voter-session-${plebisciteSlug}`, sessionId, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
+    path: '/plebiscite',
     maxAge: 2 * 60 * 60 // 2 hours
   });
 }

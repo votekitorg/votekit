@@ -12,12 +12,16 @@ interface Question {
 }
 
 export default function CreatePlebiscite() {
+  const now = new Date();
+  const defaultOpenDate = now.toISOString().slice(0, 16);
+  const defaultCloseDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     info_url: '',
-    open_date: '',
-    close_date: ''
+    open_date: defaultOpenDate,
+    close_date: defaultCloseDate
   });
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,11 +29,6 @@ export default function CreatePlebiscite() {
   const [success, setSuccess] = useState('');
   
   const router = useRouter();
-
-  // Set default dates (open now, close in 7 days)
-  const now = new Date();
-  const defaultOpenDate = now.toISOString().slice(0, 16);
-  const defaultCloseDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -124,7 +123,7 @@ export default function CreatePlebiscite() {
     setSuccess('');
 
     try {
-      const response = await fetch('/api/admin/plebiscites', {
+      const response = await fetch('/plebiscite/api/admin/plebiscites', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,10 +137,7 @@ export default function CreatePlebiscite() {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        setSuccess('Plebiscite created successfully!');
-        setTimeout(() => {
-          router.push(`/admin/plebiscites/${result.plebiscite.id}`);
-        }, 2000);
+        router.push(`/admin/plebiscites/${result.plebiscite.id}`);
       } else {
         setError(result.error || 'Failed to create plebiscite');
       }
@@ -229,7 +225,7 @@ export default function CreatePlebiscite() {
                     type="datetime-local"
                     id="open_date"
                     name="open_date"
-                    value={formData.open_date || defaultOpenDate}
+                    value={formData.open_date}
                     onChange={handleInputChange}
                     className="input-field"
                     required
@@ -244,7 +240,7 @@ export default function CreatePlebiscite() {
                     type="datetime-local"
                     id="close_date"
                     name="close_date"
-                    value={formData.close_date || defaultCloseDate}
+                    value={formData.close_date}
                     onChange={handleInputChange}
                     className="input-field"
                     required

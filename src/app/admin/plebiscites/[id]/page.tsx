@@ -166,6 +166,26 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
           </div>
         </div>
 
+        {/* Voter Roll Warning */}
+        {stats.totalVoters === 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-start">
+              <svg className="w-6 h-6 text-yellow-600 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <div>
+                <h4 className="text-sm font-semibold text-yellow-800">No voters on the roll</h4>
+                <p className="text-sm text-yellow-700 mt-1">
+                  You need to upload a voter roll before members can vote. Upload a CSV file of member email addresses.
+                </p>
+                <Link href="/admin/voters" className="inline-block mt-2 text-sm font-medium text-yellow-800 underline hover:text-yellow-900">
+                  Manage Voter Roll &rarr;
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="card">

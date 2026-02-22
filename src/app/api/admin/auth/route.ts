@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
       response.cookies.set('admin-session', sessionId, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: 'lax',
+        path: '/plebiscite',
         maxAge: 24 * 60 * 60 // 24 hours
       });
 

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function AdminLogin() {
   const [password, setPassword] = useState('');
@@ -25,7 +26,7 @@ export default function AdminLogin() {
       formData.append('action', 'login');
       formData.append('password', password);
 
-      const response = await fetch('/api/admin/auth', {
+      const response = await fetch('/plebiscite/api/admin/auth', {
         method: 'POST',
         body: formData,
       });
@@ -132,12 +133,12 @@ export default function AdminLogin() {
       </div>
 
       <div className="mt-8 text-center">
-        <a
+        <Link
           href="/"
           className="text-primary hover:text-primary-dark text-sm font-medium"
         >
           ← Back to Public Site
-        </a>
+        </Link>
       </div>
     </div>
   );
