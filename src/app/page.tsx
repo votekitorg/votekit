@@ -82,12 +82,20 @@ export default async function HomePage() {
               </div>
               <h1 className="text-2xl font-bold text-gray-900">Member Plebiscite Platform</h1>
             </div>
-            <Link 
-              href="/admin"
-              className="text-sm text-gray-600 hover:text-primary transition-colors"
-            >
-              Admin
-            </Link>
+            <div className="flex items-center space-x-4">
+              <Link 
+                href="/about"
+                className="text-sm text-gray-600 hover:text-primary transition-colors"
+              >
+                How It Works
+              </Link>
+              <Link 
+                href="/admin"
+                className="text-sm text-gray-600 hover:text-primary transition-colors"
+              >
+                Admin
+              </Link>
+            </div>
           </div>
         </div>
       </header>
