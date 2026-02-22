@@ -113,7 +113,7 @@ export default function VotingPage({ params }: VotingPageProps) {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/verify', {
+      const response = await fetch('/plebiscite/api/auth/verify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -152,7 +152,7 @@ export default function VotingPage({ params }: VotingPageProps) {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/confirm', {
+      const response = await fetch('/plebiscite/api/auth/confirm', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -180,7 +180,7 @@ export default function VotingPage({ params }: VotingPageProps) {
 
   const handleVoteSubmit = async (votes: { [questionId: number]: any }) => {
     try {
-      const response = await fetch('/api/vote', {
+      const response = await fetch('/plebiscite/api/vote', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -211,7 +211,7 @@ export default function VotingPage({ params }: VotingPageProps) {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/verify', {
+      const response = await fetch('/plebiscite/api/auth/verify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

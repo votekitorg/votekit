@@ -2,6 +2,47 @@ import { NextRequest, NextResponse } from 'next/server';
 import db, { cleanupExpiredCodes } from '@/lib/db';
 import { createVoterSession } from '@/lib/auth';
 
+// Brute force protection: track failed attempts per email
+const failedAttempts = new Map<string, { count: number; lockedUntil: number }>();
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 minutes
+
+function checkBruteForce(email: string): { blocked: boolean; remaining: number } {
+  const now = Date.now();
+  const record = failedAttempts.get(email);
+  
+  if (!record) return { blocked: false, remaining: MAX_ATTEMPTS };
+  
+  // Reset if lockout has expired
+  if (record.lockedUntil && now > record.lockedUntil) {
+    failedAttempts.delete(email);
+    return { blocked: false, remaining: MAX_ATTEMPTS };
+  }
+  
+  if (record.count >= MAX_ATTEMPTS) {
+    return { blocked: true, remaining: 0 };
+  }
+  
+  return { blocked: false, remaining: MAX_ATTEMPTS - record.count };
+}
+
+function recordFailedAttempt(email: string): void {
+  const record = failedAttempts.get(email) || { count: 0, lockedUntil: 0 };
+  record.count++;
+  
+  if (record.count >= MAX_ATTEMPTS) {
+    record.lockedUntil = Date.now() + LOCKOUT_DURATION;
+    // Also invalidate all active codes for this email
+    db.prepare('UPDATE verification_codes SET used = TRUE WHERE email = ? AND used = FALSE').run(email);
+  }
+  
+  failedAttempts.set(email, record);
+}
+
+function clearFailedAttempts(email: string): void {
+  failedAttempts.delete(email);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -15,6 +56,15 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+
+    // Check brute force lockout
+    const bruteCheck = checkBruteForce(normalizedEmail);
+    if (bruteCheck.blocked) {
+      return NextResponse.json(
+        { error: 'Too many failed attempts. Please request a new verification code after 15 minutes.' },
+        { status: 429 }
+      );
+    }
 
     // Clean up expired codes first
     cleanupExpiredCodes();
@@ -47,9 +97,13 @@ export async function POST(request: NextRequest) {
     `).get(normalizedEmail, code, now.toISOString()) as any;
 
     if (!verification) {
+      recordFailedAttempt(normalizedEmail);
+      const remaining = checkBruteForce(normalizedEmail).remaining;
       return NextResponse.json(
-        { error: 'Invalid or expired verification code' },
-        { status: 400 }
+        { error: remaining > 0 
+            ? `Invalid or expired verification code. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`
+            : 'Too many failed attempts. Please request a new verification code after 15 minutes.' },
+        { status: remaining > 0 ? 400 : 429 }
       );
     }
 
@@ -73,6 +127,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Clear failed attempts on success
+    clearFailedAttempts(normalizedEmail);
+
     // Mark code as used
     db.prepare('UPDATE verification_codes SET used = TRUE WHERE id = ?').run(verification.id);
 
@@ -88,7 +145,8 @@ export async function POST(request: NextRequest) {
     response.cookies.set(`voter-session-${plebisciteSlug}`, sessionId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
+      path: '/plebiscite',
       maxAge: 2 * 60 * 60 // 2 hours
     });
 

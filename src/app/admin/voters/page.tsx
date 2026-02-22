@@ -31,7 +31,7 @@ export default function ManageVoters() {
 
   const fetchVoters = async () => {
     try {
-      const response = await fetch('/api/admin/voters');
+      const response = await fetch('/plebiscite/api/admin/voters');
       const result = await response.json();
       
       if (response.ok) {
@@ -63,7 +63,7 @@ export default function ManageVoters() {
     setSuccess('');
 
     try {
-      const response = await fetch('/api/admin/voters', {
+      const response = await fetch('/plebiscite/api/admin/voters', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -126,7 +126,7 @@ export default function ManageVoters() {
       }
 
       // Upload emails
-      const response = await fetch('/api/admin/voters', {
+      const response = await fetch('/plebiscite/api/admin/voters', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -190,7 +190,7 @@ export default function ManageVoters() {
     }
 
     try {
-      const response = await fetch('/api/admin/voters?action=clear-all', {
+      const response = await fetch('/plebiscite/api/admin/voters?action=clear-all', {
         method: 'DELETE',
       });
 
