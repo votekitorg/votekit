@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { tabulateIRV, exportIRVResultsCSV } from '@/lib/irv';
+import { tabulateCondorcet, exportCondorcetResultsCSV } from '@/lib/condorcet';
 
 export async function GET(
   request: NextRequest,
@@ -148,6 +149,31 @@ export async function GET(
           csvData += `Question: ${question.title}\n`;
           csvData += `Type: Ranked Choice (IRV)\n`;
           csvData += exportIRVResultsCSV(irvResult);
+          csvData += '\n';
+        }
+      } else if (question.type === 'condorcet') {
+        // Process Condorcet votes
+        const condorcetVotes = votes.map((vote: any) => {
+          const voteData = JSON.parse(vote.vote_data);
+          return { preferences: voteData.preferences || [] };
+        });
+
+        const condorcetResult = tabulateCondorcet(condorcetVotes, options);
+        
+        questionResult.results = {
+          winner: condorcetResult.winner,
+          condorcetWinner: condorcetResult.condorcetWinner,
+          method: condorcetResult.method,
+          pairwiseMatrix: condorcetResult.pairwiseMatrix,
+          rounds: condorcetResult.rounds,
+          totalVotes: condorcetResult.totalVotes,
+          rankings: condorcetResult.rankings
+        };
+
+        if (format === 'csv') {
+          csvData += `Question: ${question.title}\n`;
+          csvData += `Type: Condorcet (${condorcetResult.method})\n`;
+          csvData += exportCondorcetResultsCSV(condorcetResult);
           csvData += '\n';
         }
       }

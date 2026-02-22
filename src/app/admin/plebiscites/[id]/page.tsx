@@ -105,6 +105,7 @@ function getTypeDisplayName(type: string): string {
     case 'yes_no': return 'Yes/No';
     case 'multiple_choice': return 'Multiple Choice';
     case 'ranked_choice': return 'Ranked Choice (IRV)';
+    case 'condorcet': return 'Condorcet (Pairwise/Schulze)';
     default: return type;
   }
 }

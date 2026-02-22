@@ -7,7 +7,7 @@ import AdminLayout from '@/components/AdminLayout';
 interface Question {
   title: string;
   description: string;
-  type: 'yes_no' | 'multiple_choice' | 'ranked_choice';
+  type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
   options: string[];
 }
 
@@ -327,7 +327,8 @@ export default function CreatePlebiscite() {
                           >
                             <option value="yes_no">Yes/No</option>
                             <option value="multiple_choice">Multiple Choice</option>
-                            <option value="ranked_choice">Ranked Choice (Preferential Voting)</option>
+                            <option value="ranked_choice">Ranked Choice (Preferential / IRV)</option>
+                            <option value="condorcet">Condorcet (Pairwise / Schulze)</option>
                           </select>
                         </div>
 
@@ -375,6 +376,11 @@ export default function CreatePlebiscite() {
                           {question.type === 'ranked_choice' && (
                             <p className="text-sm text-gray-500 mt-2">
                               Voters will rank these options in order of preference. IRV (Instant Runoff Voting) will be used to determine the winner.
+                            </p>
+                          )}
+                          {question.type === 'condorcet' && (
+                            <p className="text-sm text-gray-500 mt-2">
+                              Voters will rank these options. Every option is compared head-to-head against every other. If one beats all others, it wins outright. Otherwise, the Schulze method resolves cycles.
                             </p>
                           )}
                         </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import db, { generateReceiptCode } from '@/lib/db';
 import { getVoterSessionFromRequest } from '@/lib/auth';
 import { validateIRVVote } from '@/lib/irv';
+import { validateCondorcetVote } from '@/lib/condorcet';
 
 export async function POST(request: NextRequest) {
   try {
@@ -152,6 +153,26 @@ export async function POST(request: NextRequest) {
 
         // Validate IRV vote
         if (!validateIRVVote(voteValue, options)) {
+          return NextResponse.json(
+            { error: `Invalid ranking for question: ${question.title}` },
+            { status: 400 }
+          );
+        }
+
+        validatedVotes.push({
+          questionId: question.id,
+          voteData: { preferences: voteValue }
+        });
+
+      } else if (question.type === 'condorcet') {
+        if (!Array.isArray(voteValue) || voteValue.length !== options.length) {
+          return NextResponse.json(
+            { error: `Must rank all options for question: ${question.title}` },
+            { status: 400 }
+          );
+        }
+
+        if (!validateCondorcetVote(voteValue, options)) {
           return NextResponse.json(
             { error: `Invalid ranking for question: ${question.title}` },
             { status: 400 }

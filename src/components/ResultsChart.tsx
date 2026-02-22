@@ -2,7 +2,7 @@
 
 interface ResultsChartProps {
   data: { [key: string]: number };
-  type: 'yes_no' | 'multiple_choice' | 'ranked_choice';
+  type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
   title: string;
   totalVotes?: number;
 }

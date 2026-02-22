@@ -283,6 +283,98 @@ export default function AboutPage() {
                 </p>
               </div>
             </div>
+
+            {/* Condorcet */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-primary px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-lg font-semibold text-white">Condorcet (Pairwise Comparison)</h4>
+                  <span className="text-xs bg-white bg-opacity-20 text-white px-2 py-1 rounded-full">Advanced</span>
+                </div>
+              </div>
+              <div className="p-6">
+                <p className="text-gray-600 mb-4">
+                  Members <strong>rank all options in order of preference</strong>, just like Ranked Choice. 
+                  But instead of eliminating candidates round by round, every option is compared 
+                  <strong> head-to-head against every other option</strong> using the rankings. If one option 
+                  beats all others in direct comparison, it&apos;s the clear winner.
+                </p>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Example:</p>
+                  <p className="text-sm text-gray-600 italic mb-3">
+                    &quot;Rank the following policy approaches for housing reform:&quot;
+                  </p>
+                  <div className="space-y-2 text-sm text-gray-700">
+                    <div>A. Rent caps</div>
+                    <div>B. Public housing investment</div>
+                    <div>C. Zoning reform</div>
+                    <div>D. Tax incentives for developers</div>
+                  </div>
+                  <div className="mt-3 text-sm text-gray-600">
+                    The system checks: Does A beat B? Does A beat C? Does A beat D? Does B beat C? 
+                    ...and so on for every possible pair.
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <h5 className="text-sm font-semibold text-gray-900 mb-3">How Condorcet counting works:</h5>
+                  <div className="space-y-3">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0 w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-600 mt-0.5">1</div>
+                      <p className="ml-3 text-sm text-gray-600">
+                        <strong>Pairwise comparison.</strong> Every option is matched against every other option. 
+                        Using the rankings, the system counts how many voters prefer A over B, B over A, and so on 
+                        for every possible pair.
+                      </p>
+                    </div>
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0 w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-600 mt-0.5">2</div>
+                      <p className="ml-3 text-sm text-gray-600">
+                        <strong>Check for a Condorcet winner.</strong> If one option beats every other option 
+                        in head-to-head matchups, it wins outright. This is the strongest possible mandate -- 
+                        a majority prefers this option over every alternative.
+                      </p>
+                    </div>
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0 w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-600 mt-0.5">3</div>
+                      <p className="ml-3 text-sm text-gray-600">
+                        <strong>Resolve cycles (if needed).</strong> Sometimes preferences are cyclical -- A beats B, 
+                        B beats C, but C beats A. When this happens, the <strong>Schulze method</strong> is used 
+                        to find the winner by calculating the &quot;strongest paths&quot; of preference through 
+                        all candidates.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h5 className="text-sm font-semibold text-blue-900 mb-2">Condorcet vs Ranked Choice (IRV) -- what&apos;s the difference?</h5>
+                  <div className="text-sm text-blue-800 space-y-2">
+                    <p>
+                      Both use ranked ballots, but they count differently. <strong>IRV</strong> eliminates the 
+                      least popular option each round and redistributes votes -- like a series of runoff elections. 
+                      <strong> Condorcet</strong> compares every option against every other option simultaneously.
+                    </p>
+                    <p>
+                      Condorcet is generally considered more thorough because it always finds the option with the 
+                      broadest support. IRV can occasionally eliminate a broadly popular &quot;compromise&quot; 
+                      candidate early if they have fewer first-preference votes.
+                    </p>
+                    <p>
+                      <strong>When to use which:</strong> Use Condorcet when finding the option with the widest 
+                      consensus matters most. Use IRV when the process should mirror familiar Australian 
+                      preferential voting.
+                    </p>
+                  </div>
+                </div>
+
+                <p className="text-sm text-gray-500 mt-4">
+                  <strong>Best for:</strong> Finding the option with the broadest consensus. Particularly good 
+                  for policy decisions where the &quot;least objectionable&quot; choice may be more important than 
+                  the most passionately supported one.
+                </p>
+              </div>
+            </div>
           </div>
         </section>
 
