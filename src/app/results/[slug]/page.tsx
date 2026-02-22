@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import ResultsChart from '@/components/ResultsChart';
+import CondorcetResults from '@/components/CondorcetResults';
 
 interface Plebiscite {
   id: number;
@@ -17,7 +18,7 @@ interface QuestionResult {
   id: number;
   title: string;
   description?: string;
-  type: 'yes_no' | 'multiple_choice' | 'ranked_choice';
+  type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
   options: string[];
   totalVotes: number;
   results: any;
@@ -294,6 +295,12 @@ export default async function ResultsPage({ params }: { params: { slug: string }
                       <IRVResultsDisplay results={question.results} />
                     </div>
                   </div>
+                ) : question.type === 'condorcet' ? (
+                  <CondorcetResults
+                    title={`${index + 1}. ${question.title}`}
+                    results={question.results}
+                    options={question.options}
+                  />
                 ) : (
                   <ResultsChart
                     data={question.results}
@@ -317,7 +324,7 @@ export default async function ResultsPage({ params }: { params: { slug: string }
                   All votes were cast securely and anonymously. Results are final and have been preserved for audit purposes.
                 </p>
                 <p>
-                  For ranked choice questions, Instant Runoff Voting (IRV) was used to determine winners through elimination rounds.
+                  For ranked choice questions, Instant Runoff Voting (IRV) was used to determine winners through elimination rounds. For Condorcet questions, head-to-head pairwise comparison was used, with the Schulze method resolving any cycles.
                 </p>
                 <p>
                   Individual votes cannot be traced back to voters while maintaining full verifiability through receipt codes.

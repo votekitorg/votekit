@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if ((question.type === 'multiple_choice' || question.type === 'ranked_choice') && question.options.length < 2) {
+      if ((question.type === 'multiple_choice' || question.type === 'ranked_choice' || question.type === 'condorcet') && question.options.length < 2) {
         return NextResponse.json(
           { error: 'Multiple choice and ranked choice questions must have at least 2 options' },
           { status: 400 }

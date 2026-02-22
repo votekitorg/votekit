@@ -19,7 +19,7 @@ interface Question {
   id: number;
   title: string;
   description?: string;
-  type: 'yes_no' | 'multiple_choice' | 'ranked_choice';
+  type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
   options: string[];
 }
 
