@@ -14,6 +14,7 @@ A secure, transparent online voting platform for conducting membership plebiscit
 - **Yes/No Questions**: Simple binary choices
 - **Multiple Choice**: Select one or more options
 - **Ranked Choice**: Drag-to-rank interface with Instant Runoff Voting (IRV) tabulation
+- **Condorcet**: Pairwise comparison with Schulze method fallback for cyclical preferences
 
 ### 👥 **Admin Management**
 - **Password Protection**: Simple admin authentication via environment variable
