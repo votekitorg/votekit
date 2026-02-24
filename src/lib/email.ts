@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import db from './db';
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -85,49 +86,59 @@ export async function sendVerificationEmail(
   }
 }
 
-// Rate limiting helper
-const emailAttempts = new Map<string, { count: number; resetTime: number }>();
+// Database-backed rate limiting
+const MAX_EMAIL_ATTEMPTS = 3;
+const RATE_LIMIT_WINDOW_HOURS = 1;
 
 export function isEmailRateLimited(email: string): boolean {
-  const now = Date.now();
-  const attempts = emailAttempts.get(email);
+  // Clean up expired rate limits first
+  cleanupEmailRateLimit();
   
-  if (!attempts || now > attempts.resetTime) {
-    // Reset counter if time window has passed
-    emailAttempts.set(email, { count: 0, resetTime: now + (60 * 60 * 1000) }); // 1 hour window
-    return false;
-  }
+  const record = db.prepare(`
+    SELECT attempt_count, reset_time FROM email_rate_limits 
+    WHERE email = ? AND reset_time > ?
+  `).get(email, new Date().toISOString()) as { attempt_count: number; reset_time: string } | undefined;
   
-  return attempts.count >= 3; // Max 3 codes per hour
+  return record ? record.attempt_count >= MAX_EMAIL_ATTEMPTS : false;
 }
 
 export function incrementEmailAttempts(email: string): void {
-  const now = Date.now();
-  const attempts = emailAttempts.get(email);
+  const now = new Date();
+  const resetTime = new Date(now.getTime() + (RATE_LIMIT_WINDOW_HOURS * 60 * 60 * 1000));
   
-  if (!attempts || now > attempts.resetTime) {
-    emailAttempts.set(email, { count: 1, resetTime: now + (60 * 60 * 1000) });
-  } else {
-    attempts.count++;
+  // Try to update existing record first
+  const updated = db.prepare(`
+    UPDATE email_rate_limits 
+    SET attempt_count = attempt_count + 1 
+    WHERE email = ? AND reset_time > ?
+  `).run(email, now.toISOString());
+  
+  // If no existing record, create a new one
+  if (updated.changes === 0) {
+    db.prepare(`
+      INSERT INTO email_rate_limits (email, attempt_count, reset_time)
+      VALUES (?, 1, ?)
+    `).run(email, resetTime.toISOString());
   }
 }
 
 export function getRemainingEmailAttempts(email: string): number {
-  const attempts = emailAttempts.get(email);
-  if (!attempts || Date.now() > attempts.resetTime) {
-    return 3;
+  const record = db.prepare(`
+    SELECT attempt_count FROM email_rate_limits 
+    WHERE email = ? AND reset_time > ?
+  `).get(email, new Date().toISOString()) as { attempt_count: number } | undefined;
+  
+  if (!record) {
+    return MAX_EMAIL_ATTEMPTS;
   }
-  return Math.max(0, 3 - attempts.count);
+  
+  return Math.max(0, MAX_EMAIL_ATTEMPTS - record.attempt_count);
 }
 
 // Cleanup function to remove expired rate limit entries
 export function cleanupEmailRateLimit(): void {
-  const now = Date.now();
-  for (const [email, attempts] of emailAttempts.entries()) {
-    if (now > attempts.resetTime) {
-      emailAttempts.delete(email);
-    }
-  }
+  db.prepare('DELETE FROM email_rate_limits WHERE reset_time <= ?')
+    .run(new Date().toISOString());
 }
 
 // Generate 6-digit verification code

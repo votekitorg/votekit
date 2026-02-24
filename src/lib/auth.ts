@@ -1,9 +1,8 @@
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-
-// Session management
-const sessions = new Map<string, { email: string; plebisciteId: number; isAdmin?: boolean; expiresAt: number }>();
+import * as bcrypt from 'bcryptjs';
+import db, { cleanupExpiredSessions } from './db';
 
 export interface Session {
   email: string;
@@ -15,25 +14,52 @@ export interface AdminSession {
   isAdmin: true;
 }
 
-// Admin authentication
-export function verifyAdminPassword(password: string): boolean {
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  if (!adminPassword) {
-    throw new Error('ADMIN_PASSWORD environment variable not set');
+// Admin password management
+async function ensureAdminPasswordHashed(): Promise<void> {
+  // Check if we have a hashed password stored
+  const existing = db.prepare('SELECT value FROM admin_config WHERE key = ?').get('admin_password_hash') as { value: string } | undefined;
+  
+  if (!existing) {
+    // No hashed password exists, create one from environment
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    if (!adminPassword) {
+      throw new Error('ADMIN_PASSWORD environment variable not set');
+    }
+    
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(adminPassword, saltRounds);
+    
+    db.prepare('INSERT OR REPLACE INTO admin_config (key, value) VALUES (?, ?)').run('admin_password_hash', hashedPassword);
+    console.log('Admin password has been hashed and stored securely');
   }
-  return password === adminPassword;
+}
+
+// Admin authentication
+export async function verifyAdminPassword(password: string): Promise<boolean> {
+  try {
+    await ensureAdminPasswordHashed();
+    
+    const stored = db.prepare('SELECT value FROM admin_config WHERE key = ?').get('admin_password_hash') as { value: string } | undefined;
+    
+    if (!stored) {
+      throw new Error('Admin password hash not found');
+    }
+    
+    return await bcrypt.compare(password, stored.value);
+  } catch (error) {
+    console.error('Admin password verification error:', error);
+    return false;
+  }
 }
 
 export function createAdminSession(): string {
   const sessionId = uuidv4();
-  const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+  const expiresAt = new Date(Date.now() + (24 * 60 * 60 * 1000)); // 24 hours
   
-  sessions.set(sessionId, {
-    email: 'admin',
-    plebisciteId: -1,
-    isAdmin: true,
-    expiresAt
-  });
+  db.prepare(`
+    INSERT INTO sessions (id, email, plebiscite_id, is_admin, expires_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(sessionId, 'admin', -1, true, expiresAt.toISOString());
   
   return sessionId;
 }
@@ -41,17 +67,25 @@ export function createAdminSession(): string {
 export function getAdminSession(sessionId?: string): AdminSession | null {
   if (!sessionId) return null;
   
-  const session = sessions.get(sessionId);
-  if (!session || session.expiresAt < Date.now()) {
-    if (session) sessions.delete(sessionId);
+  const session = db.prepare(`
+    SELECT * FROM sessions WHERE id = ? AND is_admin = TRUE
+  `).get(sessionId) as { 
+    id: string; 
+    email: string; 
+    plebiscite_id: number; 
+    is_admin: boolean; 
+    expires_at: string;
+  } | undefined;
+  
+  if (!session) return null;
+  
+  // Check if expired
+  if (new Date(session.expires_at) < new Date()) {
+    db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
     return null;
   }
   
-  if (session.isAdmin) {
-    return { isAdmin: true };
-  }
-  
-  return null;
+  return { isAdmin: true };
 }
 
 export function setAdminCookie(sessionId: string) {
@@ -79,13 +113,12 @@ export function clearAdminCookie() {
 // Voter authentication (email verification based)
 export function createVoterSession(email: string, plebisciteId: number): string {
   const sessionId = uuidv4();
-  const expiresAt = Date.now() + (2 * 60 * 60 * 1000); // 2 hours
+  const expiresAt = new Date(Date.now() + (2 * 60 * 60 * 1000)); // 2 hours
   
-  sessions.set(sessionId, {
-    email,
-    plebisciteId,
-    expiresAt
-  });
+  db.prepare(`
+    INSERT INTO sessions (id, email, plebiscite_id, is_admin, expires_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(sessionId, email, plebisciteId, false, expiresAt.toISOString());
   
   return sessionId;
 }
@@ -93,20 +126,28 @@ export function createVoterSession(email: string, plebisciteId: number): string 
 export function getVoterSession(sessionId?: string): Session | null {
   if (!sessionId) return null;
   
-  const session = sessions.get(sessionId);
-  if (!session || session.expiresAt < Date.now()) {
-    if (session) sessions.delete(sessionId);
+  const session = db.prepare(`
+    SELECT * FROM sessions WHERE id = ? AND is_admin = FALSE
+  `).get(sessionId) as { 
+    id: string; 
+    email: string; 
+    plebiscite_id: number; 
+    is_admin: boolean; 
+    expires_at: string;
+  } | undefined;
+  
+  if (!session) return null;
+  
+  // Check if expired
+  if (new Date(session.expires_at) < new Date()) {
+    db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
     return null;
   }
   
-  if (!session.isAdmin) {
-    return {
-      email: session.email,
-      plebisciteId: session.plebisciteId
-    };
-  }
-  
-  return null;
+  return {
+    email: session.email,
+    plebisciteId: session.plebiscite_id
+  };
 }
 
 export function setVoterCookie(sessionId: string, plebisciteSlug: string) {
@@ -131,14 +172,75 @@ export function clearVoterCookie(plebisciteSlug: string) {
   cookieStore.delete(`voter-session-${plebisciteSlug}`);
 }
 
-// Session cleanup
-export function cleanupExpiredSessions(): void {
-  const now = Date.now();
-  for (const [sessionId, session] of sessions.entries()) {
-    if (session.expiresAt < now) {
-      sessions.delete(sessionId);
+// Session cleanup (delegates to db.ts)
+export { cleanupExpiredSessions };
+
+// Admin brute force protection
+const MAX_ADMIN_ATTEMPTS = 5;
+const ADMIN_LOCKOUT_DURATION = 15 * 60 * 1000; // 15 minutes
+
+export function checkAdminBruteForce(ipAddress: string): { blocked: boolean; remaining: number; lockedUntil?: Date } {
+  // Clean up old attempts (older than 1 hour)
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  db.prepare('DELETE FROM admin_login_attempts WHERE attempted_at < ? AND locked_until IS NULL').run(hourAgo.toISOString());
+
+  // Check current lockout status
+  const lockoutRecord = db.prepare(`
+    SELECT locked_until FROM admin_login_attempts 
+    WHERE ip_address = ? AND locked_until IS NOT NULL AND locked_until > ?
+    ORDER BY attempted_at DESC LIMIT 1
+  `).get(ipAddress, new Date().toISOString()) as { locked_until: string } | undefined;
+
+  if (lockoutRecord) {
+    return { 
+      blocked: true, 
+      remaining: 0, 
+      lockedUntil: new Date(lockoutRecord.locked_until)
+    };
+  }
+
+  // Count recent failed attempts
+  const recentAttempts = db.prepare(`
+    SELECT COUNT(*) as count FROM admin_login_attempts 
+    WHERE ip_address = ? AND success = FALSE AND attempted_at > ?
+  `).get(ipAddress, hourAgo.toISOString()) as { count: number };
+
+  const remaining = Math.max(0, MAX_ADMIN_ATTEMPTS - recentAttempts.count);
+  
+  return { 
+    blocked: recentAttempts.count >= MAX_ADMIN_ATTEMPTS, 
+    remaining 
+  };
+}
+
+export function recordAdminLoginAttempt(ipAddress: string, success: boolean): void {
+  const now = new Date().toISOString();
+  let lockedUntil: string | null = null;
+
+  if (!success) {
+    // Check if this puts us over the limit
+    const bruteCheck = checkAdminBruteForce(ipAddress);
+    if (bruteCheck.remaining <= 1) { // This will be the final failed attempt
+      lockedUntil = new Date(Date.now() + ADMIN_LOCKOUT_DURATION).toISOString();
     }
   }
+
+  db.prepare(`
+    INSERT INTO admin_login_attempts (ip_address, success, attempted_at, locked_until)
+    VALUES (?, ?, ?, ?)
+  `).run(ipAddress, success, now, lockedUntil);
+
+  // Clean up old successful attempts to prevent table bloat
+  if (success) {
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    db.prepare('DELETE FROM admin_login_attempts WHERE ip_address = ? AND success = TRUE AND attempted_at < ?')
+      .run(ipAddress, weekAgo.toISOString());
+  }
+}
+
+export function clearAdminFailedAttempts(ipAddress: string): void {
+  // Remove all failed attempts and lockouts for this IP
+  db.prepare('DELETE FROM admin_login_attempts WHERE ip_address = ? AND success = FALSE').run(ipAddress);
 }
 
 // Request helpers

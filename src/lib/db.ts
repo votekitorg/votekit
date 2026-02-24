@@ -103,6 +103,57 @@ const migrations = [
     CREATE INDEX IF NOT EXISTS idx_verification_codes_expires ON verification_codes(expires_at);
     CREATE INDEX IF NOT EXISTS idx_votes_question ON votes(question_id);
     CREATE INDEX IF NOT EXISTS idx_participation_plebiscite ON participation(plebiscite_id);
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      plebiscite_id INTEGER,
+      is_admin BOOLEAN DEFAULT FALSE,
+      expires_at DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_sessions_email ON sessions(email);
+  `,
+  `
+    ALTER TABLE questions ADD COLUMN preferential_type TEXT CHECK(preferential_type IN ('compulsory', 'optional')) DEFAULT 'compulsory';
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS admin_config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS admin_login_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ip_address TEXT NOT NULL,
+      success BOOLEAN DEFAULT FALSE,
+      attempted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      locked_until DATETIME NULL
+    );
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_admin_attempts_ip ON admin_login_attempts(ip_address);
+    CREATE INDEX IF NOT EXISTS idx_admin_attempts_time ON admin_login_attempts(attempted_at);
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS email_rate_limits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      attempt_count INTEGER DEFAULT 1,
+      reset_time DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_email_rate_email ON email_rate_limits(email);
+    CREATE INDEX IF NOT EXISTS idx_email_rate_reset ON email_rate_limits(reset_time);
   `
 ];
 
@@ -158,6 +209,14 @@ export function cleanupExpiredCodes(): void {
   if (!database) return;
   
   database.prepare('DELETE FROM verification_codes WHERE expires_at < ? AND used = FALSE')
+    .run(new Date().toISOString());
+}
+
+export function cleanupExpiredSessions(): void {
+  const database = getDatabase();
+  if (!database) return;
+  
+  database.prepare('DELETE FROM sessions WHERE expires_at < ?')
     .run(new Date().toISOString());
 }
 

@@ -99,8 +99,8 @@ export async function POST(request: NextRequest) {
 
     // Create questions
     const createQuestion = db.prepare(`
-      INSERT INTO questions (plebiscite_id, title, description, type, options, display_order)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO questions (plebiscite_id, title, description, type, options, display_order, preferential_type)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
     questions.forEach((question: any, index: number) => {
@@ -110,7 +110,8 @@ export async function POST(request: NextRequest) {
         question.description || null,
         question.type,
         JSON.stringify(question.options),
-        index
+        index,
+        question.preferentialType || 'compulsory'
       );
     });
 

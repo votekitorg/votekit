@@ -21,6 +21,7 @@ interface Question {
   description?: string;
   type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
   options: string[];
+  preferentialType?: 'compulsory' | 'optional';
 }
 
 interface VotingPageProps {
@@ -70,7 +71,8 @@ export default function VotingPage({ params }: VotingPageProps) {
             title: q.title,
             description: q.description,
             type: q.type,
-            options: q.options
+            options: q.options,
+            preferentialType: q.preferentialType
           })));
         } else if (response.status === 403) {
           // Plebiscite might be closed, redirect to results
