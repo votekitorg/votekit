@@ -440,7 +440,7 @@ export default function AboutPage() {
                 Transparency builds trust.
               </p>
               <a 
-                href="https://github.com/AxleEvents/member-plebiscite" 
+                href="https://github.com/votekitorg/votekit" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="inline-flex items-center text-sm text-primary hover:text-primary-dark font-medium"
