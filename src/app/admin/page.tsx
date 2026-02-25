@@ -33,7 +33,7 @@ async function getDashboardData() {
 
   // Get overall stats
   const totalPlebiscites = db.prepare('SELECT COUNT(*) as count FROM plebiscites').get() as { count: number };
-  const totalVoters = db.prepare('SELECT COUNT(*) as count FROM voter_roll').get() as { count: number };
+  const totalVoters = db.prepare('SELECT COUNT(DISTINCT email) as count FROM voter_roll').get() as { count: number };
   const totalVotes = db.prepare('SELECT COUNT(*) as count FROM participation').get() as { count: number };
   const activePlebiscites = db.prepare("SELECT COUNT(*) as count FROM plebiscites WHERE status = 'open'").get() as { count: number };
 
@@ -87,7 +87,7 @@ export default async function AdminDashboard() {
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600">Overview of your plebiscites and voting activity</p>
+          <p className="text-gray-600">Overview of your elections and voting activity</p>
         </div>
 
         {/* Stats Cards */}
@@ -102,7 +102,7 @@ export default async function AdminDashboard() {
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-gray-900">{stats.totalPlebiscites}</div>
-                  <div className="text-sm text-gray-600">Total Plebiscites</div>
+                  <div className="text-sm text-gray-600">Total Elections</div>
                 </div>
               </div>
             </div>
@@ -118,7 +118,7 @@ export default async function AdminDashboard() {
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-gray-900">{stats.activePlebiscites}</div>
-                  <div className="text-sm text-gray-600">Active Plebiscites</div>
+                  <div className="text-sm text-gray-600">Active Elections</div>
                 </div>
               </div>
             </div>
@@ -158,7 +158,7 @@ export default async function AdminDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Link href="/admin/plebiscites/new" className="card hover:shadow-lg transition-shadow duration-200">
             <div className="card-body text-center">
               <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center mx-auto mb-4">
@@ -166,20 +166,8 @@ export default async function AdminDashboard() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Create Plebiscite</h3>
-              <p className="text-gray-600">Set up a new plebiscite with questions and voting options</p>
-            </div>
-          </Link>
-
-          <Link href="/admin/voters" className="card hover:shadow-lg transition-shadow duration-200">
-            <div className="card-body text-center">
-              <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center mx-auto mb-4">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Manage Voters</h3>
-              <p className="text-gray-600">Upload voter roll and manage member email addresses</p>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Create Election</h3>
+              <p className="text-gray-600">Set up a new election with questions and voting options</p>
             </div>
           </Link>
 
@@ -200,7 +188,7 @@ export default async function AdminDashboard() {
         <div className="card">
           <div className="card-header">
             <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold text-gray-900">Recent Plebiscites</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Recent Elections</h2>
               <Link href="/admin/plebiscites/new" className="btn-primary">
                 Create New
               </Link>
@@ -209,9 +197,9 @@ export default async function AdminDashboard() {
           <div className="card-body p-0">
             {plebiscites.length === 0 ? (
               <div className="text-center py-8">
-                <div className="text-gray-500 mb-4">No plebiscites created yet</div>
+                <div className="text-gray-500 mb-4">No elections created yet</div>
                 <Link href="/admin/plebiscites/new" className="btn-primary">
-                  Create Your First Plebiscite
+                  Create Your First Election
                 </Link>
               </div>
             ) : (

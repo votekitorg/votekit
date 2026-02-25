@@ -207,7 +207,7 @@ export default function CreatePlebiscite() {
       if (response.ok && result.success) {
         router.push(`/admin/plebiscites/${result.plebiscite.id}`);
       } else {
-        setError(result.error || 'Failed to create plebiscite');
+        setError(result.error || 'Failed to create election');
       }
     } catch (error) {
       setError('An error occurred. Please try again.');
@@ -220,8 +220,8 @@ export default function CreatePlebiscite() {
     <AdminLayout>
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Create New Plebiscite</h1>
-          <p className="text-gray-600">Follow these steps to set up your plebiscite</p>
+          <h1 className="text-2xl font-bold text-gray-900">Create New Election</h1>
+          <p className="text-gray-600">Follow these steps to set up your election</p>
         </div>
 
         {/* Progress Steps */}
@@ -269,12 +269,12 @@ export default function CreatePlebiscite() {
             <div className="card">
               <div className="card-header">
                 <h2 className="text-lg font-semibold text-gray-900">Basic Information</h2>
-                <p className="text-sm text-gray-600 mt-1">Enter the core details of your plebiscite</p>
+                <p className="text-sm text-gray-600 mt-1">Enter the core details of your election</p>
               </div>
               <div className="card-body space-y-6">
                 <div>
                   <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
-                    Plebiscite Title *
+                    Election Title *
                   </label>
                   <input
                     type="text"
@@ -301,7 +301,7 @@ export default function CreatePlebiscite() {
                     value={formData.description}
                     onChange={handleInputChange}
                     className="textarea-field"
-                    placeholder="Explain the purpose, background, and importance of this plebiscite. This will be the first thing voters see."
+                    placeholder="Explain the purpose, background, and importance of this election. This will be the first thing voters see."
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Provide context and explain why member input is needed. You can use line breaks for formatting.
@@ -594,7 +594,7 @@ export default function CreatePlebiscite() {
               <div className="card">
                 <div className="card-header">
                   <h2 className="text-lg font-semibold text-gray-900">Review & Create</h2>
-                  <p className="text-sm text-gray-600 mt-1">Review your plebiscite before publishing</p>
+                  <p className="text-sm text-gray-600 mt-1">Review your election before publishing</p>
                 </div>
                 <div className="card-body space-y-6">
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -605,14 +605,14 @@ export default function CreatePlebiscite() {
                       <div className="ml-3">
                         <h3 className="text-sm font-medium text-yellow-800">Review carefully</h3>
                         <p className="text-sm text-yellow-700 mt-1">
-                          Once created, you'll still be able to manage voter lists and open/close the plebiscite, but you cannot edit questions or basic information.
+                          Once created, you'll still be able to manage voter lists and open/close the election, but you cannot edit questions or basic information.
                         </p>
                       </div>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">Plebiscite Details</h3>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Election Details</h3>
                     <dl className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
                       <div>
                         <dt className="text-sm font-medium text-gray-500">Title</dt>
@@ -715,10 +715,10 @@ export default function CreatePlebiscite() {
                   {isSubmitting ? (
                     <>
                       <div className="spinner mr-2"></div>
-                      Creating Plebiscite...
+                      Creating Election...
                     </>
                   ) : (
-                    'Create Plebiscite'
+                    'Create Election'
                   )}
                 </button>
               )}

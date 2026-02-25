@@ -31,7 +31,7 @@ export default function PlebisciteManager({
   const [copied, setCopied] = useState(false);
 
   async function handleAction(action: string) {
-    if (!confirm(`Are you sure you want to ${action} this plebiscite?`)) return;
+    if (!confirm(`Are you sure you want to ${action} this election?`)) return;
     
     setLoading(true);
     setError('');
@@ -52,7 +52,7 @@ export default function PlebisciteManager({
   }
 
   async function handleDelete() {
-    if (!confirm('Delete this plebiscite? This cannot be undone.')) return;
+    if (!confirm('Delete this election? This cannot be undone.')) return;
     
     setLoading(true);
     try {
@@ -118,13 +118,13 @@ export default function PlebisciteManager({
           disabled={loading}
           className="w-full px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50"
         >
-          {loading ? 'Deleting...' : 'Delete Plebiscite'}
+          {loading ? 'Deleting...' : 'Delete Election'}
         </button>
       )}
 
       {plebiscite.status === 'closed' && (
         <p className="text-sm text-gray-500 text-center">
-          This plebiscite is closed. Results are now available.
+          This election is closed. Results are now available.
         </p>
       )}
     </div>

@@ -154,6 +154,12 @@ const migrations = [
   `
     CREATE INDEX IF NOT EXISTS idx_email_rate_email ON email_rate_limits(email);
     CREATE INDEX IF NOT EXISTS idx_email_rate_reset ON email_rate_limits(reset_time);
+  `,
+  `
+    ALTER TABLE voter_roll ADD COLUMN plebiscite_id INTEGER REFERENCES plebiscites(id) ON DELETE CASCADE;
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_voter_roll_plebiscite ON voter_roll(plebiscite_id);
   `
 ];
 

@@ -10,11 +10,22 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const url = new URL(request.url);
+    const plebisciteId = url.searchParams.get('plebiscite_id');
+
+    if (!plebisciteId) {
+      return NextResponse.json(
+        { error: 'plebiscite_id parameter is required' },
+        { status: 400 }
+      );
+    }
+
     const voters = db.prepare(`
       SELECT id, email, added_at
       FROM voter_roll
+      WHERE plebiscite_id = ?
       ORDER BY added_at DESC
-    `).all();
+    `).all(plebisciteId);
 
     return NextResponse.json({ voters });
   } catch (error) {
@@ -35,7 +46,23 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { action, emails } = body;
+    const { action, emails, plebiscite_id } = body;
+
+    if (!plebiscite_id) {
+      return NextResponse.json(
+        { error: 'plebiscite_id is required' },
+        { status: 400 }
+      );
+    }
+
+    // Verify plebiscite exists
+    const plebiscite = db.prepare('SELECT id FROM plebiscites WHERE id = ?').get(plebiscite_id);
+    if (!plebiscite) {
+      return NextResponse.json(
+        { error: 'Election not found' },
+        { status: 404 }
+      );
+    }
 
     if (action === 'upload') {
       if (!emails || !Array.isArray(emails)) {
@@ -58,19 +85,19 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Insert emails (ignore duplicates)
+      // Insert emails for this specific election (handle duplicates within this election)
       const insertEmail = db.prepare(`
-        INSERT OR IGNORE INTO voter_roll (email)
-        VALUES (?)
+        INSERT OR IGNORE INTO voter_roll (email, plebiscite_id)
+        VALUES (?, ?)
       `);
 
       let insertedCount = 0;
       let duplicateCount = 0;
 
-      const insertMany = db.transaction((emails) => {
+      const insertMany = db.transaction((emails, plebisciteId) => {
         for (const email of emails) {
           const normalizedEmail = email.trim().toLowerCase();
-          const result = insertEmail.run(normalizedEmail);
+          const result = insertEmail.run(normalizedEmail, plebisciteId);
           if (result.changes > 0) {
             insertedCount++;
           } else {
@@ -79,7 +106,7 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      insertMany(validEmails);
+      insertMany(validEmails, plebiscite_id);
 
       return NextResponse.json({
         success: true,
@@ -108,12 +135,12 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        db.prepare('INSERT INTO voter_roll (email) VALUES (?)').run(email.trim().toLowerCase());
+        db.prepare('INSERT INTO voter_roll (email, plebiscite_id) VALUES (?, ?)').run(email.trim().toLowerCase(), plebiscite_id);
         return NextResponse.json({ success: true });
       } catch (error: any) {
         if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
           return NextResponse.json(
-            { error: 'Email already exists in voter roll' },
+            { error: 'Email already exists in this election\'s voter roll' },
             { status: 409 }
           );
         }
@@ -146,20 +173,28 @@ export async function DELETE(request: NextRequest) {
     const url = new URL(request.url);
     const id = url.searchParams.get('id') as any;
     const action = url.searchParams.get('action') as any;
+    const plebisciteId = url.searchParams.get('plebiscite_id') as any;
 
     if (action === 'clear-all') {
-      // Clear all voters (but check if any have voted)
-      const participationCount = db.prepare('SELECT COUNT(*) as count FROM participation').get() as { count: number };
-      
-      if (participationCount.count > 0) {
+      if (!plebisciteId) {
         return NextResponse.json(
-          { error: 'Cannot clear voter roll when votes exist. Delete plebiscites first.' },
+          { error: 'plebiscite_id is required for clear-all action' },
           { status: 400 }
         );
       }
 
-      db.prepare('DELETE FROM voter_roll').run();
-      return NextResponse.json({ success: true, message: 'All voters removed' });
+      // Clear all voters for this election (but check if any have voted)
+      const participationCount = db.prepare('SELECT COUNT(*) as count FROM participation WHERE plebiscite_id = ?').get(plebisciteId) as { count: number };
+      
+      if (participationCount.count > 0) {
+        return NextResponse.json(
+          { error: 'Cannot clear voter roll when votes exist for this election.' },
+          { status: 400 }
+        );
+      }
+
+      db.prepare('DELETE FROM voter_roll WHERE plebiscite_id = ?').run(plebisciteId);
+      return NextResponse.json({ success: true, message: 'All voters removed from this election' });
     }
 
     if (!id) {

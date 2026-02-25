@@ -55,9 +55,14 @@ export default function VotingPage({ params }: VotingPageProps) {
         const result = await response.json();
         
         if (response.ok) {
-          // Check if election is open for voting
+          // Check election status
           if (result.plebiscite.status === 'closed') {
             router.push(`/results/${params.slug}`);
+            return;
+          }
+          
+          if (result.plebiscite.status === 'draft') {
+            setError('This election has not opened yet');
             return;
           }
           
@@ -79,7 +84,7 @@ export default function VotingPage({ params }: VotingPageProps) {
           setError('Election not found or not available');
         }
       } catch (error) {
-        setError('Failed to load plebiscite information');
+        setError('Failed to load election information');
       } finally {
         setIsLoading(false);
       }
@@ -265,7 +270,7 @@ export default function VotingPage({ params }: VotingPageProps) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Unable to Load Plebiscite</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Unable to Load Election</h2>
           <p className="text-gray-600 mb-4">{error}</p>
           <button
             onClick={() => router.push('/')}
@@ -292,7 +297,7 @@ export default function VotingPage({ params }: VotingPageProps) {
               </svg>
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-gray-900">Member Plebiscite</h1>
+              <h1 className="text-lg font-semibold text-gray-900">VoteKit Election</h1>
               <p className="text-sm text-gray-600">Secure Online Voting</p>
             </div>
           </div>

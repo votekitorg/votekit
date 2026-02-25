@@ -4,6 +4,7 @@ import AdminLayout from '@/components/AdminLayout';
 import db from '@/lib/db';
 import Link from 'next/link';
 import PlebisciteManager from './PlebisciteManager';
+import ElectionVoterManager from '@/components/ElectionVoterManager';
 
 interface Plebiscite {
   id: number;
@@ -44,9 +45,9 @@ async function getPlebiscite(id: string): Promise<{ plebiscite: Plebiscite; ques
     options: JSON.parse(q.options)
   })) as Question[];
 
-  // Get participation stats
+  // Get participation stats for this specific election
   const participationCount = db.prepare('SELECT COUNT(*) as count FROM participation WHERE plebiscite_id = ?').get(id) as { count: number };
-  const voterRollCount = db.prepare('SELECT COUNT(*) as count FROM voter_roll').get() as { count: number };
+  const voterRollCount = db.prepare('SELECT COUNT(*) as count FROM voter_roll WHERE plebiscite_id = ?').get(id) as { count: number };
   
   const stats = {
     totalVotes: participationCount.count,
@@ -174,13 +175,10 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
               </svg>
               <div>
-                <h4 className="text-sm font-semibold text-yellow-800">No voters on the roll</h4>
+                <h4 className="text-sm font-semibold text-yellow-800">No voters registered</h4>
                 <p className="text-sm text-yellow-700 mt-1">
-                  You need to upload a voter roll before members can vote. Upload a CSV file of member email addresses.
+                  You need to add voters before members can vote in this election. Use the voter management section below.
                 </p>
-                <Link href="/admin/voters" className="inline-block mt-2 text-sm font-medium text-yellow-800 underline hover:text-yellow-900">
-                  Manage Voter Roll &rarr;
-                </Link>
               </div>
             </div>
           </div>
@@ -242,7 +240,7 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
           {/* Basic Information */}
           <div className="card">
             <div className="card-header">
-              <h2 className="text-lg font-semibold text-gray-900">Plebiscite Information</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Election Information</h2>
             </div>
             <div className="card-body space-y-4">
               <div>
@@ -304,6 +302,16 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
           </div>
         </div>
 
+        {/* Voter Management */}
+        <div className="card">
+          <div className="card-body">
+            <ElectionVoterManager 
+              plebisciteId={plebiscite.id}
+              plebisciteTitle={plebiscite.title}
+            />
+          </div>
+        </div>
+
         {/* Questions */}
         <div className="card">
           <div className="card-header">
@@ -351,7 +359,7 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
         {plebiscite.status === 'open' && (
           <div className="card">
             <div className="card-header">
-              <h2 className="text-lg font-semibold text-gray-900">Share This Plebiscite</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Share This Election</h2>
             </div>
             <div className="card-body">
               <div className="space-y-4">
@@ -362,7 +370,7 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
                   <div className="flex">
                     <input
                       type="text"
-                      defaultValue={`/vote/${plebiscite.slug}`}
+                      defaultValue={`https://votekit.org/vote/${plebiscite.slug}`}
                       readOnly
                       className="input-field flex-1 mr-2"
                       id="vote-url"

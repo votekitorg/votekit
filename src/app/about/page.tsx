@@ -1,8 +1,8 @@
 import Link from 'next/link';
 
 export const metadata = {
-  title: 'How It Works - Member Plebiscite Platform',
-  description: 'Learn how the Member Plebiscite Platform works, including voting methods, security, and the complete workflow.',
+  title: 'How It Works - VoteKit Election Platform',
+  description: 'Learn how the VoteKit Election Platform works, including voting methods, security, and the complete workflow.',
 };
 
 export default function AboutPage() {
@@ -17,7 +17,7 @@ export default function AboutPage() {
                   <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
                 </svg>
               </div>
-              <h1 className="text-xl font-bold text-gray-900">Member Plebiscite Platform</h1>
+              <h1 className="text-xl font-bold text-gray-900">VoteKit Election Platform</h1>
             </Link>
             <Link href="/" className="text-sm text-gray-600 hover:text-primary transition-colors">
               Back to Home
@@ -48,9 +48,9 @@ export default function AboutPage() {
                 1
               </div>
               <div className="ml-5">
-                <h4 className="text-lg font-semibold text-gray-900">A plebiscite is announced</h4>
+                <h4 className="text-lg font-semibold text-gray-900">An election is announced</h4>
                 <p className="text-gray-600 mt-1">
-                  When an issue is put to members, a plebiscite is created with a clear question, 
+                  When an issue is put to members, an election is created with a clear question, 
                   background information, and a voting period. A single shareable link is generated 
                   that can be posted on social media, sent via email, shared in messaging groups, 
                   or even printed as a QR code on a flyer.
@@ -65,7 +65,7 @@ export default function AboutPage() {
               <div className="ml-5">
                 <h4 className="text-lg font-semibold text-gray-900">You click the link</h4>
                 <p className="text-gray-600 mt-1">
-                  The link takes you to the plebiscite page where you can read the question, 
+                  The link takes you to the election page where you can read the question, 
                   review any background material, and understand what you&apos;re voting on. 
                   No app to download, no account to create.
                 </p>
@@ -137,7 +137,7 @@ export default function AboutPage() {
             Voting Methods
           </h3>
           <p className="text-gray-600 mb-8">
-            Each plebiscite can include multiple questions, and each question can use the 
+            Each election can include multiple questions, and each question can use the 
             voting method best suited to the decision being made.
           </p>
 
@@ -409,7 +409,7 @@ export default function AboutPage() {
               <h4 className="text-lg font-semibold text-gray-900 mb-2">One Member, One Vote</h4>
               <p className="text-gray-600 text-sm">
                 Only verified members on the electoral roll can vote. Each member can only 
-                vote once per plebiscite, enforced at the database level. Email verification 
+                vote once per election, enforced at the database level. Email verification 
                 codes expire after 10 minutes and are limited to 3 per hour.
               </p>
             </div>
@@ -505,9 +505,9 @@ export default function AboutPage() {
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h4 className="font-semibold text-gray-900 mb-2">Are these plebiscites binding?</h4>
+              <h4 className="font-semibold text-gray-900 mb-2">Are these elections binding?</h4>
               <p className="text-gray-600 text-sm">
-                That depends on the organisation running the plebiscite. Each plebiscite description 
+                That depends on the organisation running the election. Each election description 
                 will state whether it is binding or advisory. The platform itself is simply a tool 
                 for conducting secure, transparent votes.
               </p>
@@ -519,7 +519,7 @@ export default function AboutPage() {
         <div className="text-center bg-white rounded-xl shadow-sm border border-gray-200 p-8">
           <h3 className="text-2xl font-bold text-gray-900 mb-3">Ready to participate?</h3>
           <p className="text-gray-600 mb-6">
-            Check the home page for any active plebiscites, or wait for a voting link to be shared with you.
+            Check the home page for any active elections, or wait for a voting link to be shared with you.
           </p>
           <Link
             href="/"
