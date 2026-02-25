@@ -167,14 +167,6 @@ export async function PUT(request: NextRequest) {
 
     if (action === 'open') {
       // Open plebiscite
-      const now = new Date().toISOString();
-      if (new Date(plebiscite.open_date) > new Date(now)) {
-        return NextResponse.json(
-          { error: 'Cannot open plebiscite before open date' },
-          { status: 400 }
-        );
-      }
-
       db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?')
         .run('open', id);
 

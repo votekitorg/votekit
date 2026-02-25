@@ -56,7 +56,7 @@ export default function PlebisciteManager({
     
     setLoading(true);
     try {
-      const res = await fetch(`/plebiscite/api/admin/plebiscites?id=${plebiscite.id}`, {
+      const res = await fetch(`/api/admin/plebiscites?id=${plebiscite.id}`, {
         method: 'DELETE',
       });
       const data = await res.json();

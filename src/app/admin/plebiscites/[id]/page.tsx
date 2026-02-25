@@ -77,9 +77,9 @@ function getStatusInfo(plebiscite: Plebiscite) {
     return {
       status: 'Draft',
       color: 'gray',
-      canOpen: now >= openDate,
+      canOpen: true,
       canClose: false,
-      message: now < openDate ? 'Not yet ready to open' : 'Ready to open'
+      message: now < openDate ? `Scheduled to open ${openDate.toLocaleDateString()}. You can open it early.` : 'Ready to open'
     };
   } else if (plebiscite.status === 'open') {
     return {
