@@ -77,7 +77,7 @@ export default function VotingPage({ params }: VotingPageProps) {
             title: q.title,
             description: q.description,
             type: q.type,
-            options: q.options,
+            options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
             preferentialType: q.preferentialType
           })));
         } else {
