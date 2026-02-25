@@ -167,9 +167,13 @@ function runMigrations() {
       try {
         database.exec(migration);
         console.log(`Migration ${index + 1} applied successfully`);
-      } catch (error) {
-        console.error(`Failed to apply migration ${index + 1}:`, error);
-        throw error;
+      } catch (error: any) {
+        if (error?.message?.includes('duplicate column name')) {
+          console.log(`Migration ${index + 1} skipped (column already exists)`);
+        } else {
+          console.error(`Failed to apply migration ${index + 1}:`, error);
+          throw error;
+        }
       }
     });
   });

@@ -26,7 +26,7 @@ export default function AdminLogin() {
       formData.append('action', 'login');
       formData.append('password', password);
 
-      const response = await fetch('/plebiscite/api/admin/auth', {
+      const response = await fetch('/api/admin/auth', {
         method: 'POST',
         body: formData,
       });

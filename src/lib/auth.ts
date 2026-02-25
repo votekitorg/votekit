@@ -59,7 +59,7 @@ export function createAdminSession(): string {
   db.prepare(`
     INSERT INTO sessions (id, email, plebiscite_id, is_admin, expires_at)
     VALUES (?, ?, ?, ?, ?)
-  `).run(sessionId, 'admin', -1, true, expiresAt.toISOString());
+  `).run(sessionId, 'admin', -1, 1, expiresAt.toISOString());
   
   return sessionId;
 }
@@ -68,7 +68,7 @@ export function getAdminSession(sessionId?: string): AdminSession | null {
   if (!sessionId) return null;
   
   const session = db.prepare(`
-    SELECT * FROM sessions WHERE id = ? AND is_admin = TRUE
+    SELECT * FROM sessions WHERE id = ? AND is_admin = 1
   `).get(sessionId) as { 
     id: string; 
     email: string; 
@@ -94,7 +94,7 @@ export function setAdminCookie(sessionId: string) {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    path: '/plebiscite',
+    path: '/',
     maxAge: 24 * 60 * 60 // 24 hours
   });
 }
@@ -118,7 +118,7 @@ export function createVoterSession(email: string, plebisciteId: number): string 
   db.prepare(`
     INSERT INTO sessions (id, email, plebiscite_id, is_admin, expires_at)
     VALUES (?, ?, ?, ?, ?)
-  `).run(sessionId, email, plebisciteId, false, expiresAt.toISOString());
+  `).run(sessionId, email, plebisciteId, 0, expiresAt.toISOString());
   
   return sessionId;
 }
@@ -156,7 +156,7 @@ export function setVoterCookie(sessionId: string, plebisciteSlug: string) {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    path: '/plebiscite',
+    path: '/',
     maxAge: 2 * 60 * 60 // 2 hours
   });
 }
@@ -228,12 +228,12 @@ export function recordAdminLoginAttempt(ipAddress: string, success: boolean): vo
   db.prepare(`
     INSERT INTO admin_login_attempts (ip_address, success, attempted_at, locked_until)
     VALUES (?, ?, ?, ?)
-  `).run(ipAddress, success, now, lockedUntil);
+  `).run(ipAddress, success ? 1 : 0, now, lockedUntil);
 
   // Clean up old successful attempts to prevent table bloat
   if (success) {
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    db.prepare('DELETE FROM admin_login_attempts WHERE ip_address = ? AND success = TRUE AND attempted_at < ?')
+    db.prepare('DELETE FROM admin_login_attempts WHERE ip_address = ? AND success = 1 AND attempted_at < ?')
       .run(ipAddress, weekAgo.toISOString());
   }
 }

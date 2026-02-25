@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      path: '/plebiscite',
+      path: '/',
       maxAge: 2 * 60 * 60 // 2 hours
     });
 

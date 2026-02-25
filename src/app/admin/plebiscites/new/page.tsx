@@ -191,7 +191,7 @@ export default function CreatePlebiscite() {
     setSuccess('');
 
     try {
-      const response = await fetch('/plebiscite/api/admin/plebiscites', {
+      const response = await fetch('/api/admin/plebiscites', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

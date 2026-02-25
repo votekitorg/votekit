@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        path: '/plebiscite',
+        path: '/',
         maxAge: 24 * 60 * 60 // 24 hours
       });
 

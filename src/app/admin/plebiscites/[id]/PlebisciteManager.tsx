@@ -36,7 +36,7 @@ export default function PlebisciteManager({
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/plebiscite/api/admin/plebiscites', {
+      const res = await fetch('/api/admin/plebiscites', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: plebiscite.id, action }),

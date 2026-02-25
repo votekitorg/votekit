@@ -36,7 +36,7 @@ export const dynamic = 'force-dynamic';
 
 async function getResults(slug: string): Promise<ResultsData | null> {
   try {
-    const response = await fetch(`${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'http://localhost:3006'}/plebiscite/api/results/${slug}`, {
+    const response = await fetch(`${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'http://localhost:3006'}/api/results/${slug}`, {
       cache: 'no-store'
     });
 
@@ -210,7 +210,7 @@ export default async function ResultsPage({ params }: { params: { slug: string }
             
             <div className="flex items-center space-x-4">
               <a
-                href={`/plebiscite/api/results/${params.slug}?format=csv`}
+                href={`/api/results/${params.slug}?format=csv`}
                 className="btn-secondary"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
