@@ -51,17 +51,18 @@ export default function VotingPage({ params }: VotingPageProps) {
   useEffect(() => {
     const fetchPlebiscite = async () => {
       try {
-        const response = await fetch(`/api/results/${params.slug}`);
+        const response = await fetch(`/api/elections/${params.slug}`);
         const result = await response.json();
         
         if (response.ok) {
-          // Check if plebiscite is open for voting
-          const now = new Date();
-          const openDate = new Date(result.plebiscite.open_date);
-          const closeDate = new Date(result.plebiscite.close_date);
+          // Check if election is open for voting
+          if (result.plebiscite.status === 'closed') {
+            router.push(`/results/${params.slug}`);
+            return;
+          }
           
-          if (result.plebiscite.status !== 'open' || now < openDate || now >= closeDate) {
-            setError('Voting is not currently active for this plebiscite');
+          if (result.plebiscite.status !== 'open') {
+            setError('Voting is not currently active for this election');
             return;
           }
           
@@ -74,12 +75,8 @@ export default function VotingPage({ params }: VotingPageProps) {
             options: q.options,
             preferentialType: q.preferentialType
           })));
-        } else if (response.status === 403) {
-          // Plebiscite might be closed, redirect to results
-          router.push(`/results/${params.slug}`);
-          return;
         } else {
-          setError('Plebiscite not found or not available');
+          setError('Election not found or not available');
         }
       } catch (error) {
         setError('Failed to load plebiscite information');

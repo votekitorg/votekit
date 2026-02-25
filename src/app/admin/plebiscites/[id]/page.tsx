@@ -297,8 +297,8 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
             </div>
             <div className="card-body">
               <PlebisciteManager 
-                plebiscite={plebiscite}
-                statusInfo={statusInfo}
+                plebiscite={{id: plebiscite.id, slug: plebiscite.slug, title: plebiscite.title, status: plebiscite.status}}
+                statusInfo={{status: statusInfo.status, color: statusInfo.color, canOpen: statusInfo.canOpen, canClose: statusInfo.canClose, message: statusInfo.message}}
               />
             </div>
           </div>
@@ -362,18 +362,11 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
                   <div className="flex">
                     <input
                       type="text"
-                      value={`${typeof window !== 'undefined' ? window.location.origin : ''}/vote/${plebiscite.slug}`}
+                      defaultValue={`/vote/${plebiscite.slug}`}
                       readOnly
                       className="input-field flex-1 mr-2"
+                      id="vote-url"
                     />
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/vote/${plebiscite.slug}`);
-                      }}
-                      className="btn-secondary"
-                    >
-                      Copy
-                    </button>
                   </div>
                   <p className="text-sm text-gray-500 mt-1">
                     Share this URL on social media, email, or messaging apps for members to vote
