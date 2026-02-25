@@ -30,13 +30,13 @@ export async function sendVerificationEmail(
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="text-align: center; margin-bottom: 30px;">
-            <h1 style="color: #00843D; margin: 0;">Member Plebiscite Platform</h1>
+            <h1 style="color: #00843D; margin: 0;">VoteKit Election Platform</h1>
           </div>
           
           <div style="background-color: #f8f9fa; border-radius: 8px; padding: 30px; margin-bottom: 20px;">
             <h2 style="color: #1B5E20; margin-top: 0;">Verification Required</h2>
             <p style="color: #333; font-size: 16px; line-height: 1.5;">
-              You have requested to participate in the plebiscite: <strong>${plebisciteTitle}</strong>
+              You have requested to participate in the election: <strong>${plebisciteTitle}</strong>
             </p>
             <p style="color: #333; font-size: 16px; line-height: 1.5;">
               Your verification code is:
@@ -53,23 +53,23 @@ export async function sendVerificationEmail(
           
           <div style="border-top: 1px solid #e0e0e0; padding-top: 20px; text-align: center;">
             <p style="color: #999; font-size: 12px; margin: 0;">
-              This is an automated message from the Member Plebiscite Platform.
+              This is an automated message from VoteKit.
             </p>
           </div>
         </div>
       `,
       text: `
-        Member Plebiscite Platform
+        VoteKit Election Platform
         
         Verification Required
         
-        You have requested to participate in the plebiscite: ${plebisciteTitle}
+        You have requested to participate in the election: ${plebisciteTitle}
         
         Your verification code is: ${code}
         
         This code will expire in 10 minutes. If you did not request this code, please ignore this email.
         
-        This is an automated message from the Member Plebiscite Platform.
+        This is an automated message from the VoteKit Election Platform.
       `
     });
 
