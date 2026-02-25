@@ -78,17 +78,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if voting period is active
-    const now = new Date();
-    const openDate = new Date(plebiscite.open_date);
-    const closeDate = new Date(plebiscite.close_date);
-
-    if (now < openDate || now >= closeDate) {
-      return NextResponse.json(
-        { error: 'Voting period is not active' },
-        { status: 400 }
-      );
-    }
+    // Status check is sufficient - admin controls open/close manually
 
     // Verify code
     const verification = db.prepare(`

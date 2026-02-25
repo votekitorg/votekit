@@ -49,24 +49,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if voting period is active
-    const now = new Date();
-    const openDate = new Date(plebiscite.open_date);
-    const closeDate = new Date(plebiscite.close_date);
-
-    if (now < openDate) {
-      return NextResponse.json(
-        { error: 'Voting has not yet opened' },
-        { status: 400 }
-      );
-    }
-
-    if (now >= closeDate) {
-      return NextResponse.json(
-        { error: 'Voting has closed' },
-        { status: 400 }
-      );
-    }
+    // Status check is sufficient - admin controls open/close manually
 
     // Check if email is in this election's voter roll
     const voter = db.prepare('SELECT * FROM voter_roll WHERE email = ? AND plebiscite_id = ?').get(normalizedEmail, plebiscite.id) as any;
