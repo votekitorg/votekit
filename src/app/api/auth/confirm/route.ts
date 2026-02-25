@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Status check is sufficient - admin controls open/close manually
+    const now = new Date();
 
     // Verify code
     const verification = db.prepare(`
