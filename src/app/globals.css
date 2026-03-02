@@ -221,3 +221,84 @@ a {
 .markdown-content pre code {
   @apply bg-transparent p-0;
 }
+/* Print styles for results page */
+@media print {
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #d1d5db !important;
+    break-inside: avoid;
+  }
+
+  .card-header {
+    background: #f9fafb !important;
+  }
+
+  /* Ensure bars print with colour */
+  .bg-primary,
+  .bg-green-600,
+  .bg-green-400,
+  .bg-emerald-300,
+  .bg-red-400 {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide interactive elements */
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Show elements only for print */
+  .print\:block {
+    display: block !important;
+  }
+
+  /* Remove hover effects */
+  button:hover,
+  a:hover {
+    background: inherit !important;
+  }
+
+  /* Page breaks */
+  .print\:break-before-avoid {
+    break-before: avoid;
+  }
+
+  .print\:break-after-avoid {
+    break-after: avoid;
+  }
+
+  /* Ensure sufficient contrast */
+  .text-gray-500 {
+    color: #4b5563 !important;
+  }
+
+  .text-gray-600 {
+    color: #374151 !important;
+  }
+
+  /* Table styles for print */
+  table {
+    border-collapse: collapse !important;
+  }
+
+  th, td {
+    border: 1px solid #d1d5db !important;
+  }
+
+  /* Make sure backgrounds print */
+  .bg-green-50,
+  .bg-red-50,
+  .bg-amber-50,
+  .bg-gray-50,
+  .bg-blue-50 {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

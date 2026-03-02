@@ -4,12 +4,22 @@ export interface IRVVote {
   preferences: string[]; // Array of candidate names in order of preference
 }
 
+export interface IRVTransfer {
+  fromCandidate: string;
+  transfers: { [toCandidate: string]: number };
+  exhausted: number;
+}
+
 export interface IRVRound {
   round: number;
   candidates: string[];
   votes: { [candidate: string]: number };
+  previousVotes?: { [candidate: string]: number }; // Votes from previous round
   eliminated: string[];
   winner?: string;
+  transfers?: IRVTransfer; // Where eliminated candidate's votes went
+  exhaustedThisRound?: number; // Ballots that became exhausted this round
+  totalExhausted?: number; // Total exhausted so far
 }
 
 export interface IRVResult {
@@ -37,12 +47,17 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
   };
 
   let remainingCandidates = [...candidates];
+  
+  // Track each ballot's state
   const activeBallots = votes.map(vote => ({
     preferences: vote.preferences.filter(pref => candidates.includes(pref)),
-    exhausted: false
+    exhausted: false,
+    currentChoice: null as string | null
   }));
 
   let round = 1;
+  let previousVotes: { [candidate: string]: number } = {};
+  let totalExhaustedSoFar = 0;
 
   while (remainingCandidates.length > 1) {
     // Count first preferences for remaining candidates
@@ -50,6 +65,8 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
     remainingCandidates.forEach(candidate => {
       voteCounts[candidate] = 0;
     });
+
+    let exhaustedThisRound = 0;
 
     // Count votes from active ballots
     activeBallots.forEach(ballot => {
@@ -62,16 +79,21 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
 
       if (firstChoice) {
         voteCounts[firstChoice]++;
+        ballot.currentChoice = firstChoice;
       } else {
-        // Ballot is exhausted (no remaining preferences for active candidates)
-        ballot.exhausted = true;
+        // Ballot is exhausted
+        if (!ballot.exhausted) {
+          ballot.exhausted = true;
+          exhaustedThisRound++;
+        }
       }
     });
+
+    totalExhaustedSoFar += exhaustedThisRound;
 
     const totalActiveVotes = Object.values(voteCounts).reduce((sum, count) => sum + count, 0);
     const majority = Math.floor(totalActiveVotes / 2) + 1;
 
-    // Check if any candidate has a majority
     const sortedCandidates = Object.entries(voteCounts)
       .sort(([, a], [, b]) => b - a);
 
@@ -79,7 +101,10 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
       round,
       candidates: [...remainingCandidates],
       votes: { ...voteCounts },
-      eliminated: []
+      previousVotes: round > 1 ? { ...previousVotes } : undefined,
+      eliminated: [],
+      exhaustedThisRound: round > 1 ? exhaustedThisRound : 0,
+      totalExhausted: totalExhaustedSoFar
     };
 
     // Check for winner
@@ -94,7 +119,9 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
     if (remainingCandidates.length === 2) {
       const winner = sortedCandidates[0][1] > sortedCandidates[1][1] 
         ? sortedCandidates[0][0] 
-        : sortedCandidates[1][0];
+        : sortedCandidates[0][1] < sortedCandidates[1][1]
+          ? sortedCandidates[1][0]
+          : sortedCandidates[0][0]; // Tie goes to first alphabetically
       roundData.winner = winner;
       result.winner = winner;
       result.rounds.push(roundData);
@@ -107,7 +134,7 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
       .filter(([, count]) => count === lowestVoteCount)
       .map(([candidate]) => candidate);
 
-    // If all remaining candidates are tied, pick the first one alphabetically as winner
+    // If all remaining candidates are tied, pick the first alphabetically
     if (candidatesToEliminate.length === remainingCandidates.length) {
       const winner = remainingCandidates.sort()[0];
       roundData.winner = winner;
@@ -116,12 +143,38 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
       break;
     }
 
-    // Eliminate candidate(s) with lowest votes
-    // If there's a tie for last place, eliminate all tied candidates
+    // Track where eliminated candidate's votes transfer to
+    const eliminatedCandidate = candidatesToEliminate[0];
+    const transferData: IRVTransfer = {
+      fromCandidate: eliminatedCandidate,
+      transfers: {},
+      exhausted: 0
+    };
+
+    const futureRemaining = remainingCandidates.filter(c => !candidatesToEliminate.includes(c));
+    futureRemaining.forEach(c => {
+      transferData.transfers[c] = 0;
+    });
+
+    // Count where each eliminated candidate's ballots go
+    activeBallots.forEach(ballot => {
+      if (ballot.exhausted) return;
+      if (ballot.currentChoice !== eliminatedCandidate) return;
+      
+      const nextChoice = ballot.preferences.find(pref => futureRemaining.includes(pref));
+      
+      if (nextChoice) {
+        transferData.transfers[nextChoice]++;
+      } else {
+        transferData.exhausted++;
+      }
+    });
+
     roundData.eliminated = candidatesToEliminate;
+    roundData.transfers = transferData;
     result.rounds.push(roundData);
 
-    // Remove eliminated candidates from remaining candidates
+    previousVotes = { ...voteCounts };
     remainingCandidates = remainingCandidates.filter(
       candidate => !candidatesToEliminate.includes(candidate)
     );
@@ -129,7 +182,14 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
     round++;
   }
 
-  // Count exhausted ballots
+  // Handle edge case: only one candidate left
+  if (!result.winner && remainingCandidates.length === 1) {
+    result.winner = remainingCandidates[0];
+    if (result.rounds.length > 0) {
+      result.rounds[result.rounds.length - 1].winner = remainingCandidates[0];
+    }
+  }
+
   result.exhaustedBallots = activeBallots.filter(ballot => ballot.exhausted).length;
 
   return result;
@@ -137,12 +197,8 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
 
 // Helper function to validate IRV votes
 export function validateIRVVote(vote: string[], candidates: string[]): boolean {
-  // Check that all preferences are valid candidates
   const validPreferences = vote.filter(pref => candidates.includes(pref));
-  
-  // Check for duplicates
   const uniquePreferences = new Set(validPreferences);
-  
   return validPreferences.length === uniquePreferences.size;
 }
 
@@ -152,32 +208,34 @@ export function formatIRVResults(result: IRVResult): string {
     return "No winner could be determined.";
   }
 
-  let output = `Winner: ${result.winner}\n`;
-  output += `Total Votes: ${result.totalVotes}\n`;
-  output += `Exhausted Ballots: ${result.exhaustedBallots}\n\n`;
+  let output = "Winner: " + result.winner + "\n";
+  output += "Total Votes: " + result.totalVotes + "\n";
+  output += "Exhausted Ballots: " + result.exhaustedBallots + "\n\n";
 
   result.rounds.forEach(round => {
-    output += `Round ${round.round}:\n`;
+    output += "Round " + round.round + ":\n";
     
     const sortedVotes = Object.entries(round.votes)
       .sort(([, a], [, b]) => b - a);
     
+    const totalVotes = Object.values(round.votes).reduce((sum, count) => sum + count, 0);
+    
     sortedVotes.forEach(([candidate, votes]) => {
-      const percentage = round.votes && Object.values(round.votes).reduce((sum, count) => sum + count, 0) > 0
-        ? ((votes / Object.values(round.votes).reduce((sum, count) => sum + count, 0)) * 100).toFixed(1)
+      const percentage = totalVotes > 0
+        ? ((votes / totalVotes) * 100).toFixed(1)
         : '0.0';
-      output += `  ${candidate}: ${votes} votes (${percentage}%)\n`;
+      output += "  " + candidate + ": " + votes + " votes (" + percentage + "%)\n";
     });
 
     if (round.eliminated.length > 0) {
-      output += `  Eliminated: ${round.eliminated.join(', ')}\n`;
+      output += "  Eliminated: " + round.eliminated.join(', ') + "\n";
     }
 
     if (round.winner) {
-      output += `  Winner: ${round.winner}\n`;
+      output += "  Winner: " + round.winner + "\n";
     }
 
-    output += '\n';
+    output += "\n";
   });
 
   return output;
@@ -202,7 +260,7 @@ export function exportIRVResultsCSV(result: IRVResult): string {
           status = 'Winner';
         }
         
-        csv += `${round.round},"${candidate}",${votes},${percentage}%,${status}\n`;
+        csv += round.round + ',"' + candidate + '",' + votes + ',' + percentage + '%,' + status + '\n';
       });
   });
   
