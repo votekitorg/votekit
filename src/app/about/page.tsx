@@ -31,7 +31,7 @@ export default function AboutPage() {
         <div className="text-center mb-16">
           <h2 className="text-4xl font-bold text-gray-900 mb-4">How It Works</h2>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            A simple, secure platform for members to have their say on the issues that matter. 
+            A simple, secure platform for electors to have their say on the issues that matter. 
             Here&apos;s everything you need to know.
           </p>
         </div>
@@ -50,7 +50,7 @@ export default function AboutPage() {
               <div className="ml-5">
                 <h4 className="text-lg font-semibold text-gray-900">An election is announced</h4>
                 <p className="text-gray-600 mt-1">
-                  When an issue is put to members, an election is created with a clear question, 
+                  When an issue is put to electors, an election is created with a clear question, 
                   background information, and a voting period. A single shareable link is generated 
                   that can be posted on social media, sent via email, shared in messaging groups, 
                   or even printed as a QR code on a flyer.
@@ -77,11 +77,11 @@ export default function AboutPage() {
                 3
               </div>
               <div className="ml-5">
-                <h4 className="text-lg font-semibold text-gray-900">Verify your membership</h4>
+                <h4 className="text-lg font-semibold text-gray-900">Verify your identity</h4>
                 <p className="text-gray-600 mt-1">
-                  Enter the email address you&apos;re registered with as a member. You&apos;ll receive 
+                  Enter the email or phone number you&apos;re registered with. You&apos;ll receive 
                   a 6-digit verification code to that address. This confirms you&apos;re an eligible 
-                  member and prevents anyone from voting on your behalf. The code expires after 
+                  elector and prevents anyone from voting on your behalf. The code expires after 
                   10 minutes for security.
                 </p>
               </div>
@@ -149,7 +149,7 @@ export default function AboutPage() {
               </div>
               <div className="p-6">
                 <p className="text-gray-600 mb-4">
-                  The simplest form of voting. A clear question is asked and members vote 
+                  The simplest form of voting. A clear question is asked and electors vote 
                   either <strong>Yes</strong> or <strong>No</strong>.
                 </p>
                 <div className="bg-gray-50 rounded-lg p-4">
@@ -176,7 +176,7 @@ export default function AboutPage() {
               </div>
               <div className="p-6">
                 <p className="text-gray-600 mb-4">
-                  Members choose <strong>one option</strong> from a list of possibilities. 
+                  Electors choose <strong>one option</strong> from a list of possibilities. 
                   The option with the most votes wins (simple plurality).
                 </p>
                 <div className="bg-gray-50 rounded-lg p-4">
@@ -406,9 +406,9 @@ export default function AboutPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                 </svg>
               </div>
-              <h4 className="text-lg font-semibold text-gray-900 mb-2">One Member, One Vote</h4>
+              <h4 className="text-lg font-semibold text-gray-900 mb-2">One Elector, One Vote</h4>
               <p className="text-gray-600 text-sm">
-                Only verified members on the electoral roll can vote. Each member can only 
+                Only verified electors on the electoral roll can vote. Each elector can only 
                 vote once per election, enforced at the database level. Email verification 
                 codes expire after 10 minutes and are limited to 3 per hour.
               </p>
@@ -435,7 +435,7 @@ export default function AboutPage() {
               </div>
               <h4 className="text-lg font-semibold text-gray-900 mb-2">Open Source</h4>
               <p className="text-gray-600 text-sm mb-3">
-                The entire platform is open source. Any member can inspect the code to 
+                The entire platform is open source. Any elector can inspect the code to 
                 verify that it works correctly and that votes are handled securely. 
                 Transparency builds trust.
               </p>
@@ -464,8 +464,8 @@ export default function AboutPage() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h4 className="font-semibold text-gray-900 mb-2">Can anyone vote?</h4>
               <p className="text-gray-600 text-sm">
-                No. Only members whose email address is on the verified electoral roll can vote. 
-                Your membership is confirmed via email verification each time you vote.
+                No. Only electors whose email or phone number is on the verified electoral roll can vote. 
+                Your identity is confirmed via email or SMS verification each time you vote.
               </p>
             </div>
 
@@ -483,7 +483,7 @@ export default function AboutPage() {
               <p className="text-gray-600 text-sm">
                 No. The system is designed so that your identity (that you voted) is stored 
                 separately from your actual vote. There is no technical way for anyone -- including 
-                administrators or developers -- to link a specific vote to a specific member.
+                administrators or developers -- to link a specific vote to a specific elector.
               </p>
             </div>
 
@@ -491,7 +491,7 @@ export default function AboutPage() {
               <h4 className="font-semibold text-gray-900 mb-2">When can I see the results?</h4>
               <p className="text-gray-600 text-sm">
                 Results are only published after the voting period closes. This prevents any 
-                influence from partial results on members who haven&apos;t yet voted.
+                influence from partial results on electors who haven&apos;t yet voted.
               </p>
             </div>
 
@@ -532,7 +532,7 @@ export default function AboutPage() {
 
       <footer className="bg-white border-t border-gray-200 py-8 mt-12">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-sm text-gray-600">&copy; {new Date().getFullYear()} Member Plebiscite Platform. Secure, transparent, democratic.</p>
+          <p className="text-sm text-gray-600">&copy; {new Date().getFullYear()} VoteKit Election Platform. Secure, transparent, democratic.</p>
         </div>
       </footer>
     </div>
