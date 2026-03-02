@@ -423,213 +423,136 @@ export default function HomePage() {
       </section>
 
 
-      {/* Privacy & Anonymous Use Section */}
+      {/* How to Use VoteKit Section */}
       <section className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="lg:text-center mb-12">
-            <h2 className="text-base text-primary font-semibold tracking-wide uppercase">Privacy by Design</h2>
+            <h2 className="text-base text-primary font-semibold tracking-wide uppercase">Get Started</h2>
             <p className="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-gray-900 sm:text-4xl">
-              Run Elections Without a Trace
+              Two Ways to Use VoteKit
             </p>
-            <p className="mt-4 max-w-3xl text-xl text-gray-500 lg:mx-auto">
-              VoteKit is built for situations where privacy is not just preferred -- it is essential.
-              Whether you are organising a union ballot under hostile management, running an internal party vote,
-              or conducting any election where participants need protection, VoteKit gives you complete control.
+            <p className="mt-4 max-w-2xl text-xl text-gray-500 lg:mx-auto">
+              Use our hosted platform, or run your own instance. Either way, the software is free and open source.
             </p>
           </div>
 
-          <div className="max-w-4xl mx-auto">
-            {/* Run From Anywhere */}
-            <div className="mb-12">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Run It From Your Laptop</h3>
-              <p className="text-gray-600 mb-4">
-                VoteKit does not require a cloud server. You can run it from a personal laptop, a desktop computer,
-                or even a Raspberry Pi. Start it up, conduct your election, and shut it down. No server rental,
-                no account registration, no payment trail.
+          <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
+            {/* Hosted Option */}
+            <div className="bg-white border-2 border-primary rounded-lg p-8">
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Use Our Hosted Platform</h3>
+              <p className="text-sm text-primary font-medium mb-4">Available at cost -- no markup, no profit</p>
+              <p className="text-gray-600 mb-6">
+                We run and maintain a VoteKit instance with email and SMS verification already configured.
+                You create your election, upload your voter roll, and send out ballot links. We handle the infrastructure.
               </p>
-              <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-3">
+              <div className="space-y-3 mb-6">
                 <div className="flex items-start">
                   <svg className="flex-shrink-0 h-5 w-5 text-primary mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <p className="ml-3 text-gray-700">Run on your own machine -- laptop, desktop, or single-board computer</p>
+                  <p className="ml-3 text-gray-700">Email verification via Resend</p>
                 </div>
                 <div className="flex items-start">
                   <svg className="flex-shrink-0 h-5 w-5 text-primary mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <p className="ml-3 text-gray-700">Share on a local network for in-person voting without internet access</p>
+                  <p className="ml-3 text-gray-700">SMS verification via Firebase</p>
                 </div>
                 <div className="flex items-start">
                   <svg className="flex-shrink-0 h-5 w-5 text-primary mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <p className="ml-3 text-gray-700">Use a temporary tunnel (like ngrok or Cloudflare Tunnel) to make it accessible remotely without renting a server</p>
+                  <p className="ml-3 text-gray-700">Automatic ballot link emails and reminders</p>
                 </div>
                 <div className="flex items-start">
                   <svg className="flex-shrink-0 h-5 w-5 text-primary mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <p className="ml-3 text-gray-700">Shut it down when the election is over. Delete the database. No residual data anywhere.</p>
+                  <p className="ml-3 text-gray-700">Nothing to install or maintain</p>
                 </div>
               </div>
+              <Link href="mailto:hello@votekit.org" className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-primary hover:bg-green-700">
+                Get in Touch
+              </Link>
             </div>
 
-            {/* No Third-Party Dependencies */}
-            <div className="mb-12">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">No Third-Party Dependencies Required</h3>
-              <p className="text-gray-600 mb-4">
-                VoteKit works entirely offline if needed. Email and SMS verification are optional features --
-                you can run a fully functional election using only unique ballot links sent through
-                any communication channel you trust: encrypted messaging apps, printed QR codes,
-                or hand-delivered letters.
+            {/* Self-Host Option */}
+            <div className="bg-white border border-gray-200 rounded-lg p-8">
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Self-Host Your Own Instance</h3>
+              <p className="text-sm text-gray-500 font-medium mb-4">Free forever -- you run everything</p>
+              <p className="text-gray-600 mb-6">
+                Clone the repo and run VoteKit on your own hardware. You are responsible for setup and
+                any third-party services you choose to integrate.
               </p>
-              <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-3">
+              <div className="space-y-3 mb-6">
                 <div className="flex items-start">
                   <svg className="flex-shrink-0 h-5 w-5 text-primary mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <p className="ml-3 text-gray-700">No Google, Amazon, or Microsoft accounts needed to operate</p>
+                  <p className="ml-3 text-gray-700">Runs on any machine -- server, laptop, Raspberry Pi</p>
                 </div>
                 <div className="flex items-start">
                   <svg className="flex-shrink-0 h-5 w-5 text-primary mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <p className="ml-3 text-gray-700">SQLite database stored locally -- no cloud database service required</p>
+                  <p className="ml-3 text-gray-700">Unique ballot links work without any third-party services</p>
                 </div>
                 <div className="flex items-start">
                   <svg className="flex-shrink-0 h-5 w-5 text-primary mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <p className="ml-3 text-gray-700">Unique ballot links can be distributed through any channel -- Signal, WhatsApp, printed paper, or in person</p>
+                  <p className="ml-3 text-gray-700">Your data stays on your hardware</p>
                 </div>
                 <div className="flex items-start">
-                  <svg className="flex-shrink-0 h-5 w-5 text-primary mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <svg className="flex-shrink-0 h-5 w-5 text-yellow-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <p className="ml-3 text-gray-700">Works behind a VPN, on Tor, or on a completely air-gapped network</p>
+                  <p className="ml-3 text-gray-700">Email verification requires a <a href="https://resend.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Resend</a> account (free tier available)</p>
+                </div>
+                <div className="flex items-start">
+                  <svg className="flex-shrink-0 h-5 w-5 text-yellow-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="ml-3 text-gray-700">SMS verification requires a <a href="https://firebase.google.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Firebase</a> project (free tier available)</p>
                 </div>
               </div>
+              <Link
+                href="https://github.com/votekitorg/votekit"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+              >
+                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                  <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd"/>
+                </svg>
+                View on GitHub
+              </Link>
             </div>
+          </div>
 
-            {/* What VoteKit Does NOT Collect */}
-            <div className="mb-12">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">What VoteKit Does NOT Collect</h3>
+          {/* Privacy Note */}
+          <div className="max-w-3xl mx-auto">
+            <div className="bg-white border border-gray-200 rounded-lg p-8">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">A Note on Privacy</h3>
               <p className="text-gray-600 mb-4">
-                Commercial voting platforms store your data on their servers, often in jurisdictions
-                you cannot control. VoteKit is different. When you self-host, you control every byte of data.
+                All votes in VoteKit are anonymous. There is no link between a ballot and the person who cast it -- not for admins,
+                not for anyone with database access. Electors receive a receipt code to confirm their vote was counted,
+                but that code cannot be used to reveal what they voted.
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center mb-2">
-                    <svg className="h-5 w-5 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    <span className="font-medium text-gray-900">No analytics or tracking</span>
-                  </div>
-                  <p className="text-sm text-gray-600">No Google Analytics, no cookies beyond session auth, no tracking pixels</p>
-                </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center mb-2">
-                    <svg className="h-5 w-5 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    <span className="font-medium text-gray-900">No IP address logging</span>
-                  </div>
-                  <p className="text-sm text-gray-600">VoteKit does not log voter IP addresses or browser fingerprints</p>
-                </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center mb-2">
-                    <svg className="h-5 w-5 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    <span className="font-medium text-gray-900">No vote-to-voter link</span>
-                  </div>
-                  <p className="text-sm text-gray-600">Ballots are cryptographically separated from voter identity. Even the admin cannot link a vote to a person.</p>
-                </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center mb-2">
-                    <svg className="h-5 w-5 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    <span className="font-medium text-gray-900">No external data transmission</span>
-                  </div>
-                  <p className="text-sm text-gray-600">Unless you enable optional email/SMS, VoteKit sends zero data to external services</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Use Cases for Anonymous Operation */}
-            <div className="mb-12">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Built For Those Who Need It Most</h3>
-              <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-200">
-                <div className="p-5">
-                  <h4 className="font-medium text-gray-900">Union Organising</h4>
-                  <p className="mt-1 text-gray-600">
-                    Run strike ballots or leadership elections without employer surveillance.
-                    Distribute ballot links via encrypted messaging. No paper trail linking organisers to the platform.
-                  </p>
-                </div>
-                <div className="p-5">
-                  <h4 className="font-medium text-gray-900">Whistleblower Votes</h4>
-                  <p className="mt-1 text-gray-600">
-                    Conduct anonymous votes on whether to escalate concerns, file complaints, or take collective action.
-                    Participants cannot be identified through the voting platform.
-                  </p>
-                </div>
-                <div className="p-5">
-                  <h4 className="font-medium text-gray-900">Political Movements</h4>
-                  <p className="mt-1 text-gray-600">
-                    Run internal party plebiscites or policy votes in environments where political activity is monitored.
-                    Self-host behind a VPN or Tor hidden service for maximum protection.
-                  </p>
-                </div>
-                <div className="p-5">
-                  <h4 className="font-medium text-gray-900">Sensitive Board Decisions</h4>
-                  <p className="mt-1 text-gray-600">
-                    Conduct anonymous votes on contentious matters -- leadership challenges, misconduct investigations,
-                    or strategic decisions -- without revealing individual positions.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Operational Security Tips */}
-            <div>
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Operational Security Tips</h3>
               <p className="text-gray-600 mb-4">
-                For maximum anonymity, consider these practices when running a VoteKit election:
+                If you self-host without email or SMS verification (using only unique ballot links), VoteKit has
+                zero dependency on external services. You can run it on a local network, behind a VPN, or on
+                any machine you control. When the election is over, the entire database is a single file you can
+                delete or archive as you see fit.
               </p>
-              <div className="bg-gray-900 text-gray-300 rounded-lg p-6 space-y-4 text-sm">
-                <div>
-                  <span className="text-white font-medium">1. Use a clean machine.</span>
-                  <span className="ml-1">Run VoteKit from a fresh installation or a live USB operating system like Tails.</span>
-                </div>
-                <div>
-                  <span className="text-white font-medium">2. Distribute links securely.</span>
-                  <span className="ml-1">Send unique ballot links via Signal, Session, or another end-to-end encrypted messenger. Avoid email if surveillance is a concern.</span>
-                </div>
-                <div>
-                  <span className="text-white font-medium">3. Use Tor or a VPN.</span>
-                  <span className="ml-1">Run VoteKit as a Tor hidden service (.onion address) so neither the server nor the voters reveal their IP addresses.</span>
-                </div>
-                <div>
-                  <span className="text-white font-medium">4. Skip email and SMS verification.</span>
-                  <span className="ml-1">Use unique ballot links instead. This avoids any dependency on third-party services (Resend, Firebase) that could log activity.</span>
-                </div>
-                <div>
-                  <span className="text-white font-medium">5. Delete after use.</span>
-                  <span className="ml-1">Export results, then delete the database and shut down the server. VoteKit stores everything in a single SQLite file -- delete it and the data is gone.</span>
-                </div>
-                <div>
-                  <span className="text-white font-medium">6. Verify the code.</span>
-                  <span className="ml-1">VoteKit is open source. Before running it, review the code yourself or have someone you trust audit it. The entire codebase is public on GitHub.</span>
-                </div>
-              </div>
+              <p className="text-gray-600">
+                The code is open source. You do not need to trust us -- you can read it yourself.
+              </p>
             </div>
           </div>
         </div>
       </section>
+
 
       {/* Footer */}
       <footer className="bg-gray-900">
