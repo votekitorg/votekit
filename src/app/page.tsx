@@ -507,7 +507,7 @@ export default function HomePage() {
                   <svg className="flex-shrink-0 h-5 w-5 text-yellow-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <p className="ml-3 text-gray-700">Email verification requires a <a href="https://resend.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Resend</a> account (free tier available)</p>
+                  <p className="ml-3 text-gray-700">Email verification works via SMTP (any email provider) or <a href="https://resend.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Resend</a> (free tier available)</p>
                 </div>
                 <div className="flex items-start">
                   <svg className="flex-shrink-0 h-5 w-5 text-yellow-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
