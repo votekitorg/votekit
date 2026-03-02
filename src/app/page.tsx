@@ -52,26 +52,7 @@ export default function HomePage() {
             <p className="mt-3 max-w-md mx-auto text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
               Secure, anonymous voting platform for unions, political parties, NGOs, and community organizations. Self-hosted, transparent, and completely free.
             </p>
-            <div className="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
-              <div className="rounded-md shadow">
-                <Link
-                  href="https://github.com/votekitorg/votekit"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-primary hover:bg-primary-dark md:py-4 md:text-lg md:px-10"
-                >
-                  Get Started
-                </Link>
-              </div>
-              <div className="mt-3 rounded-md shadow sm:mt-0 sm:ml-3">
-                <Link
-                  href="/admin"
-                  className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-primary bg-white hover:bg-gray-50 border-primary md:py-4 md:text-lg md:px-10"
-                >
-                  Admin Login
-                </Link>
-              </div>
-            </div>
+
           </div>
         </div>
       </section>
@@ -332,7 +313,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="mt-6 text-lg font-medium text-gray-900">Upload Voter Roll</h3>
                 <p className="mt-2 text-base text-gray-500">
-                  Upload list of eligible voters with email addresses or phone numbers
+                  Upload a list of eligible electors with email addresses or phone numbers
                 </p>
               </div>
 
@@ -342,7 +323,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="mt-6 text-lg font-medium text-gray-900">Send Ballot Links</h3>
                 <p className="mt-2 text-base text-gray-500">
-                  System automatically sends unique ballot links to all electors
+                  Each elector receives a unique, one-time ballot link by email or SMS. No shared login, no passwords -- each link is tied to one person.
                 </p>
               </div>
 
@@ -352,7 +333,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="mt-6 text-lg font-medium text-gray-900">Verify & Vote</h3>
                 <p className="mt-2 text-base text-gray-500">
-                  Electors verify their identity and cast their votes securely
+                  Electors click their unique link and vote. If email or SMS verification is enabled, they confirm their identity first.
                 </p>
               </div>
 
@@ -362,7 +343,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="mt-6 text-lg font-medium text-gray-900">Results Published</h3>
                 <p className="mt-2 text-base text-gray-500">
-                  Results are automatically published when the election closes
+                  When the election closes, results are available to the admin and participating electors
                 </p>
               </div>
             </div>
@@ -588,7 +569,7 @@ export default function HomePage() {
                 VoteKit is open source software. No tracking. No ads. No data collection.
               </p>
               <p className="mt-4 text-sm text-gray-400">
-                © 2024 VoteKit Election Platform. Licensed under MIT.
+                © 2026 VoteKit Election Platform.
               </p>
             </div>
           </div>

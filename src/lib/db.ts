@@ -171,6 +171,14 @@ const migrations = [
   `,
   `
     ALTER TABLE sessions ADD COLUMN identifier_type TEXT CHECK(identifier_type IN ('email', 'phone')) DEFAULT 'email';
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS verification_attempts (
+      identifier TEXT PRIMARY KEY,
+      attempts INTEGER DEFAULT 0,
+      last_attempt INTEGER,
+      locked_until INTEGER
+    );
   `
 ];
 
@@ -202,8 +210,8 @@ function runMigrations() {
 export function generateSlug(title: string): string {
   return title
     .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9s-]/g, '')
+    .replace(/s+/g, '-')
     .substring(0, 50);
 }
 
@@ -222,7 +230,7 @@ export function generateUniqueSlug(title: string): string {
 }
 
 export function generateReceiptCode(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  return crypto.randomBytes(16).toString('hex');
 }
 
 export function cleanupExpiredCodes(): void {

@@ -1,5 +1,6 @@
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 import { getAuth, Auth } from 'firebase-admin/auth';
+import fs from 'fs';
 
 let app: App | null = null;
 let auth: Auth | null = null;
@@ -8,15 +9,33 @@ function getAdminApp(): App | null {
   if (typeof window !== 'undefined') return null;
   
   if (getApps().length === 0) {
+    let serviceAccount: any = null;
+    
+    // Try file path first, then fall back to inline env var
+    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
     const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
     
-    if (!serviceAccountKey) {
-      console.warn('FIREBASE_SERVICE_ACCOUNT_KEY not set. SMS verification will not work.');
+    if (serviceAccountPath) {
+      try {
+        const content = fs.readFileSync(serviceAccountPath, 'utf-8');
+        serviceAccount = JSON.parse(content);
+      } catch (error) {
+        console.error('Failed to read Firebase service account file:', error);
+        return null;
+      }
+    } else if (serviceAccountKey) {
+      try {
+        serviceAccount = JSON.parse(serviceAccountKey);
+      } catch (error) {
+        console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY:', error);
+        return null;
+      }
+    } else {
+      console.warn('No Firebase service account configured. SMS verification will not work.');
       return null;
     }
     
     try {
-      const serviceAccount = JSON.parse(serviceAccountKey);
       app = initializeApp({
         credential: cert(serviceAccount),
       });

@@ -94,12 +94,13 @@ export async function sendVerificationEmail(
   code: string,
   plebisciteTitle: string
 ): Promise<EmailResult> {
-  const fromEmail = process.env.FROM_EMAIL || 'noreply@example.com';
+  const rawFrom = process.env.FROM_EMAIL || 'noreply@example.com';
+  const fromEmail = rawFrom.includes('<') ? rawFrom : 'VoteKit <' + rawFrom + '>';
 
   return sendEmail({
     from: fromEmail,
     to: email,
-    subject: `Verification Code: ${plebisciteTitle}`,
+    subject: `${plebisciteTitle} - Verification Code`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
@@ -135,13 +136,14 @@ export async function sendBallotLinkEmail(
   plebisciteDescription: string,
   ballotUrl: string
 ): Promise<EmailResult> {
-  const fromEmail = process.env.FROM_EMAIL || 'noreply@example.com';
+  const rawFrom = process.env.FROM_EMAIL || 'noreply@example.com';
+  const fromEmail = rawFrom.includes('<') ? rawFrom : 'VoteKit <' + rawFrom + '>';
   const descSnippet = plebisciteDescription.substring(0, 300) + (plebisciteDescription.length > 300 ? '...' : '');
 
   return sendEmail({
     from: fromEmail,
     to: email,
-    subject: `Your Ballot: ${plebisciteTitle}`,
+    subject: `${plebisciteTitle} - Your Ballot is Ready`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
@@ -175,7 +177,8 @@ export async function sendReminderEmail(
   ballotUrl: string,
   closeDate: string
 ): Promise<EmailResult> {
-  const fromEmail = process.env.FROM_EMAIL || 'noreply@example.com';
+  const rawFrom = process.env.FROM_EMAIL || 'noreply@example.com';
+  const fromEmail = rawFrom.includes('<') ? rawFrom : 'VoteKit <' + rawFrom + '>';
   const descSnippet = plebisciteDescription.substring(0, 200) + (plebisciteDescription.length > 200 ? '...' : '');
   const formattedCloseDate = new Date(closeDate).toLocaleDateString('en-AU', {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Brisbane'
@@ -184,7 +187,7 @@ export async function sendReminderEmail(
   return sendEmail({
     from: fromEmail,
     to: email,
-    subject: `Reminder: Cast your vote - ${plebisciteTitle}`,
+    subject: `${plebisciteTitle} - Don't Forget to Vote`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
@@ -246,4 +249,45 @@ export function cleanupEmailRateLimit(): void {
 
 export function generateVerificationCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+export async function sendElectionClosedEmail(
+  email: string,
+  plebisciteTitle: string,
+  resultsUrl: string,
+  verifyUrl: string
+): Promise<EmailResult> {
+  const rawFrom = process.env.FROM_EMAIL || 'noreply@example.com';
+  const fromEmail = rawFrom.includes('<') ? rawFrom : 'VoteKit <' + rawFrom + '>';
+
+  return sendEmail({
+    from: fromEmail,
+    to: email,
+    subject: `${plebisciteTitle} - Results Available`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #00843D; margin: 0;">VoteKit Election Platform</h1>
+        </div>
+        <div style="background-color: #f8f9fa; border-radius: 8px; padding: 30px; margin-bottom: 20px;">
+          <h2 style="color: #1B5E20; margin-top: 0;">Election Closed -- Results Are In</h2>
+          <p style="color: #333; font-size: 16px; line-height: 1.5;">
+            The election <strong>${plebisciteTitle}</strong> has now closed. Thank you for participating.
+          </p>
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${resultsUrl}" style="background-color: #00843D; color: white; font-size: 18px; font-weight: bold; padding: 15px 30px; border-radius: 5px; text-decoration: none; display: inline-block;">View Results</a>
+          </div>
+        </div>
+        <div style="background-color: #e8f5e9; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+          <p style="color: #1B5E20; font-size: 14px; margin: 0;">
+            <strong>Verify your vote:</strong> Use your receipt code at <a href="${verifyUrl}" style="color: #00843D;">${verifyUrl}</a> to confirm your vote was counted.
+          </p>
+        </div>
+        <div style="border-top: 1px solid #e0e0e0; padding-top: 20px; text-align: center;">
+          <p style="color: #999; font-size: 12px; margin: 0;">This is an automated message from VoteKit.</p>
+        </div>
+      </div>
+    `,
+    text: `VoteKit Election Platform\n\nElection Closed -- Results Are In\n\nThe election "${plebisciteTitle}" has now closed. Thank you for participating.\n\nView results: ${resultsUrl}\n\nVerify your vote: Use your receipt code at ${verifyUrl} to confirm your vote was counted.`
+  });
 }

@@ -60,6 +60,25 @@ export default function PlebisciteManager({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      
+      // After closing, send results notifications to voters
+      if (action === 'close') {
+        try {
+          const notifyRes = await fetch('/api/admin/plebiscites/send-closed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plebisciteId: plebiscite.id }),
+          });
+          const notifyData = await notifyRes.json();
+          if (notifyRes.ok) {
+            alert('Election closed. Results notifications sent to ' + notifyData.sentCount + ' voter(s).');
+          }
+        } catch (e) {
+          // Don't block the close if notifications fail
+          console.error('Failed to send close notifications:', e);
+        }
+      }
+      
       router.refresh();
     } catch (err: any) {
       setError(err.message);

@@ -18,18 +18,19 @@ export interface AdminSession {
 async function ensureAdminPasswordHashed(): Promise<void> {
   const existing = db.prepare('SELECT value FROM admin_config WHERE key = ?').get('admin_password_hash') as { value: string } | undefined;
   
-  if (!existing) {
-    const adminPassword = process.env.ADMIN_PASSWORD;
-    if (!adminPassword) {
-      throw new Error('ADMIN_PASSWORD environment variable not set');
-    }
-    
-    const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(adminPassword, saltRounds);
-    
-    db.prepare('INSERT OR REPLACE INTO admin_config (key, value) VALUES (?, ?)').run('admin_password_hash', hashedPassword);
-    console.log('Admin password has been hashed and stored securely');
+  if (existing) return;
+  
+  // Hash already exists in DB - no env var needed
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminPassword) {
+    throw new Error('Admin password hash not found in database and ADMIN_PASSWORD env var not set. Run initial setup first.');
   }
+  
+  const saltRounds = 12;
+  const hashedPassword = await bcrypt.hash(adminPassword, saltRounds);
+  
+  db.prepare('INSERT OR REPLACE INTO admin_config (key, value) VALUES (?, ?)').run('admin_password_hash', hashedPassword);
+  console.log('Admin password has been hashed and stored securely');
 }
 
 export async function verifyAdminPassword(password: string): Promise<boolean> {
@@ -89,7 +90,7 @@ export function setAdminCookie(sessionId: string) {
   cookieStore.set('admin-session', sessionId, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
     maxAge: 24 * 60 * 60
   });
@@ -151,7 +152,7 @@ export function setVoterCookie(sessionId: string, plebisciteSlug: string) {
   cookieStore.set('voter-session-' + plebisciteSlug, sessionId, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
     maxAge: 2 * 60 * 60
   });

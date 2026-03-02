@@ -1,4 +1,5 @@
 'use client';
+import { useRouter } from 'next/navigation';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, onVoterCountChange }: Props) {
+  const router = useRouter();
   const [voters, setVoters] = useState<Voter[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -86,7 +88,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
         setSuccess('Voter added successfully');
         setNewEmail('');
         setNewPhone('');
-        fetchVoters();
+        fetchVoters(); router.refresh();
       } else {
         setError(result.error || 'Failed to add voter');
       }
@@ -165,7 +167,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
           invalid: result.invalid
         });
         setSuccess('Upload completed: ' + result.inserted + ' added, ' + result.duplicates + ' duplicates, ' + result.invalid + ' invalid');
-        fetchVoters();
+        fetchVoters(); router.refresh();
       } else {
         setError(result.error || 'Failed to upload voters');
       }
@@ -193,7 +195,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
 
       if (response.ok && result.success) {
         setSuccess('Voter removed successfully');
-        fetchVoters();
+        fetchVoters(); router.refresh();
       } else {
         setError(result.error || 'Failed to remove voter');
       }
@@ -216,7 +218,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
 
       if (response.ok && result.success) {
         setSuccess('All voters cleared successfully');
-        fetchVoters();
+        fetchVoters(); router.refresh();
       } else {
         setError(result.error || 'Failed to clear voters');
       }

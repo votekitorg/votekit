@@ -141,7 +141,7 @@ export default function VotingPage({ params }: VotingPageProps) {
             description: q.description,
             type: q.type,
             options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
-            preferentialType: q.preferentialType
+            preferentialType: q.preferentialType || q.preferential_type
           })));
         } else {
           setError('Election not found or not available');

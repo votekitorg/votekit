@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     response.cookies.set('voter-session-' + plebisciteSlug, sessionId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: 'strict',
       path: '/',
       maxAge: 2 * 60 * 60
     });

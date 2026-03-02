@@ -101,12 +101,13 @@ function getStatusInfo(plebiscite: Plebiscite) {
   }
 }
 
-function getTypeDisplayName(type: string): string {
+function getTypeDisplayName(type: string, preferentialType?: string): string {
+  const pref = preferentialType === 'optional' ? ' - Optional Preferential' : preferentialType === 'compulsory' ? ' - Compulsory Preferential' : '';
   switch (type) {
     case 'yes_no': return 'Yes/No';
     case 'multiple_choice': return 'Multiple Choice';
-    case 'ranked_choice': return 'Ranked Choice (IRV)';
-    case 'condorcet': return 'Condorcet (Pairwise/Schulze)';
+    case 'ranked_choice': return 'Ranked Choice (IRV)' + pref;
+    case 'condorcet': return 'Condorcet (Pairwise/Schulze)' + pref;
     default: return type;
   }
 }
@@ -143,6 +144,15 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
           </div>
           
           <div className="flex space-x-3">
+            {plebiscite.status === 'draft' && (
+              <Link
+                href={`/admin/plebiscites/${plebiscite.id}/edit`}
+                className="btn-primary"
+              >
+                Edit Election
+              </Link>
+            )}
+            
             {plebiscite.status === 'open' && (
               <Link
                 href={`/vote/${plebiscite.slug}`}
@@ -177,7 +187,7 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
               <div>
                 <h4 className="text-sm font-semibold text-yellow-800">No voters registered</h4>
                 <p className="text-sm text-yellow-700 mt-1">
-                  You need to add voters before members can vote in this election. Use the voter management section below.
+                  You need to add voters before electors can vote in this election. Use the voter management section below.
                 </p>
               </div>
             </div>
@@ -336,7 +346,7 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
                         )}
                       </div>
                       <span className="badge badge-gray">
-                        {getTypeDisplayName(question.type)}
+                        {getTypeDisplayName(question.type, (question as any).preferential_type)}
                       </span>
                     </div>
                     
@@ -377,12 +387,12 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
                     />
                   </div>
                   <p className="text-sm text-gray-500 mt-1">
-                    Share this URL on social media, email, or messaging apps for members to vote
+                    Share this URL on social media, email, or messaging apps for electors to vote
                   </p>
                 </div>
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="text-sm font-medium text-blue-900 mb-2">Voting Instructions for Members:</h4>
+                  <h4 className="text-sm font-medium text-blue-900 mb-2">Voting Instructions for Electors:</h4>
                   <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
                     <li>Click the voting URL</li>
                     <li>Enter your registered email address</li>

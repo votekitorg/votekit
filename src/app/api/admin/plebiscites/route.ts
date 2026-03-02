@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title, description, info_url, open_date, close_date, timezone, questions = [], sms_enabled = false } = body;
+    const { title, description, info_url, open_date, close_date, timezone, questions = [], sms_enabled = true, open_now = false } = body;
 
     if (!title || !description || !open_date || !close_date) {
       return NextResponse.json(
@@ -91,10 +91,11 @@ export async function POST(request: NextRequest) {
 
     const createPlebiscite = db.prepare(`
       INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, status, sms_enabled, timezone)
-      VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    const result = createPlebiscite.run(slug, title, description, info_url, open_date, close_date, sms_enabled ? 1 : 0, timezone || 'UTC');
+    const electionStatus = 'draft';
+    const result = createPlebiscite.run(slug, title, description, info_url, open_date, close_date, electionStatus, sms_enabled ? 1 : 0, timezone || 'UTC');
     const plebisciteId = result.lastInsertRowid;
 
     const createQuestion = db.prepare(`
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest) {
         open_date,
         close_date,
         timezone: timezone || 'UTC',
-        status: 'draft',
+        status: electionStatus,
         sms_enabled
       }
     });
@@ -165,11 +166,23 @@ export async function PUT(request: NextRequest) {
     }
 
     if (action === 'open') {
+      if (plebiscite.status !== 'draft') {
+        return NextResponse.json(
+          { error: 'Only draft plebiscites can be opened' },
+          { status: 400 }
+        );
+      }
       db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?').run('open', id);
       return NextResponse.json({ success: true, status: 'open' });
     }
 
     if (action === 'close') {
+      if (plebiscite.status !== 'open') {
+        return NextResponse.json(
+          { error: 'Only open plebiscites can be closed' },
+          { status: 400 }
+        );
+      }
       db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?').run('closed', id);
       return NextResponse.json({ success: true, status: 'closed' });
     }
@@ -180,7 +193,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: true, sms_enabled: newValue });
     }
 
-    const { title, description, info_url, open_date, close_date, sms_enabled } = updateData;
+    const { title, description, info_url, open_date, close_date, timezone, sms_enabled, questions } = updateData;
 
     if (sms_enabled !== undefined) {
       db.prepare('UPDATE plebiscites SET sms_enabled = ? WHERE id = ?').run(sms_enabled ? 1 : 0, id);
@@ -210,6 +223,10 @@ export async function PUT(request: NextRequest) {
         updateFields.push('close_date = ?');
         updateValues.push(close_date);
       }
+      if (timezone !== undefined) {
+        updateFields.push('timezone = ?');
+        updateValues.push(timezone);
+      }
 
       if (updateFields.length > 0) {
         updateValues.push(id);
@@ -218,6 +235,24 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    if (plebiscite.status === 'draft' && questions !== undefined) {
+      db.prepare('DELETE FROM questions WHERE plebiscite_id = ?').run(id);
+      const createQuestion = db.prepare(`
+        INSERT INTO questions (plebiscite_id, title, description, type, options, display_order, preferential_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      questions.forEach((question: any, index: number) => {
+        createQuestion.run(
+          id,
+          question.title,
+          question.description || null,
+          question.type,
+          JSON.stringify(question.options),
+          index,
+          question.preferentialType || 'compulsory'
+        );
+      });
+    }
     return NextResponse.json({ success: true });
 
   } catch (error) {

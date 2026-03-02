@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
 
 interface Question {
@@ -12,30 +12,57 @@ interface Question {
   preferentialType?: 'compulsory' | 'optional';
 }
 
-export default function CreatePlebiscite() {
+export default function EditPlebiscite() {
+  const router = useRouter();
+  const params = useParams();
+  const id = params.id as string;
+
   const pad = (n: number) => n.toString().padStart(2, '0');
   const toLocalDatetime = (d: Date) =>
     d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-  const defaultCloseDate = toLocalDatetime(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
 
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     info_url: '',
-    close_date: defaultCloseDate,
+    close_date: '',
     timezone: 'Australia/Brisbane'
   });
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  const router = useRouter();
+
+  useEffect(() => {
+    fetch(`/api/admin/plebiscites/${id}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) { setError(data.error); setIsLoading(false); return; }
+        const p = data.plebiscite;
+        setFormData({
+          title: p.title || '',
+          description: p.description || '',
+          info_url: p.info_url || '',
+          close_date: p.close_date ? toLocalDatetime(new Date(p.close_date)) : '',
+          timezone: p.timezone || 'Australia/Brisbane'
+        });
+        setQuestions((data.questions || []).map((q: any) => ({
+          title: q.title,
+          description: q.description || '',
+          type: q.type,
+          options: q.options,
+          preferentialType: q.preferential_type || 'compulsory'
+        })));
+        setIsLoading(false);
+      })
+      .catch(() => { setError('Failed to load election'); setIsLoading(false); });
+  }, [id]);
 
   const steps = [
     { id: 1, name: 'Basic Information', description: 'Title and description' },
-    { id: 2, name: 'Questions', description: 'Add questions and voting methods' },
-    { id: 3, name: 'Review & Create', description: 'Set closing date and create' }
+    { id: 2, name: 'Questions', description: 'Edit questions and voting methods' },
+    { id: 3, name: 'Review & Save', description: 'Set closing date and save' }
   ];
 
   const timezoneOptions = [
@@ -157,13 +184,13 @@ export default function CreatePlebiscite() {
 
     try {
       const response = await fetch('/api/admin/plebiscites', {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: Number(id),
           title: formData.title,
           description: formData.description,
           info_url: formData.info_url,
-          open_date: toLocalDatetime(new Date()),
           close_date: formData.close_date,
           timezone: formData.timezone,
           questions
@@ -172,9 +199,9 @@ export default function CreatePlebiscite() {
 
       const result = await response.json();
       if (response.ok && result.success) {
-        router.push(`/admin/plebiscites/${result.plebiscite.id}`);
+        router.push(`/admin/plebiscites/${id}`);
       } else {
-        setError(result.error || 'Failed to create election');
+        setError(result.error || 'Failed to update election');
       }
     } catch (error) {
       setError('An error occurred. Please try again.');
@@ -183,12 +210,23 @@ export default function CreatePlebiscite() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center py-20">
+          <div className="spinner mr-3"></div>
+          <span className="text-gray-600">Loading election...</span>
+        </div>
+      </AdminLayout>
+    );
+  }
+
   return (
     <AdminLayout>
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Create New Election</h1>
-          <p className="text-gray-600">Set up your election as a draft. You can review and edit everything before opening it.</p>
+          <h1 className="text-2xl font-bold text-gray-900">Edit Election</h1>
+          <p className="text-gray-600">Update your draft election details, questions, and settings.</p>
         </div>
 
         {/* Progress Steps */}
@@ -236,61 +274,20 @@ export default function CreatePlebiscite() {
             <div className="card">
               <div className="card-header">
                 <h2 className="text-lg font-semibold text-gray-900">Basic Information</h2>
-                <p className="text-sm text-gray-600 mt-1">Enter the core details of your election</p>
+                <p className="text-sm text-gray-600 mt-1">Update the core details of your election</p>
               </div>
               <div className="card-body space-y-6">
                 <div>
-                  <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
-                    Election Title *
-                  </label>
-                  <input
-                    type="text"
-                    id="title"
-                    name="title"
-                    value={formData.title}
-                    onChange={handleInputChange}
-                    className="input-field"
-                    placeholder="e.g., Board Election 2024"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Choose a clear, descriptive title that electors will recognize
-                  </p>
+                  <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">Election Title *</label>
+                  <input type="text" id="title" name="title" value={formData.title} onChange={handleInputChange} className="input-field" placeholder="e.g., Board Election 2024" />
                 </div>
-
                 <div>
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                    Description *
-                  </label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    rows={5}
-                    value={formData.description}
-                    onChange={handleInputChange}
-                    className="textarea-field"
-                    placeholder="Explain the purpose, background, and importance of this election."
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Provide context so electors understand what they are voting on.
-                  </p>
+                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">Description *</label>
+                  <textarea id="description" name="description" rows={5} value={formData.description} onChange={handleInputChange} className="textarea-field" placeholder="Explain the purpose of this election." />
                 </div>
-
                 <div>
-                  <label htmlFor="info_url" className="block text-sm font-medium text-gray-700 mb-2">
-                    Additional Information URL (optional)
-                  </label>
-                  <input
-                    type="url"
-                    id="info_url"
-                    name="info_url"
-                    value={formData.info_url}
-                    onChange={handleInputChange}
-                    className="input-field"
-                    placeholder="https://example.com/background-document"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Link to detailed background documents, policy papers, or additional context
-                  </p>
+                  <label htmlFor="info_url" className="block text-sm font-medium text-gray-700 mb-2">Additional Information URL (optional)</label>
+                  <input type="url" id="info_url" name="info_url" value={formData.info_url} onChange={handleInputChange} className="input-field" placeholder="https://example.com/background-document" />
                 </div>
               </div>
             </div>
@@ -303,24 +300,17 @@ export default function CreatePlebiscite() {
                 <div className="flex justify-between items-start">
                   <div>
                     <h2 className="text-lg font-semibold text-gray-900">Questions & Voting Methods</h2>
-                    <p className="text-sm text-gray-600 mt-1">Add the questions you want electors to vote on</p>
+                    <p className="text-sm text-gray-600 mt-1">Edit the questions electors will vote on</p>
                   </div>
-                  <button type="button" onClick={addQuestion} className="btn-primary">
-                    Add Question
-                  </button>
+                  <button type="button" onClick={addQuestion} className="btn-primary">Add Question</button>
                 </div>
               </div>
               <div className="card-body">
                 {questions.length === 0 ? (
                   <div className="text-center py-12 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg">
-                    <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No questions yet</h3>
                     <p className="text-gray-600 mb-4">Start by adding your first question</p>
-                    <button type="button" onClick={addQuestion} className="btn-primary">
-                      Add Your First Question
-                    </button>
+                    <button type="button" onClick={addQuestion} className="btn-primary">Add Your First Question</button>
                   </div>
                 ) : (
                   <div className="space-y-6">
@@ -328,118 +318,67 @@ export default function CreatePlebiscite() {
                       <div key={qIndex} className="border border-gray-200 rounded-lg p-6 bg-gray-50">
                         <div className="flex justify-between items-start mb-6">
                           <h3 className="text-lg font-semibold text-gray-900">Question {qIndex + 1}</h3>
-                          <button type="button" onClick={() => removeQuestion(qIndex)} className="text-red-600 hover:text-red-800 font-medium">
-                            Remove Question
-                          </button>
+                          <button type="button" onClick={() => removeQuestion(qIndex)} className="text-red-600 hover:text-red-800 font-medium">Remove Question</button>
                         </div>
-
                         <div className="space-y-6">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Question Text *</label>
-                            <input
-                              type="text"
-                              value={question.title}
-                              onChange={(e) => updateQuestion(qIndex, 'title', e.target.value)}
-                              className="input-field"
-                              placeholder="Enter a clear, specific question..."
-                            />
-                            <p className="text-xs text-gray-500 mt-1">Make it specific and unambiguous. Avoid leading questions.</p>
+                            <input type="text" value={question.title} onChange={(e) => updateQuestion(qIndex, 'title', e.target.value)} className="input-field" placeholder="Enter a clear, specific question..." />
                           </div>
-
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Additional Instructions (optional)</label>
-                            <textarea
-                              value={question.description}
-                              onChange={(e) => updateQuestion(qIndex, 'description', e.target.value)}
-                              className="textarea-field"
-                              rows={3}
-                              placeholder="Any additional context or instructions for voters..."
-                            />
+                            <textarea value={question.description} onChange={(e) => updateQuestion(qIndex, 'description', e.target.value)} className="textarea-field" rows={3} placeholder="Any additional context or instructions for voters..." />
                           </div>
-
                           <div className="bg-white border border-gray-200 rounded-lg p-4">
                             <label className="block text-sm font-medium text-gray-700 mb-3">Voting Method *</label>
                             <div className="space-y-2">
                               <label className="flex items-start space-x-3 cursor-pointer">
                                 <input type="radio" checked={question.type === 'yes_no'} onChange={() => updateQuestion(qIndex, 'type', 'yes_no')} className="mt-1 w-4 h-4 text-primary" />
-                                <div>
-                                  <div className="font-medium text-gray-900">Yes/No Vote</div>
-                                  <div className="text-sm text-gray-600">Simple binary choice. Winner determined by majority.</div>
-                                </div>
+                                <div><div className="font-medium text-gray-900">Yes/No Vote</div><div className="text-sm text-gray-600">Simple binary choice.</div></div>
                               </label>
                               <label className="flex items-start space-x-3 cursor-pointer">
                                 <input type="radio" checked={question.type === 'multiple_choice'} onChange={() => updateQuestion(qIndex, 'type', 'multiple_choice')} className="mt-1 w-4 h-4 text-primary" />
-                                <div>
-                                  <div className="font-medium text-gray-900">Multiple Choice</div>
-                                  <div className="text-sm text-gray-600">Choose one option from several. Winner determined by plurality.</div>
-                                </div>
+                                <div><div className="font-medium text-gray-900">Multiple Choice</div><div className="text-sm text-gray-600">Choose one option from several.</div></div>
                               </label>
                               <label className="flex items-start space-x-3 cursor-pointer">
                                 <input type="radio" checked={question.type === 'ranked_choice'} onChange={() => updateQuestion(qIndex, 'type', 'ranked_choice')} className="mt-1 w-4 h-4 text-primary" />
-                                <div>
-                                  <div className="font-medium text-gray-900">Ranked Choice (IRV)</div>
-                                  <div className="text-sm text-gray-600">Rank options by preference. Winner determined by instant runoff voting.</div>
-                                </div>
+                                <div><div className="font-medium text-gray-900">Ranked Choice (IRV)</div><div className="text-sm text-gray-600">Rank options by preference.</div></div>
                               </label>
                               <label className="flex items-start space-x-3 cursor-pointer">
                                 <input type="radio" checked={question.type === 'condorcet'} onChange={() => updateQuestion(qIndex, 'type', 'condorcet')} className="mt-1 w-4 h-4 text-primary" />
-                                <div>
-                                  <div className="font-medium text-gray-900">Condorcet (Pairwise)</div>
-                                  <div className="text-sm text-gray-600">Advanced ranked voting. Every option compared head-to-head.</div>
-                                </div>
+                                <div><div className="font-medium text-gray-900">Condorcet (Pairwise)</div><div className="text-sm text-gray-600">Advanced ranked voting.</div></div>
                               </label>
                             </div>
                           </div>
-
                           {(question.type === 'ranked_choice' || question.type === 'condorcet') && (
                             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                               <label className="block text-sm font-medium text-blue-800 mb-3">Preferential Voting Requirements *</label>
                               <div className="space-y-2">
                                 <label className="flex items-start space-x-3 cursor-pointer">
                                   <input type="radio" checked={question.preferentialType === 'compulsory'} onChange={() => updateQuestion(qIndex, 'preferentialType', 'compulsory')} className="mt-1 w-4 h-4 text-blue-600" />
-                                  <div>
-                                    <div className="font-medium text-blue-900">Compulsory Preferential</div>
-                                    <div className="text-sm text-blue-700">Voters must rank ALL candidates to submit their vote</div>
-                                  </div>
+                                  <div><div className="font-medium text-blue-900">Compulsory Preferential</div><div className="text-sm text-blue-700">Voters must rank ALL candidates</div></div>
                                 </label>
                                 <label className="flex items-start space-x-3 cursor-pointer">
                                   <input type="radio" checked={question.preferentialType === 'optional'} onChange={() => updateQuestion(qIndex, 'preferentialType', 'optional')} className="mt-1 w-4 h-4 text-blue-600" />
-                                  <div>
-                                    <div className="font-medium text-blue-900">Optional Preferential</div>
-                                    <div className="text-sm text-blue-700">Voters can rank as few or many candidates as they wish</div>
-                                  </div>
+                                  <div><div className="font-medium text-blue-900">Optional Preferential</div><div className="text-sm text-blue-700">Voters can rank as few or many as they wish</div></div>
                                 </label>
                               </div>
                             </div>
                           )}
-
                           <div>
                             <div className="flex justify-between items-center mb-3">
                               <label className="block text-sm font-medium text-gray-700">Answer Options *</label>
                               {question.type !== 'yes_no' && (
-                                <button type="button" onClick={() => addOption(qIndex)} className="text-sm text-primary hover:text-primary-dark font-medium">
-                                  + Add Option
-                                </button>
+                                <button type="button" onClick={() => addOption(qIndex)} className="text-sm text-primary hover:text-primary-dark font-medium">+ Add Option</button>
                               )}
                             </div>
                             <div className="space-y-3">
                               {question.options.map((option, oIndex) => (
                                 <div key={oIndex} className="flex items-center space-x-3">
-                                  <span className="flex-shrink-0 w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-xs font-medium text-gray-600">
-                                    {oIndex + 1}
-                                  </span>
-                                  <input
-                                    type="text"
-                                    value={option}
-                                    onChange={(e) => updateOption(qIndex, oIndex, e.target.value)}
-                                    className="input-field flex-1"
-                                    placeholder={`Option ${oIndex + 1}`}
-                                    disabled={question.type === 'yes_no'}
-                                  />
+                                  <span className="flex-shrink-0 w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-xs font-medium text-gray-600">{oIndex + 1}</span>
+                                  <input type="text" value={option} onChange={(e) => updateOption(qIndex, oIndex, e.target.value)} className="input-field flex-1" placeholder={`Option ${oIndex + 1}`} disabled={question.type === 'yes_no'} />
                                   {question.type !== 'yes_no' && question.options.length > 2 && (
-                                    <button type="button" onClick={() => removeOption(qIndex, oIndex)} className="text-red-600 hover:text-red-800 font-medium">
-                                      Remove
-                                    </button>
+                                    <button type="button" onClick={() => removeOption(qIndex, oIndex)} className="text-red-600 hover:text-red-800 font-medium">Remove</button>
                                   )}
                                 </div>
                               ))}
@@ -450,24 +389,17 @@ export default function CreatePlebiscite() {
                     ))}
                   </div>
                 )}
-                {questions.length > 0 && (
-                  <div className="mt-4 text-center">
-                    <button type="button" onClick={addQuestion} className="btn-primary">
-                      Add Another Question
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           )}
 
-          {/* Step 3: Review & Create */}
+          {/* Step 3: Review & Save */}
           {currentStep === 3 && (
             <div className="space-y-6">
               <div className="card">
                 <div className="card-header">
-                  <h2 className="text-lg font-semibold text-gray-900">Review & Create</h2>
-                  <p className="text-sm text-gray-600 mt-1">This will create a draft election. You can edit everything, upload voters, and open it when ready.</p>
+                  <h2 className="text-lg font-semibold text-gray-900">Review & Save</h2>
+                  <p className="text-sm text-gray-600 mt-1">Review your changes before saving.</p>
                 </div>
                 <div className="card-body space-y-6">
                   <div>
@@ -484,11 +416,7 @@ export default function CreatePlebiscite() {
                       {formData.info_url && (
                         <div className="sm:col-span-2">
                           <dt className="text-sm font-medium text-gray-500">Information URL</dt>
-                          <dd className="text-sm text-blue-600">
-                            <a href={formData.info_url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-800">
-                              {formData.info_url}
-                            </a>
-                          </dd>
+                          <dd className="text-sm text-blue-600">{formData.info_url}</dd>
                         </div>
                       )}
                     </dl>
@@ -508,9 +436,7 @@ export default function CreatePlebiscite() {
                               {question.type === 'condorcet' && `Condorcet${question.preferentialType === 'optional' ? ' (Optional)' : ''}`}
                             </span>
                           </div>
-                          {question.description && (
-                            <p className="text-sm text-gray-600 mb-3">{question.description}</p>
-                          )}
+                          {question.description && <p className="text-sm text-gray-600 mb-3">{question.description}</p>}
                           <div className="text-sm">
                             <span className="font-medium text-gray-700">Options: </span>
                             <span className="text-gray-600">{question.options.join(', ')}</span>
@@ -527,44 +453,18 @@ export default function CreatePlebiscite() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label htmlFor="close_date" className="block text-sm font-medium text-blue-800 mb-2">Closing Date & Time *</label>
-                          <input
-                            type="datetime-local"
-                            id="close_date"
-                            name="close_date"
-                            value={formData.close_date}
-                            onChange={handleInputChange}
-                            className="input-field"
-                          />
-                          <p className="text-xs text-blue-700 mt-1">Voting will automatically close at this time</p>
+                          <input type="datetime-local" id="close_date" name="close_date" value={formData.close_date} onChange={handleInputChange} className="input-field" />
                         </div>
                         <div>
                           <label htmlFor="timezone" className="block text-sm font-medium text-blue-800 mb-2">Timezone *</label>
-                          <select
-                            id="timezone"
-                            name="timezone"
-                            value={formData.timezone}
-                            onChange={(e) => setFormData(prev => ({ ...prev, timezone: e.target.value }))}
-                            className="input-field"
-                          >
+                          <select id="timezone" name="timezone" value={formData.timezone} onChange={(e) => setFormData(prev => ({ ...prev, timezone: e.target.value }))} className="input-field">
                             {timezoneOptions.map(tz => (
                               <option key={tz.value} value={tz.value}>{tz.label}</option>
                             ))}
                           </select>
-                          <p className="text-xs text-blue-700 mt-1">Closing time will be interpreted in this timezone</p>
                         </div>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h4 className="text-sm font-medium text-gray-900 mb-2">What happens next?</h4>
-                    <ol className="text-sm text-gray-600 list-decimal list-inside space-y-1">
-                      <li>Election is created as a <strong>draft</strong></li>
-                      <li>Upload your voter roll (emails and/or phone numbers)</li>
-                      <li>Review everything, edit if needed</li>
-                      <li>When ready, click <strong>Open Voting</strong> to go live</li>
-                      <li>Send ballot links to all electors</li>
-                    </ol>
                   </div>
                 </div>
               </div>
@@ -575,39 +475,17 @@ export default function CreatePlebiscite() {
           <div className="flex justify-between items-center pt-6">
             <div className="flex space-x-4">
               {currentStep > 1 && (
-                <button type="button" onClick={prevStep} className="btn-secondary">
-                  Previous Step
-                </button>
+                <button type="button" onClick={prevStep} className="btn-secondary">Previous Step</button>
               )}
-              <button type="button" onClick={() => router.back()} className="btn-secondary">
-                Cancel
-              </button>
+              <button type="button" onClick={() => router.push(`/admin/plebiscites/${id}`)} className="btn-secondary">Cancel</button>
             </div>
-            
             <div className="flex items-center space-x-4">
-              {error && (
-                <div className="alert-error max-w-md">{error}</div>
-              )}
-              
+              {error && <div className="alert-error max-w-md">{error}</div>}
               {currentStep < 3 ? (
-                <button type="button" onClick={nextStep} className="btn-primary">
-                  Next Step
-                </button>
+                <button type="button" onClick={nextStep} className="btn-primary">Next Step</button>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={isSubmitting}
-                  className="btn-primary px-8"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <div className="spinner mr-2"></div>
-                      Creating...
-                    </>
-                  ) : (
-                    'Create Draft Election'
-                  )}
+                <button type="button" onClick={handleSubmit} disabled={isSubmitting} className="btn-primary px-8">
+                  {isSubmitting ? (<><div className="spinner mr-2"></div>Saving...</>) : 'Save Changes'}
                 </button>
               )}
             </div>

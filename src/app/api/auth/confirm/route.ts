@@ -2,45 +2,54 @@ import { NextRequest, NextResponse } from 'next/server';
 import db, { cleanupExpiredCodes } from '@/lib/db';
 import { createVoterSession } from '@/lib/auth';
 
-// Brute force protection: track failed attempts per email
-const failedAttempts = new Map<string, { count: number; lockedUntil: number }>();
+// Brute force protection constants
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 minutes
 
-function checkBruteForce(email: string): { blocked: boolean; remaining: number } {
+function checkBruteForce(identifier: string): { blocked: boolean; remaining: number } {
   const now = Date.now();
-  const record = failedAttempts.get(email);
-  
+  const record = db.prepare('SELECT * FROM verification_attempts WHERE identifier = ?').get(identifier) as {
+    identifier: string; attempts: number; last_attempt: number; locked_until: number;
+  } | undefined;
+
   if (!record) return { blocked: false, remaining: MAX_ATTEMPTS };
-  
+
   // Reset if lockout has expired
-  if (record.lockedUntil && now > record.lockedUntil) {
-    failedAttempts.delete(email);
+  if (record.locked_until && now > record.locked_until) {
+    db.prepare('DELETE FROM verification_attempts WHERE identifier = ?').run(identifier);
     return { blocked: false, remaining: MAX_ATTEMPTS };
   }
-  
-  if (record.count >= MAX_ATTEMPTS) {
+
+  if (record.attempts >= MAX_ATTEMPTS) {
     return { blocked: true, remaining: 0 };
   }
-  
-  return { blocked: false, remaining: MAX_ATTEMPTS - record.count };
+
+  return { blocked: false, remaining: MAX_ATTEMPTS - record.attempts };
 }
 
-function recordFailedAttempt(email: string): void {
-  const record = failedAttempts.get(email) || { count: 0, lockedUntil: 0 };
-  record.count++;
-  
-  if (record.count >= MAX_ATTEMPTS) {
-    record.lockedUntil = Date.now() + LOCKOUT_DURATION;
-    // Also invalidate all active codes for this email
-    db.prepare('UPDATE verification_codes SET used = TRUE WHERE email = ? AND used = FALSE').run(email);
+function recordFailedAttempt(identifier: string): void {
+  const now = Date.now();
+  const record = db.prepare('SELECT * FROM verification_attempts WHERE identifier = ?').get(identifier) as {
+    identifier: string; attempts: number; last_attempt: number; locked_until: number;
+  } | undefined;
+
+  const newCount = (record?.attempts || 0) + 1;
+  const lockedUntil = newCount >= MAX_ATTEMPTS ? now + LOCKOUT_DURATION : null;
+
+  if (newCount >= MAX_ATTEMPTS) {
+    // Invalidate all active codes for this identifier
+    db.prepare('UPDATE verification_codes SET used = TRUE WHERE email = ? AND used = FALSE').run(identifier);
   }
-  
-  failedAttempts.set(email, record);
+
+  db.prepare(`
+    INSERT INTO verification_attempts (identifier, attempts, last_attempt, locked_until)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(identifier) DO UPDATE SET attempts = ?, last_attempt = ?, locked_until = ?
+  `).run(identifier, newCount, now, lockedUntil, newCount, now, lockedUntil);
 }
 
-function clearFailedAttempts(email: string): void {
-  failedAttempts.delete(email);
+function clearFailedAttempts(identifier: string): void {
+  db.prepare('DELETE FROM verification_attempts WHERE identifier = ?').run(identifier);
 }
 
 export async function POST(request: NextRequest) {
@@ -78,7 +87,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Status check is sufficient - admin controls open/close manually
     const now = new Date();
 
     // Verify code
@@ -136,7 +144,7 @@ export async function POST(request: NextRequest) {
     response.cookies.set(`voter-session-${plebisciteSlug}`, sessionId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: 'strict',
       path: '/',
       maxAge: 2 * 60 * 60 // 2 hours
     });
