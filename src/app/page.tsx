@@ -1,73 +1,8 @@
 import Link from 'next/link';
-import db from '@/lib/db';
-
-interface Plebiscite {
-  id: number;
-  slug: string;
-  title: string;
-  description: string;
-  open_date: string;
-  close_date: string;
-  status: 'draft' | 'open' | 'closed';
-}
 
 export const dynamic = 'force-dynamic';
 
-async function getActiveElections(): Promise<Plebiscite[]> {
-  const now = new Date().toISOString();
-  
-  // Get elections that are either:
-  // 1. Status is 'open' and within date range
-  // 2. Status is 'closed' (for results viewing)
-  const plebiscites = db.prepare(`
-    SELECT id, slug, title, description, open_date, close_date, status
-    FROM plebiscites 
-    WHERE (
-      (status = 'open' AND open_date <= ? AND close_date > ?) OR
-      status = 'closed'
-    )
-    ORDER BY 
-      CASE WHEN status = 'open' THEN 1 ELSE 2 END,
-      open_date DESC
-  `).all(now, now) as Plebiscite[];
-
-  return plebiscites;
-}
-
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-AU', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Australia/Brisbane'
-  });
-}
-
-function getTimeRemaining(closeDate: string): string {
-  const now = new Date();
-  const close = new Date(closeDate);
-  const diffMs = close.getTime() - now.getTime();
-  
-  if (diffMs <= 0) return 'Closed';
-  
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-  
-  if (diffDays > 0) {
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} remaining`;
-  } else if (diffHours > 0) {
-    return `${diffHours} hour${diffHours > 1 ? 's' : ''} remaining`;
-  } else {
-    return `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} remaining`;
-  }
-}
-
-export default async function HomePage() {
-  const plebiscites = await getActiveElections();
-
+export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Header */}
@@ -113,90 +48,17 @@ export default async function HomePage() {
           </p>
         </div>
 
-        {/* Elections List */}
-        {plebiscites.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Elections</h3>
-            <p className="text-gray-600">
-              There are currently no active elections. Check back later or contact your organization for updates.
-            </p>
+        <div className="text-center py-12">
+          <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
           </div>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {plebiscites.map((plebiscite) => (
-              <div key={plebiscite.id} className="card hover:shadow-lg transition-shadow duration-200">
-                <div className="card-header">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-gray-900 truncate">
-                      {plebiscite.title}
-                    </h3>
-                    <span 
-                      className={`badge ${
-                        plebiscite.status === 'open' 
-                          ? 'badge-green' 
-                          : 'badge-gray'
-                      }`}
-                    >
-                      {plebiscite.status === 'open' ? 'Open' : 'Closed'}
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="card-body">
-                  <p className="text-gray-600 mb-4 line-clamp-3">
-                    {plebiscite.description}
-                  </p>
-                  
-                  <div className="space-y-2 text-sm">
-                    <div>
-                      <span className="font-medium text-gray-700">Opens:</span>
-                      <span className="text-gray-600 ml-2">
-                        {formatDate(plebiscite.open_date)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="font-medium text-gray-700">Closes:</span>
-                      <span className="text-gray-600 ml-2">
-                        {formatDate(plebiscite.close_date)}
-                      </span>
-                    </div>
-                    {plebiscite.status === 'open' && (
-                      <div>
-                        <span className="font-medium text-gray-700">Status:</span>
-                        <span className="text-green-600 ml-2 font-medium">
-                          {getTimeRemaining(plebiscite.close_date)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="card-footer">
-                  {plebiscite.status === 'open' ? (
-                    <Link
-                      href={`/vote/${plebiscite.slug}`}
-                      className="btn-primary w-full text-center"
-                    >
-                      Vote Now
-                    </Link>
-                  ) : (
-                    <Link
-                      href={`/results/${plebiscite.slug}`}
-                      className="btn-secondary w-full text-center"
-                    >
-                      View Results
-                    </Link>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Check Your Email</h3>
+          <p className="text-gray-600 max-w-md mx-auto">
+            If you are an eligible voter, you will receive a unique ballot link via email when an election is open. Use that link to cast your vote securely.
+          </p>
+        </div>
 
         {/* Info Section */}
         <div className="mt-16 grid gap-8 md:grid-cols-3">
@@ -232,7 +94,7 @@ export default async function HomePage() {
             </div>
             <h4 className="text-lg font-semibold text-gray-900 mb-2">Member-Only</h4>
             <p className="text-gray-600">
-              Only verified members can participate. Email verification ensures election integrity.
+              Only verified members can participate. Identity verification ensures election integrity.
             </p>
           </div>
         </div>
