@@ -9,8 +9,7 @@ interface AdminLayoutProps {
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: 'home' },
-  { name: 'Create Plebiscite', href: '/admin/plebiscites/new', icon: 'plus' },
-  { name: 'Manage Voters', href: '/admin/voters', icon: 'users' },
+  { name: 'Create Election', href: '/admin/plebiscites/new', icon: 'plus' },
 ];
 
 function getIcon(iconName: string) {
@@ -62,7 +61,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </div>
             <div>
               <h1 className="text-lg font-semibold text-gray-900">Admin Panel</h1>
-              <p className="text-sm text-gray-600">Plebiscite Platform</p>
+              <p className="text-sm text-gray-600">Election Platform</p>
             </div>
           </div>
         </div>

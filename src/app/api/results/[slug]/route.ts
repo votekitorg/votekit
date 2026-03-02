@@ -72,6 +72,7 @@ export async function GET(
         description: question.description,
         type: question.type,
         options: options,
+        preferentialType: question.preferential_type,
         totalVotes: votes.length,
         results: {} as any
       };

@@ -13,10 +13,10 @@ interface Plebiscite {
 
 export const dynamic = 'force-dynamic';
 
-async function getActivePlebiscites(): Promise<Plebiscite[]> {
+async function getActiveElections(): Promise<Plebiscite[]> {
   const now = new Date().toISOString();
   
-  // Get plebiscites that are either:
+  // Get elections that are either:
   // 1. Status is 'open' and within date range
   // 2. Status is 'closed' (for results viewing)
   const plebiscites = db.prepare(`
@@ -66,7 +66,7 @@ function getTimeRemaining(closeDate: string): string {
 }
 
 export default async function HomePage() {
-  const plebiscites = await getActivePlebiscites();
+  const plebiscites = await getActiveElections();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -80,7 +80,7 @@ export default async function HomePage() {
                   <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
                 </svg>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900">Member Plebiscite Platform</h1>
+              <h1 className="text-2xl font-bold text-gray-900">VoteKit Election Platform</h1>
             </div>
             <div className="flex items-center space-x-4">
               <Link 
@@ -108,12 +108,12 @@ export default async function HomePage() {
             Have Your Voice Heard
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Participate in democratic decision-making through secure, transparent online plebiscites. 
+            Participate in democratic decision-making through secure, transparent online elections. 
             Your privacy is protected while ensuring election integrity.
           </p>
         </div>
 
-        {/* Plebiscites List */}
+        {/* Elections List */}
         {plebiscites.length === 0 ? (
           <div className="text-center py-12">
             <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -121,9 +121,9 @@ export default async function HomePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
               </svg>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Plebiscites</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Elections</h3>
             <p className="text-gray-600">
-              There are currently no active plebiscites. Check back later or contact your organization for updates.
+              There are currently no active elections. Check back later or contact your organization for updates.
             </p>
           </div>
         ) : (

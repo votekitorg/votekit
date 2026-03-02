@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import VoteForm from '@/components/VoteForm';
+import { setupRecaptcha, sendSMSVerification, verifySMSCode, clearRecaptcha } from '@/lib/firebase';
 
 interface Plebiscite {
   id: number;
@@ -13,6 +14,7 @@ interface Plebiscite {
   open_date: string;
   close_date: string;
   status: string;
+  sms_enabled?: boolean;
 }
 
 interface Question {
@@ -21,46 +23,68 @@ interface Question {
   description?: string;
   type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
   options: string[];
+  preferentialType?: 'compulsory' | 'optional';
+}
+
+interface VoterLookup {
+  hasEmail: boolean;
+  hasPhone: boolean;
+  smsEnabled: boolean;
+  availableMethods: ('email' | 'sms')[];
+  maskedEmail?: string;
+  maskedPhone?: string;
 }
 
 interface VotingPageProps {
   params: { slug: string };
 }
 
+type Step = 'info' | 'identify' | 'choose-method' | 'email' | 'verify-email' | 'sms' | 'verify-sms' | 'vote' | 'complete';
+
 export default function VotingPage({ params }: VotingPageProps) {
-  const [step, setStep] = useState<'info' | 'email' | 'verify' | 'vote' | 'complete'>('info');
+  const [step, setStep] = useState<Step>('info');
   const [plebiscite, setPlebiscite] = useState<Plebiscite | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   
-  // Email verification
+  const [identifier, setIdentifier] = useState('');
+  const [voterLookup, setVoterLookup] = useState<VoterLookup | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<'email' | 'sms' | null>(null);
+  
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [canResend, setCanResend] = useState(true);
   const [resendCooldown, setResendCooldown] = useState(0);
   
-  // Vote submission
+  const [phone, setPhone] = useState('');
+  const [smsCode, setSmsCode] = useState('');
+  const [recaptchaReady, setRecaptchaReady] = useState(false);
+  
   const [receiptCodes, setReceiptCodes] = useState<string[]>([]);
   
   const router = useRouter();
 
-  // Fetch plebiscite data
   useEffect(() => {
     const fetchPlebiscite = async () => {
       try {
-        const response = await fetch(`/api/results/${params.slug}`);
+        const response = await fetch('/api/elections/' + params.slug);
         const result = await response.json();
         
         if (response.ok) {
-          // Check if plebiscite is open for voting
-          const now = new Date();
-          const openDate = new Date(result.plebiscite.open_date);
-          const closeDate = new Date(result.plebiscite.close_date);
+          if (result.plebiscite.status === 'closed') {
+            router.push('/results/' + params.slug);
+            return;
+          }
           
-          if (result.plebiscite.status !== 'open' || now < openDate || now >= closeDate) {
-            setError('Voting is not currently active for this plebiscite');
+          if (result.plebiscite.status === 'draft') {
+            setError('This election has not opened yet');
+            return;
+          }
+          
+          if (result.plebiscite.status !== 'open') {
+            setError('Voting is not currently active for this election');
             return;
           }
           
@@ -70,17 +94,14 @@ export default function VotingPage({ params }: VotingPageProps) {
             title: q.title,
             description: q.description,
             type: q.type,
-            options: q.options
+            options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
+            preferentialType: q.preferentialType
           })));
-        } else if (response.status === 403) {
-          // Plebiscite might be closed, redirect to results
-          router.push(`/results/${params.slug}`);
-          return;
         } else {
-          setError('Plebiscite not found or not available');
+          setError('Election not found or not available');
         }
-      } catch (error) {
-        setError('Failed to load plebiscite information');
+      } catch (err) {
+        setError('Failed to load election information');
       } finally {
         setIsLoading(false);
       }
@@ -89,7 +110,6 @@ export default function VotingPage({ params }: VotingPageProps) {
     fetchPlebiscite();
   }, [params.slug, router]);
 
-  // Cooldown timer for resend
   useEffect(() => {
     if (resendCooldown > 0) {
       const timer = setTimeout(() => {
@@ -100,6 +120,98 @@ export default function VotingPage({ params }: VotingPageProps) {
       setCanResend(true);
     }
   }, [resendCooldown]);
+
+  useEffect(() => {
+    if (step === 'sms' && !recaptchaReady) {
+      const timer = setTimeout(() => {
+        const verifier = setupRecaptcha('sms-send-button');
+        if (verifier) {
+          setRecaptchaReady(true);
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+    
+    return () => {
+      if (step !== 'sms' && step !== 'verify-sms') {
+        clearRecaptcha();
+        setRecaptchaReady(false);
+      }
+    };
+  }, [step, recaptchaReady]);
+
+  const looksLikePhone = (input: string): boolean => {
+    const cleaned = input.replace(/[\s\-\(\)]/g, '');
+    return /^(\+?\d{10,15}|0\d{9})$/.test(cleaned);
+  };
+
+  const handleIdentifierSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!identifier.trim()) {
+      setError('Please enter your email or phone number');
+      return;
+    }
+
+    setIsVerifying(true);
+    setError('');
+
+    try {
+      const isPhone = looksLikePhone(identifier);
+      
+      const response = await fetch('/api/auth/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: isPhone ? undefined : identifier.trim().toLowerCase(),
+          phone: isPhone ? identifier.trim() : undefined,
+          plebisciteSlug: params.slug
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setVoterLookup(result);
+        
+        if (isPhone) {
+          setPhone(identifier.trim());
+        } else {
+          setEmail(identifier.trim().toLowerCase());
+        }
+        
+        if (result.availableMethods.length === 0) {
+          setError('No verification methods available');
+        } else if (result.availableMethods.length === 1) {
+          const method = result.availableMethods[0];
+          setSelectedMethod(method);
+          if (method === 'email') {
+            setStep('email');
+          } else {
+            setStep('sms');
+          }
+        } else {
+          setStep('choose-method');
+        }
+      } else {
+        setError(result.error || 'Not found in voter roll');
+      }
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleMethodSelect = (method: 'email' | 'sms') => {
+    setSelectedMethod(method);
+    setError('');
+    if (method === 'email') {
+      setStep('email');
+    } else {
+      setStep('sms');
+    }
+  };
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,11 +225,9 @@ export default function VotingPage({ params }: VotingPageProps) {
     setError('');
 
     try {
-      const response = await fetch('/plebiscite/api/auth/verify', {
+      const response = await fetch('/api/auth/verify', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: email.trim(),
           plebisciteSlug: params.slug
@@ -127,13 +237,13 @@ export default function VotingPage({ params }: VotingPageProps) {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        setStep('verify');
+        setStep('verify-email');
         setCanResend(false);
-        setResendCooldown(60); // 60 second cooldown
+        setResendCooldown(60);
       } else {
         setError(result.error || 'Failed to send verification code');
       }
-    } catch (error) {
+    } catch (err) {
       setError('An error occurred. Please try again.');
     } finally {
       setIsVerifying(false);
@@ -152,11 +262,9 @@ export default function VotingPage({ params }: VotingPageProps) {
     setError('');
 
     try {
-      const response = await fetch('/plebiscite/api/auth/confirm', {
+      const response = await fetch('/api/auth/confirm', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: email.trim(),
           code: code.trim(),
@@ -171,7 +279,86 @@ export default function VotingPage({ params }: VotingPageProps) {
       } else {
         setError(result.error || 'Invalid or expired verification code');
       }
-    } catch (error) {
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleSMSSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!phone.trim()) {
+      setError('Phone number is required');
+      return;
+    }
+
+    setIsVerifying(true);
+    setError('');
+
+    try {
+      let normalizedPhone = phone.trim();
+      if (normalizedPhone.startsWith('0') && normalizedPhone.length === 10) {
+        normalizedPhone = '+61' + normalizedPhone.substring(1);
+      } else if (!normalizedPhone.startsWith('+')) {
+        normalizedPhone = '+61' + normalizedPhone;
+      }
+
+      const result = await sendSMSVerification(normalizedPhone);
+
+      if (result.success) {
+        setStep('verify-sms');
+        setCanResend(false);
+        setResendCooldown(60);
+      } else {
+        setError(result.error || 'Failed to send SMS');
+      }
+    } catch (err: any) {
+      setError(err.message || 'An error occurred. Please try again.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleSMSCodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!smsCode.trim() || smsCode.trim().length !== 6) {
+      setError('Please enter a valid 6-digit code');
+      return;
+    }
+
+    setIsVerifying(true);
+    setError('');
+
+    try {
+      const firebaseResult = await verifySMSCode(smsCode.trim());
+      
+      if (!firebaseResult.success) {
+        setError(firebaseResult.error || 'Invalid verification code');
+        setIsVerifying(false);
+        return;
+      }
+
+      const response = await fetch('/api/auth/verify-phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idToken: firebaseResult.idToken,
+          phone: phone.trim(),
+          plebisciteSlug: params.slug
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setStep('vote');
+      } else {
+        setError(result.error || 'Verification failed');
+      }
+    } catch (err) {
       setError('An error occurred. Please try again.');
     } finally {
       setIsVerifying(false);
@@ -180,14 +367,13 @@ export default function VotingPage({ params }: VotingPageProps) {
 
   const handleVoteSubmit = async (votes: { [questionId: number]: any }) => {
     try {
-      const response = await fetch('/plebiscite/api/vote', {
+      const response = await fetch('/api/vote', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           plebisciteSlug: params.slug,
-          votes
+          votes,
+          verificationMethod: selectedMethod || 'email'
         }),
       });
 
@@ -199,23 +385,21 @@ export default function VotingPage({ params }: VotingPageProps) {
       } else {
         throw new Error(result.error || 'Failed to submit vote');
       }
-    } catch (error) {
-      throw error; // Let VoteForm handle the error display
+    } catch (err) {
+      throw err;
     }
   };
 
-  const resendCode = async () => {
+  const resendEmailCode = async () => {
     if (!canResend) return;
     
     setIsVerifying(true);
     setError('');
 
     try {
-      const response = await fetch('/plebiscite/api/auth/verify', {
+      const response = await fetch('/api/auth/verify', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: email.trim(),
           plebisciteSlug: params.slug
@@ -227,15 +411,21 @@ export default function VotingPage({ params }: VotingPageProps) {
       if (response.ok && result.success) {
         setCanResend(false);
         setResendCooldown(60);
-        // Don't show success message, just reset cooldown
       } else {
         setError(result.error || 'Failed to resend code');
       }
-    } catch (error) {
+    } catch (err) {
       setError('An error occurred. Please try again.');
     } finally {
       setIsVerifying(false);
     }
+  };
+
+  const resendSMS = async () => {
+    if (!canResend) return;
+    setStep('sms');
+    setRecaptchaReady(false);
+    setSmsCode('');
   };
 
   const formatDate = (dateString: string) => {
@@ -266,12 +456,9 @@ export default function VotingPage({ params }: VotingPageProps) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Unable to Load Plebiscite</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Unable to Load Election</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={() => router.push('/')}
-            className="btn-primary"
-          >
+          <button onClick={() => router.push('/')} className="btn-primary">
             Return Home
           </button>
         </div>
@@ -283,7 +470,6 @@ export default function VotingPage({ params }: VotingPageProps) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center">
@@ -293,7 +479,7 @@ export default function VotingPage({ params }: VotingPageProps) {
               </svg>
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-gray-900">Member Plebiscite</h1>
+              <h1 className="text-lg font-semibold text-gray-900">VoteKit Election</h1>
               <p className="text-sm text-gray-600">Secure Online Voting</p>
             </div>
           </div>
@@ -301,13 +487,10 @@ export default function VotingPage({ params }: VotingPageProps) {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Plebiscite Information */}
         {step === 'info' && (
           <div className="space-y-8">
             <div className="text-center">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                {plebiscite.title}
-              </h2>
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">{plebiscite.title}</h2>
               <div className="flex justify-center space-x-4 text-sm text-gray-600">
                 <span>Opens: {formatDate(plebiscite.open_date)}</span>
                 <span>•</span>
@@ -340,10 +523,9 @@ export default function VotingPage({ params }: VotingPageProps) {
                 <div className="mt-8 bg-green-50 border border-green-200 rounded-lg p-4">
                   <h4 className="text-sm font-medium text-green-900 mb-2">How Voting Works:</h4>
                   <ol className="text-sm text-green-800 space-y-1 list-decimal list-inside">
-                    <li>Enter your registered email address</li>
-                    <li>Check your email for a 6-digit verification code</li>
-                    <li>Enter the code to access your ballot</li>
-                    <li>Vote on all questions</li>
+                    <li>Enter your registered email or phone number</li>
+                    <li>Verify your identity via email code or SMS</li>
+                    <li>Access your ballot and vote on all questions</li>
                     <li>Review and submit your votes</li>
                     <li>Save your receipt codes for verification</li>
                   </ol>
@@ -352,24 +534,123 @@ export default function VotingPage({ params }: VotingPageProps) {
             </div>
 
             <div className="text-center">
-              <button
-                onClick={() => setStep('email')}
-                className="btn-primary px-8"
-              >
+              <button onClick={() => setStep('identify')} className="btn-primary px-8">
                 Begin Voting
               </button>
             </div>
           </div>
         )}
 
-        {/* Email Entry */}
+        {step === 'identify' && (
+          <div className="max-w-md mx-auto">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Enter Your Details</h2>
+              <p className="text-gray-600">Enter your registered email or phone number</p>
+            </div>
+
+            <div className="card">
+              <div className="card-body">
+                <form onSubmit={handleIdentifierSubmit} className="space-y-4">
+                  <div>
+                    <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 mb-1">
+                      Email or Phone Number
+                    </label>
+                    <input
+                      type="text"
+                      id="identifier"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      className="input-field"
+                      placeholder="your.email@example.com or 0412 345 678"
+                      disabled={isVerifying}
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Must be registered in the voter roll
+                    </p>
+                  </div>
+
+                  {error && <div className="alert-error">{error}</div>}
+
+                  <button type="submit" disabled={isVerifying} className="btn-primary w-full">
+                    {isVerifying ? 'Looking up...' : 'Continue'}
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <div className="text-center mt-4">
+              <button onClick={() => setStep('info')} className="text-sm text-gray-600 hover:text-primary">
+                ← Back to Information
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 'choose-method' && voterLookup && (
+          <div className="max-w-md mx-auto">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Choose Verification Method</h2>
+              <p className="text-gray-600">How would you like to verify your identity?</p>
+            </div>
+
+            <div className="card">
+              <div className="card-body space-y-4">
+                {voterLookup.hasEmail && voterLookup.availableMethods.includes('email') && (
+                  <button
+                    onClick={() => handleMethodSelect('email')}
+                    className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-primary hover:bg-blue-50 transition-colors text-left"
+                  >
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-4">
+                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900">Verify via Email</div>
+                        <div className="text-sm text-gray-500">{voterLookup.maskedEmail}</div>
+                      </div>
+                    </div>
+                  </button>
+                )}
+
+                {voterLookup.hasPhone && voterLookup.smsEnabled && voterLookup.availableMethods.includes('sms') && (
+                  <button
+                    onClick={() => handleMethodSelect('sms')}
+                    className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-primary hover:bg-blue-50 transition-colors text-left"
+                  >
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-4">
+                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900">Verify via SMS</div>
+                        <div className="text-sm text-gray-500">{voterLookup.maskedPhone}</div>
+                      </div>
+                    </div>
+                  </button>
+                )}
+
+                {error && <div className="alert-error">{error}</div>}
+              </div>
+            </div>
+
+            <div className="text-center mt-4">
+              <button onClick={() => { setStep('identify'); setVoterLookup(null); }} className="text-sm text-gray-600 hover:text-primary">
+                ← Change identifier
+              </button>
+            </div>
+          </div>
+        )}
+
         {step === 'email' && (
           <div className="max-w-md mx-auto">
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Enter Your Email</h2>
-              <p className="text-gray-600">
-                We'll send a verification code to confirm your identity
-              </p>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Verify via Email</h2>
+              <p className="text-gray-600">We will send a verification code to your email</p>
             </div>
 
             <div className="card">
@@ -389,30 +670,12 @@ export default function VotingPage({ params }: VotingPageProps) {
                       disabled={isVerifying}
                       required
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Must be registered in the voter roll
-                    </p>
                   </div>
 
-                  {error && (
-                    <div className="alert-error">
-                      {error}
-                    </div>
-                  )}
+                  {error && <div className="alert-error">{error}</div>}
 
-                  <button
-                    type="submit"
-                    disabled={isVerifying}
-                    className="btn-primary w-full"
-                  >
-                    {isVerifying ? (
-                      <>
-                        <div className="spinner mr-2"></div>
-                        Sending Code...
-                      </>
-                    ) : (
-                      'Send Verification Code'
-                    )}
+                  <button type="submit" disabled={isVerifying} className="btn-primary w-full">
+                    {isVerifying ? 'Sending Code...' : 'Send Verification Code'}
                   </button>
                 </form>
               </div>
@@ -420,17 +683,16 @@ export default function VotingPage({ params }: VotingPageProps) {
 
             <div className="text-center mt-4">
               <button
-                onClick={() => setStep('info')}
+                onClick={() => voterLookup ? setStep('choose-method') : setStep('identify')}
                 className="text-sm text-gray-600 hover:text-primary"
               >
-                ← Back to Information
+                ← Back
               </button>
             </div>
           </div>
         )}
 
-        {/* Code Verification */}
-        {step === 'verify' && (
+        {step === 'verify-email' && (
           <div className="max-w-md mx-auto">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Enter Verification Code</h2>
@@ -458,80 +720,156 @@ export default function VotingPage({ params }: VotingPageProps) {
                       maxLength={6}
                       required
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Code expires in 10 minutes
-                    </p>
+                    <p className="text-xs text-gray-500 mt-1">Code expires in 10 minutes</p>
                   </div>
 
-                  {error && (
-                    <div className="alert-error">
-                      {error}
-                    </div>
-                  )}
+                  {error && <div className="alert-error">{error}</div>}
 
-                  <button
-                    type="submit"
-                    disabled={isVerifying || code.length !== 6}
-                    className="btn-primary w-full"
-                  >
-                    {isVerifying ? (
-                      <>
-                        <div className="spinner mr-2"></div>
-                        Verifying...
-                      </>
-                    ) : (
-                      'Verify & Continue'
-                    )}
+                  <button type="submit" disabled={isVerifying || code.length !== 6} className="btn-primary w-full">
+                    {isVerifying ? 'Verifying...' : 'Verify & Continue'}
                   </button>
                 </form>
 
                 <div className="text-center mt-4">
                   {canResend ? (
-                    <button
-                      onClick={resendCode}
-                      disabled={isVerifying}
-                      className="text-sm text-primary hover:text-primary-dark"
-                    >
+                    <button onClick={resendEmailCode} disabled={isVerifying} className="text-sm text-primary hover:text-primary-dark">
                       Resend Code
                     </button>
                   ) : (
-                    <span className="text-sm text-gray-500">
-                      Resend in {resendCooldown}s
-                    </span>
+                    <span className="text-sm text-gray-500">Resend in {resendCooldown}s</span>
                   )}
                 </div>
               </div>
             </div>
 
             <div className="text-center mt-4">
-              <button
-                onClick={() => setStep('email')}
-                className="text-sm text-gray-600 hover:text-primary"
-              >
+              <button onClick={() => setStep('email')} className="text-sm text-gray-600 hover:text-primary">
                 ← Change Email Address
               </button>
             </div>
           </div>
         )}
 
-        {/* Voting */}
+        {step === 'sms' && (
+          <div className="max-w-md mx-auto">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Verify via SMS</h2>
+              <p className="text-gray-600">We will send a verification code to your phone</p>
+            </div>
+
+            <div className="card">
+              <div className="card-body">
+                <form onSubmit={handleSMSSend} className="space-y-4">
+                  <div>
+                    <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+                      Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      id="phone"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="input-field"
+                      placeholder="+61 412 345 678"
+                      disabled={isVerifying}
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Must match your registered phone number</p>
+                  </div>
+
+                  {error && <div className="alert-error">{error}</div>}
+
+                  <button
+                    type="submit"
+                    id="sms-send-button"
+                    disabled={isVerifying || !recaptchaReady}
+                    className="btn-primary w-full"
+                  >
+                    {isVerifying ? 'Sending SMS...' : !recaptchaReady ? 'Initializing...' : 'Send Verification SMS'}
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <div className="text-center mt-4">
+              <button
+                onClick={() => voterLookup ? setStep('choose-method') : setStep('identify')}
+                className="text-sm text-gray-600 hover:text-primary"
+              >
+                ← Back
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 'verify-sms' && (
+          <div className="max-w-md mx-auto">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Enter SMS Code</h2>
+              <p className="text-gray-600">
+                Check your phone for a 6-digit code sent to<br />
+                <strong>{phone}</strong>
+              </p>
+            </div>
+
+            <div className="card">
+              <div className="card-body">
+                <form onSubmit={handleSMSCodeSubmit} className="space-y-4">
+                  <div>
+                    <label htmlFor="smsCode" className="block text-sm font-medium text-gray-700 mb-1">
+                      Verification Code
+                    </label>
+                    <input
+                      type="text"
+                      id="smsCode"
+                      value={smsCode}
+                      onChange={(e) => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="input-field text-center text-2xl tracking-widest font-mono"
+                      placeholder="000000"
+                      disabled={isVerifying}
+                      maxLength={6}
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Code expires in 5 minutes</p>
+                  </div>
+
+                  {error && <div className="alert-error">{error}</div>}
+
+                  <button type="submit" disabled={isVerifying || smsCode.length !== 6} className="btn-primary w-full">
+                    {isVerifying ? 'Verifying...' : 'Verify & Continue'}
+                  </button>
+                </form>
+
+                <div className="text-center mt-4">
+                  {canResend ? (
+                    <button onClick={resendSMS} disabled={isVerifying} className="text-sm text-primary hover:text-primary-dark">
+                      Resend SMS
+                    </button>
+                  ) : (
+                    <span className="text-sm text-gray-500">Resend in {resendCooldown}s</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="text-center mt-4">
+              <button onClick={() => setStep('sms')} className="text-sm text-gray-600 hover:text-primary">
+                ← Change Phone Number
+              </button>
+            </div>
+          </div>
+        )}
+
         {step === 'vote' && (
           <div className="space-y-8">
             <div className="text-center">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Cast Your Vote</h2>
-              <p className="text-gray-600">
-                Answer all questions below. You can review your choices before submitting.
-              </p>
+              <p className="text-gray-600">Answer all questions below. You can review your choices before submitting.</p>
             </div>
-
-            <VoteForm
-              questions={questions}
-              onSubmit={handleVoteSubmit}
-            />
+            <VoteForm questions={questions} onSubmit={handleVoteSubmit} />
           </div>
         )}
 
-        {/* Completion */}
         {step === 'complete' && (
           <div className="max-w-2xl mx-auto text-center">
             <div className="w-16 h-16 bg-green-200 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -554,10 +892,10 @@ export default function VotingPage({ params }: VotingPageProps) {
                   Save these receipt codes. You can use them to verify your vote was counted without revealing how you voted.
                 </p>
                 <div className="bg-gray-50 rounded-lg p-4">
-                  {receiptCodes.map((code, index) => (
+                  {receiptCodes.map((receiptCode, index) => (
                     <div key={index} className="flex justify-between items-center py-2">
                       <span className="text-sm font-medium text-gray-700">Question {index + 1}:</span>
-                      <span className="font-mono text-sm bg-white px-2 py-1 rounded border">{code}</span>
+                      <span className="font-mono text-sm bg-white px-2 py-1 rounded border">{receiptCode}</span>
                     </div>
                   ))}
                 </div>
@@ -568,11 +906,7 @@ export default function VotingPage({ params }: VotingPageProps) {
               <p className="text-sm text-gray-600">
                 Results will be published after voting closes on {formatDate(plebiscite.close_date)}
               </p>
-              
-              <button
-                onClick={() => router.push('/')}
-                className="btn-primary"
-              >
+              <button onClick={() => router.push('/')} className="btn-primary">
                 Return to Home
               </button>
             </div>

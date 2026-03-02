@@ -3,7 +3,6 @@ import { getAdminSessionFromRequest } from '@/lib/auth';
 import db, { generateUniqueSlug } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
-  // Verify admin authentication
   const adminSession = getAdminSessionFromRequest(request);
   if (!adminSession) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -19,7 +18,12 @@ export async function GET(request: NextRequest) {
       ORDER BY p.created_at DESC
     `).all();
 
-    return NextResponse.json({ plebiscites });
+    return NextResponse.json({ 
+      plebiscites: plebiscites.map((p: any) => ({
+        ...p,
+        sms_enabled: !!p.sms_enabled
+      }))
+    });
   } catch (error) {
     console.error('Failed to fetch plebiscites:', error);
     return NextResponse.json(
@@ -30,7 +34,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  // Verify admin authentication
   const adminSession = getAdminSessionFromRequest(request);
   if (!adminSession) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -38,9 +41,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title, description, info_url, open_date, close_date, questions = [] } = body;
+    const { title, description, info_url, open_date, close_date, questions = [], sms_enabled = false } = body;
 
-    // Validation
     if (!title || !description || !open_date || !close_date) {
       return NextResponse.json(
         { error: 'Missing required fields' },
@@ -62,7 +64,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate questions
     for (const question of questions) {
       if (!question.title || !question.type || !question.options || question.options.length === 0) {
         return NextResponse.json(
@@ -88,19 +89,17 @@ export async function POST(request: NextRequest) {
 
     const slug = generateUniqueSlug(title);
 
-    // Create plebiscite
     const createPlebiscite = db.prepare(`
-      INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, status)
-      VALUES (?, ?, ?, ?, ?, ?, 'draft')
+      INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, status, sms_enabled)
+      VALUES (?, ?, ?, ?, ?, ?, 'draft', ?)
     `);
 
-    const result = createPlebiscite.run(slug, title, description, info_url, open_date, close_date);
+    const result = createPlebiscite.run(slug, title, description, info_url, open_date, close_date, sms_enabled ? 1 : 0);
     const plebisciteId = result.lastInsertRowid;
 
-    // Create questions
     const createQuestion = db.prepare(`
-      INSERT INTO questions (plebiscite_id, title, description, type, options, display_order)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO questions (plebiscite_id, title, description, type, options, display_order, preferential_type)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
     questions.forEach((question: any, index: number) => {
@@ -110,7 +109,8 @@ export async function POST(request: NextRequest) {
         question.description || null,
         question.type,
         JSON.stringify(question.options),
-        index
+        index,
+        question.preferentialType || 'compulsory'
       );
     });
 
@@ -124,7 +124,8 @@ export async function POST(request: NextRequest) {
         info_url,
         open_date,
         close_date,
-        status: 'draft'
+        status: 'draft',
+        sms_enabled
       }
     });
 
@@ -138,7 +139,6 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  // Verify admin authentication
   const adminSession = getAdminSessionFromRequest(request);
   if (!adminSession) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -155,7 +155,6 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Get current plebiscite
     const plebiscite = db.prepare('SELECT * FROM plebiscites WHERE id = ?').get(id) as any;
     if (!plebiscite) {
       return NextResponse.json(
@@ -165,68 +164,57 @@ export async function PUT(request: NextRequest) {
     }
 
     if (action === 'open') {
-      // Open plebiscite
-      const now = new Date().toISOString();
-      if (new Date(plebiscite.open_date) > new Date(now)) {
-        return NextResponse.json(
-          { error: 'Cannot open plebiscite before open date' },
-          { status: 400 }
-        );
-      }
-
-      db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?')
-        .run('open', id);
-
+      db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?').run('open', id);
       return NextResponse.json({ success: true, status: 'open' });
     }
 
     if (action === 'close') {
-      // Close plebiscite
-      db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?')
-        .run('closed', id);
-
+      db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?').run('closed', id);
       return NextResponse.json({ success: true, status: 'closed' });
     }
 
-    // Regular update
-    const { title, description, info_url, open_date, close_date } = updateData;
-
-    // Validation for regular updates
-    if ((plebiscite as any).status !== 'draft') {
-      return NextResponse.json(
-        { error: 'Can only edit draft plebiscites' },
-        { status: 400 }
-      );
+    if (action === 'toggle_sms') {
+      const newValue = !plebiscite.sms_enabled;
+      db.prepare('UPDATE plebiscites SET sms_enabled = ? WHERE id = ?').run(newValue ? 1 : 0, id);
+      return NextResponse.json({ success: true, sms_enabled: newValue });
     }
 
-    const updateFields = [];
-    const updateValues = [];
+    const { title, description, info_url, open_date, close_date, sms_enabled } = updateData;
 
-    if (title !== undefined) {
-      updateFields.push('title = ?');
-      updateValues.push(title);
-    }
-    if (description !== undefined) {
-      updateFields.push('description = ?');
-      updateValues.push(description);
-    }
-    if (info_url !== undefined) {
-      updateFields.push('info_url = ?');
-      updateValues.push(info_url);
-    }
-    if (open_date !== undefined) {
-      updateFields.push('open_date = ?');
-      updateValues.push(open_date);
-    }
-    if (close_date !== undefined) {
-      updateFields.push('close_date = ?');
-      updateValues.push(close_date);
+    if (sms_enabled !== undefined) {
+      db.prepare('UPDATE plebiscites SET sms_enabled = ? WHERE id = ?').run(sms_enabled ? 1 : 0, id);
     }
 
-    if (updateFields.length > 0) {
-      updateValues.push(id);
-      db.prepare(`UPDATE plebiscites SET ${updateFields.join(', ')} WHERE id = ?`)
-        .run(...updateValues);
+    if (plebiscite.status === 'draft') {
+      const updateFields = [];
+      const updateValues: any[] = [];
+
+      if (title !== undefined) {
+        updateFields.push('title = ?');
+        updateValues.push(title);
+      }
+      if (description !== undefined) {
+        updateFields.push('description = ?');
+        updateValues.push(description);
+      }
+      if (info_url !== undefined) {
+        updateFields.push('info_url = ?');
+        updateValues.push(info_url);
+      }
+      if (open_date !== undefined) {
+        updateFields.push('open_date = ?');
+        updateValues.push(open_date);
+      }
+      if (close_date !== undefined) {
+        updateFields.push('close_date = ?');
+        updateValues.push(close_date);
+      }
+
+      if (updateFields.length > 0) {
+        updateValues.push(id);
+        db.prepare(`UPDATE plebiscites SET ${updateFields.join(', ')} WHERE id = ?`)
+          .run(...updateValues);
+      }
     }
 
     return NextResponse.json({ success: true });
@@ -241,7 +229,6 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  // Verify admin authentication
   const adminSession = getAdminSessionFromRequest(request);
   if (!adminSession) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -258,7 +245,6 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Check if plebiscite exists and has no votes
     const plebiscite = db.prepare('SELECT * FROM plebiscites WHERE id = ?').get(id) as any;
     if (!plebiscite) {
       return NextResponse.json(
@@ -275,7 +261,6 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Delete plebiscite (cascade will delete questions)
     db.prepare('DELETE FROM plebiscites WHERE id = ?').run(id);
 
     return NextResponse.json({ success: true });

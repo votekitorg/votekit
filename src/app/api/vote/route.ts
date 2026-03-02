@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db, { generateReceiptCode } from '@/lib/db';
+import db, { generateReceiptCode, normalizePhoneNumber } from '@/lib/db';
 import { getVoterSessionFromRequest } from '@/lib/auth';
 import { validateIRVVote } from '@/lib/irv';
 import { validateCondorcetVote } from '@/lib/condorcet';
@@ -7,7 +7,7 @@ import { validateCondorcetVote } from '@/lib/condorcet';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { plebisciteSlug, votes } = body;
+    const { plebisciteSlug, votes, verificationMethod } = body;
 
     if (!plebisciteSlug || !votes) {
       return NextResponse.json(
@@ -16,7 +16,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get voter session
     const session = getVoterSessionFromRequest(request, plebisciteSlug);
     if (!session) {
       return NextResponse.json(
@@ -25,7 +24,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get plebiscite
     const plebiscite = db.prepare('SELECT * FROM plebiscites WHERE slug = ? AND status = ?').get(plebisciteSlug, 'open') as any;
     if (!plebiscite) {
       return NextResponse.json(
@@ -34,7 +32,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify session matches plebiscite
     if (session.plebisciteId !== plebiscite.id) {
       return NextResponse.json(
         { error: 'Invalid session for this plebiscite' },
@@ -42,20 +39,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if voting period is active
-    const now = new Date();
-    const openDate = new Date(plebiscite.open_date);
-    const closeDate = new Date(plebiscite.close_date);
-
-    if (now < openDate || now >= closeDate) {
-      return NextResponse.json(
-        { error: 'Voting period is not active' },
-        { status: 400 }
-      );
+    let voter: any = null;
+    const identifierType = session.identifierType || 'email';
+    
+    if (identifierType === 'phone') {
+      const normalizedPhone = normalizePhoneNumber(session.email);
+      voter = db.prepare('SELECT * FROM voter_roll WHERE phone = ? AND plebiscite_id = ?').get(normalizedPhone, plebiscite.id);
+      if (!voter) {
+        voter = db.prepare('SELECT * FROM voter_roll WHERE phone = ? AND plebiscite_id = ?').get(session.email, plebiscite.id);
+      }
+    } else {
+      voter = db.prepare('SELECT * FROM voter_roll WHERE email = ? AND plebiscite_id = ?').get(session.email, plebiscite.id);
     }
-
-    // Get voter from roll
-    const voter = db.prepare('SELECT * FROM voter_roll WHERE email = ?').get(session.email) as any;
+    
     if (!voter) {
       return NextResponse.json(
         { error: 'Voter not found' },
@@ -63,7 +59,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user has already voted
     const hasVoted = db.prepare('SELECT * FROM participation WHERE plebiscite_id = ? AND voter_roll_id = ?')
       .get(plebiscite.id, voter.id) as any;
     
@@ -74,7 +69,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get questions
     const questions = db.prepare('SELECT * FROM questions WHERE plebiscite_id = ? ORDER BY display_order')
       .all(plebiscite.id);
 
@@ -85,7 +79,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate votes
     const voteEntries = Object.entries(votes);
     if (voteEntries.length !== questions.length) {
       return NextResponse.json(
@@ -94,7 +87,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validatedVotes = [];
+    const validatedVotes: Array<{questionId: number; voteData: any}> = [];
 
     for (const question of questions as any[]) {
       const voteValue = votes[question.id];
@@ -102,16 +95,15 @@ export async function POST(request: NextRequest) {
 
       if (voteValue === undefined || voteValue === null) {
         return NextResponse.json(
-          { error: `Answer required for question: ${question.title}` },
+          { error: 'Answer required for question: ' + question.title },
           { status: 400 }
         );
       }
 
-      // Validate based on question type
       if (question.type === 'yes_no') {
         if (!options.includes(voteValue)) {
           return NextResponse.json(
-            { error: `Invalid answer for question: ${question.title}` },
+            { error: 'Invalid answer for question: ' + question.title },
             { status: 400 }
           );
         }
@@ -123,16 +115,15 @@ export async function POST(request: NextRequest) {
       } else if (question.type === 'multiple_choice') {
         if (!Array.isArray(voteValue) || voteValue.length === 0) {
           return NextResponse.json(
-            { error: `At least one selection required for question: ${question.title}` },
+            { error: 'At least one selection required for question: ' + question.title },
             { status: 400 }
           );
         }
 
-        // Check all selected options are valid
         for (const choice of voteValue) {
           if (!options.includes(choice)) {
             return NextResponse.json(
-              { error: `Invalid selection for question: ${question.title}` },
+              { error: 'Invalid selection for question: ' + question.title },
               { status: 400 }
             );
           }
@@ -146,15 +137,14 @@ export async function POST(request: NextRequest) {
       } else if (question.type === 'ranked_choice') {
         if (!Array.isArray(voteValue) || voteValue.length !== options.length) {
           return NextResponse.json(
-            { error: `Must rank all options for question: ${question.title}` },
+            { error: 'Must rank all options for question: ' + question.title },
             { status: 400 }
           );
         }
 
-        // Validate IRV vote
         if (!validateIRVVote(voteValue, options)) {
           return NextResponse.json(
-            { error: `Invalid ranking for question: ${question.title}` },
+            { error: 'Invalid ranking for question: ' + question.title },
             { status: 400 }
           );
         }
@@ -167,14 +157,14 @@ export async function POST(request: NextRequest) {
       } else if (question.type === 'condorcet') {
         if (!Array.isArray(voteValue) || voteValue.length !== options.length) {
           return NextResponse.json(
-            { error: `Must rank all options for question: ${question.title}` },
+            { error: 'Must rank all options for question: ' + question.title },
             { status: 400 }
           );
         }
 
         if (!validateCondorcetVote(voteValue, options)) {
           return NextResponse.json(
-            { error: `Invalid ranking for question: ${question.title}` },
+            { error: 'Invalid ranking for question: ' + question.title },
             { status: 400 }
           );
         }
@@ -186,11 +176,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Submit votes in a transaction
-    const submitVotes = db.transaction((validatedVotes, participationData) => {
-      const receiptCodes = [];
+    const finalVerificationMethod = verificationMethod || (identifierType === 'phone' ? 'sms' : 'email');
 
-      // Insert vote records
+    const submitVotes = db.transaction((validatedVotes: any[], participationData: any) => {
+      const receiptCodes: string[] = [];
+
       const insertVote = db.prepare(`
         INSERT INTO votes (question_id, vote_data, receipt_code)
         VALUES (?, ?, ?)
@@ -206,16 +196,16 @@ export async function POST(request: NextRequest) {
         receiptCodes.push(receiptCode);
       }
 
-      // Record participation (without linking to specific votes)
       const insertParticipation = db.prepare(`
-        INSERT INTO participation (plebiscite_id, voter_roll_id, receipt_codes)
-        VALUES (?, ?, ?)
+        INSERT INTO participation (plebiscite_id, voter_roll_id, receipt_codes, verification_method)
+        VALUES (?, ?, ?, ?)
       `);
 
       insertParticipation.run(
         participationData.plebisciteId,
         participationData.voterRollId,
-        JSON.stringify(receiptCodes)
+        JSON.stringify(receiptCodes),
+        participationData.verificationMethod
       );
 
       return receiptCodes;
@@ -223,10 +213,10 @@ export async function POST(request: NextRequest) {
 
     const receiptCodes = submitVotes(validatedVotes, {
       plebisciteId: plebiscite.id,
-      voterRollId: voter.id
+      voterRollId: voter.id,
+      verificationMethod: finalVerificationMethod
     });
 
-    // Clear voter session (they can only vote once)
     const response = NextResponse.json({
       success: true,
       message: 'Vote submitted successfully',
@@ -234,8 +224,7 @@ export async function POST(request: NextRequest) {
       plebisciteTitle: plebiscite.title
     });
 
-    // Clear the session cookie
-    response.cookies.delete(`voter-session-${plebisciteSlug}`);
+    response.cookies.delete('voter-session-' + plebisciteSlug);
 
     return response;
 

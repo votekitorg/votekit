@@ -2,7 +2,6 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
-// Only initialize database if not in build process
 let db: Database.Database | null = null;
 
 function getDatabase() {
@@ -10,25 +9,21 @@ function getDatabase() {
     const dbPath = process.env.DATABASE_PATH || './plebiscite.db';
     const dbDir = path.dirname(dbPath);
 
-    // Ensure directory exists
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true });
     }
 
     db = new Database(dbPath);
 
-    // Enable foreign keys and WAL mode for better performance
     db.pragma('foreign_keys = ON');
     db.pragma('journal_mode = WAL');
 
-    // Run migrations
     runMigrations();
   }
   
   return db;
 }
 
-// Migration system
 const migrations = [
   `
     CREATE TABLE IF NOT EXISTS plebiscites (
@@ -50,7 +45,7 @@ const migrations = [
       title TEXT NOT NULL,
       description TEXT,
       type TEXT CHECK(type IN ('yes_no', 'multiple_choice', 'ranked_choice')) NOT NULL,
-      options TEXT NOT NULL, -- JSON array
+      options TEXT NOT NULL,
       display_order INTEGER NOT NULL,
       FOREIGN KEY (plebiscite_id) REFERENCES plebiscites (id) ON DELETE CASCADE
     );
@@ -76,7 +71,7 @@ const migrations = [
     CREATE TABLE IF NOT EXISTS votes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       question_id INTEGER NOT NULL,
-      vote_data TEXT NOT NULL, -- JSON containing vote choices/rankings
+      vote_data TEXT NOT NULL,
       receipt_code TEXT UNIQUE NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (question_id) REFERENCES questions (id) ON DELETE CASCADE
@@ -88,7 +83,7 @@ const migrations = [
       plebiscite_id INTEGER NOT NULL,
       voter_roll_id INTEGER NOT NULL,
       voted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      receipt_codes TEXT NOT NULL, -- JSON array of receipt codes for verification
+      receipt_codes TEXT NOT NULL,
       FOREIGN KEY (plebiscite_id) REFERENCES plebiscites (id) ON DELETE CASCADE,
       FOREIGN KEY (voter_roll_id) REFERENCES voter_roll (id) ON DELETE CASCADE,
       UNIQUE(plebiscite_id, voter_roll_id)
@@ -103,10 +98,81 @@ const migrations = [
     CREATE INDEX IF NOT EXISTS idx_verification_codes_expires ON verification_codes(expires_at);
     CREATE INDEX IF NOT EXISTS idx_votes_question ON votes(question_id);
     CREATE INDEX IF NOT EXISTS idx_participation_plebiscite ON participation(plebiscite_id);
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      plebiscite_id INTEGER,
+      is_admin BOOLEAN DEFAULT FALSE,
+      expires_at DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_sessions_email ON sessions(email);
+  `,
+  `
+    ALTER TABLE questions ADD COLUMN preferential_type TEXT CHECK(preferential_type IN ('compulsory', 'optional')) DEFAULT 'compulsory';
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS admin_config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS admin_login_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ip_address TEXT NOT NULL,
+      success BOOLEAN DEFAULT FALSE,
+      attempted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      locked_until DATETIME NULL
+    );
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_admin_attempts_ip ON admin_login_attempts(ip_address);
+    CREATE INDEX IF NOT EXISTS idx_admin_attempts_time ON admin_login_attempts(attempted_at);
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS email_rate_limits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      attempt_count INTEGER DEFAULT 1,
+      reset_time DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_email_rate_email ON email_rate_limits(email);
+    CREATE INDEX IF NOT EXISTS idx_email_rate_reset ON email_rate_limits(reset_time);
+  `,
+  `
+    ALTER TABLE voter_roll ADD COLUMN plebiscite_id INTEGER REFERENCES plebiscites(id) ON DELETE CASCADE;
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_voter_roll_plebiscite ON voter_roll(plebiscite_id);
+  `,
+  `
+    ALTER TABLE voter_roll ADD COLUMN phone TEXT;
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_voter_roll_phone ON voter_roll(phone);
+  `,
+  `
+    ALTER TABLE participation ADD COLUMN verification_method TEXT CHECK(verification_method IN ('email', 'sms')) DEFAULT 'email';
+  `,
+  `
+    ALTER TABLE plebiscites ADD COLUMN sms_enabled BOOLEAN DEFAULT FALSE;
+  `,
+  `
+    ALTER TABLE sessions ADD COLUMN identifier_type TEXT CHECK(identifier_type IN ('email', 'phone')) DEFAULT 'email';
   `
 ];
 
-// Apply migrations
 function runMigrations() {
   const database = getDatabase();
   if (!database) return;
@@ -115,10 +181,16 @@ function runMigrations() {
     migrations.forEach((migration, index) => {
       try {
         database.exec(migration);
-        console.log(`Migration ${index + 1} applied successfully`);
-      } catch (error) {
-        console.error(`Failed to apply migration ${index + 1}:`, error);
-        throw error;
+        console.log('Migration ' + (index + 1) + ' applied successfully');
+      } catch (error: any) {
+        if (error?.message?.includes('duplicate column name')) {
+          console.log('Migration ' + (index + 1) + ' skipped (column already exists)');
+        } else if (error?.message?.includes('already exists')) {
+          console.log('Migration ' + (index + 1) + ' skipped (already exists)');
+        } else {
+          console.error('Failed to apply migration ' + (index + 1) + ':', error);
+          throw error;
+        }
       }
     });
   });
@@ -126,7 +198,6 @@ function runMigrations() {
   migrate();
 }
 
-// Utility functions
 export function generateSlug(title: string): string {
   return title
     .toLowerCase()
@@ -140,13 +211,13 @@ export function generateUniqueSlug(title: string): string {
   if (!database) return generateSlug(title);
   
   const baseSlug = generateSlug(title);
-  const existing = database.prepare('SELECT COUNT(*) as count FROM plebiscites WHERE slug LIKE ?').get(`${baseSlug}%`) as { count: number };
+  const existing = database.prepare('SELECT COUNT(*) as count FROM plebiscites WHERE slug LIKE ?').get(baseSlug + '%') as { count: number };
   
   if (existing.count === 0) {
     return baseSlug;
   }
   
-  return `${baseSlug}-${Date.now()}`;
+  return baseSlug + '-' + Date.now();
 }
 
 export function generateReceiptCode(): string {
@@ -161,7 +232,32 @@ export function cleanupExpiredCodes(): void {
     .run(new Date().toISOString());
 }
 
-// Export a proxy that lazily initializes the database
+export function cleanupExpiredSessions(): void {
+  const database = getDatabase();
+  if (!database) return;
+  
+  database.prepare('DELETE FROM sessions WHERE expires_at < ?')
+    .run(new Date().toISOString());
+}
+
+export function normalizePhoneNumber(phone: string): string {
+  let cleaned = phone.replace(/[^\d+]/g, '');
+  
+  if (cleaned.startsWith('0') && cleaned.length === 10) {
+    cleaned = '+61' + cleaned.substring(1);
+  }
+  
+  if (!cleaned.startsWith('+')) {
+    if (cleaned.startsWith('61') && cleaned.length === 11) {
+      cleaned = '+' + cleaned;
+    } else {
+      cleaned = '+61' + cleaned;
+    }
+  }
+  
+  return cleaned;
+}
+
 const dbProxy = new Proxy({} as Database.Database, {
   get(_target, prop) {
     const database = getDatabase();

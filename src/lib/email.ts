@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import db from './db';
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -29,13 +30,13 @@ export async function sendVerificationEmail(
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="text-align: center; margin-bottom: 30px;">
-            <h1 style="color: #00843D; margin: 0;">Member Plebiscite Platform</h1>
+            <h1 style="color: #00843D; margin: 0;">VoteKit Election Platform</h1>
           </div>
           
           <div style="background-color: #f8f9fa; border-radius: 8px; padding: 30px; margin-bottom: 20px;">
             <h2 style="color: #1B5E20; margin-top: 0;">Verification Required</h2>
             <p style="color: #333; font-size: 16px; line-height: 1.5;">
-              You have requested to participate in the plebiscite: <strong>${plebisciteTitle}</strong>
+              You have requested to participate in the election: <strong>${plebisciteTitle}</strong>
             </p>
             <p style="color: #333; font-size: 16px; line-height: 1.5;">
               Your verification code is:
@@ -52,23 +53,23 @@ export async function sendVerificationEmail(
           
           <div style="border-top: 1px solid #e0e0e0; padding-top: 20px; text-align: center;">
             <p style="color: #999; font-size: 12px; margin: 0;">
-              This is an automated message from the Member Plebiscite Platform.
+              This is an automated message from VoteKit.
             </p>
           </div>
         </div>
       `,
       text: `
-        Member Plebiscite Platform
+        VoteKit Election Platform
         
         Verification Required
         
-        You have requested to participate in the plebiscite: ${plebisciteTitle}
+        You have requested to participate in the election: ${plebisciteTitle}
         
         Your verification code is: ${code}
         
         This code will expire in 10 minutes. If you did not request this code, please ignore this email.
         
-        This is an automated message from the Member Plebiscite Platform.
+        This is an automated message from the VoteKit Election Platform.
       `
     });
 
@@ -85,49 +86,59 @@ export async function sendVerificationEmail(
   }
 }
 
-// Rate limiting helper
-const emailAttempts = new Map<string, { count: number; resetTime: number }>();
+// Database-backed rate limiting
+const MAX_EMAIL_ATTEMPTS = 3;
+const RATE_LIMIT_WINDOW_HOURS = 1;
 
 export function isEmailRateLimited(email: string): boolean {
-  const now = Date.now();
-  const attempts = emailAttempts.get(email);
+  // Clean up expired rate limits first
+  cleanupEmailRateLimit();
   
-  if (!attempts || now > attempts.resetTime) {
-    // Reset counter if time window has passed
-    emailAttempts.set(email, { count: 0, resetTime: now + (60 * 60 * 1000) }); // 1 hour window
-    return false;
-  }
+  const record = db.prepare(`
+    SELECT attempt_count, reset_time FROM email_rate_limits 
+    WHERE email = ? AND reset_time > ?
+  `).get(email, new Date().toISOString()) as { attempt_count: number; reset_time: string } | undefined;
   
-  return attempts.count >= 3; // Max 3 codes per hour
+  return record ? record.attempt_count >= MAX_EMAIL_ATTEMPTS : false;
 }
 
 export function incrementEmailAttempts(email: string): void {
-  const now = Date.now();
-  const attempts = emailAttempts.get(email);
+  const now = new Date();
+  const resetTime = new Date(now.getTime() + (RATE_LIMIT_WINDOW_HOURS * 60 * 60 * 1000));
   
-  if (!attempts || now > attempts.resetTime) {
-    emailAttempts.set(email, { count: 1, resetTime: now + (60 * 60 * 1000) });
-  } else {
-    attempts.count++;
+  // Try to update existing record first
+  const updated = db.prepare(`
+    UPDATE email_rate_limits 
+    SET attempt_count = attempt_count + 1 
+    WHERE email = ? AND reset_time > ?
+  `).run(email, now.toISOString());
+  
+  // If no existing record, create a new one
+  if (updated.changes === 0) {
+    db.prepare(`
+      INSERT INTO email_rate_limits (email, attempt_count, reset_time)
+      VALUES (?, 1, ?)
+    `).run(email, resetTime.toISOString());
   }
 }
 
 export function getRemainingEmailAttempts(email: string): number {
-  const attempts = emailAttempts.get(email);
-  if (!attempts || Date.now() > attempts.resetTime) {
-    return 3;
+  const record = db.prepare(`
+    SELECT attempt_count FROM email_rate_limits 
+    WHERE email = ? AND reset_time > ?
+  `).get(email, new Date().toISOString()) as { attempt_count: number } | undefined;
+  
+  if (!record) {
+    return MAX_EMAIL_ATTEMPTS;
   }
-  return Math.max(0, 3 - attempts.count);
+  
+  return Math.max(0, MAX_EMAIL_ATTEMPTS - record.attempt_count);
 }
 
 // Cleanup function to remove expired rate limit entries
 export function cleanupEmailRateLimit(): void {
-  const now = Date.now();
-  for (const [email, attempts] of emailAttempts.entries()) {
-    if (now > attempts.resetTime) {
-      emailAttempts.delete(email);
-    }
-  }
+  db.prepare('DELETE FROM email_rate_limits WHERE reset_time <= ?')
+    .run(new Date().toISOString());
 }
 
 // Generate 6-digit verification code

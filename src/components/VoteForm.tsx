@@ -9,6 +9,7 @@ interface Question {
   description?: string;
   type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
   options: string[];
+  preferentialType?: 'compulsory' | 'optional';
 }
 
 interface VoteFormProps {
@@ -48,9 +49,22 @@ export default function VoteForm({ questions, onSubmit, disabled = false }: Vote
       } else if (question.type === 'multiple_choice' && Array.isArray(vote) && vote.length === 0) {
         newErrors[question.id] = 'Please select at least one option';
         isValid = false;
-      } else if (question.type === 'ranked_choice' || question.type === 'condorcet' && Array.isArray(vote) && vote.length !== question.options.length) {
-        newErrors[question.id] = 'Please rank all options';
-        isValid = false;
+      } else if ((question.type === 'ranked_choice' || question.type === 'condorcet') && Array.isArray(vote)) {
+        // For compulsory preferential, require all options to be ranked
+        if (question.preferentialType === 'compulsory' && vote.length !== question.options.length) {
+          newErrors[question.id] = 'Please rank all options';
+          isValid = false;
+        }
+        // For optional preferential, require at least one option to be ranked
+        else if (question.preferentialType === 'optional' && vote.length === 0) {
+          newErrors[question.id] = 'Please rank at least one option';
+          isValid = false;
+        }
+        // Default to compulsory behavior if preferentialType is not set
+        else if (!question.preferentialType && vote.length !== question.options.length) {
+          newErrors[question.id] = 'Please rank all options';
+          isValid = false;
+        }
       }
     });
 
@@ -129,12 +143,13 @@ export default function VoteForm({ questions, onSubmit, disabled = false }: Vote
             </div>
           )}
 
-          {question.type === 'ranked_choice' || question.type === 'condorcet' && (
+          {(question.type === 'ranked_choice' || question.type === 'condorcet') && (
             <RankedChoiceInput
               options={question.options}
               value={Array.isArray(vote) ? vote : []}
               onChange={(rankings) => handleVoteChange(question.id, rankings)}
               disabled={disabled}
+              preferentialType={question.preferentialType || 'compulsory'}
             />
           )}
 
@@ -184,7 +199,7 @@ export default function VoteForm({ questions, onSubmit, disabled = false }: Vote
                     </div>
                   )}
 
-                  {question.type === 'ranked_choice' || question.type === 'condorcet' && (
+                  {(question.type === 'ranked_choice' || question.type === 'condorcet') && (
                     <div>
                       <div className="font-medium text-gray-900 mb-2">Your ranking:</div>
                       <ol className="list-decimal list-inside text-gray-700 space-y-1">
