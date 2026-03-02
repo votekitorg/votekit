@@ -379,7 +379,7 @@ export default function HomePage() {
               Deploy in 5 minutes
             </p>
             <p className="mt-4 max-w-2xl text-xl text-gray-500 lg:mx-auto">
-              Run VoteKit on your own server with Docker. Works on a $6/month VPS.
+              Run VoteKit on your own server with Docker. Lightweight enough for any hardware.
             </p>
           </div>
 
