@@ -1,0 +1,65 @@
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Build outputs
+.next
+out
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Database files
+plebiscite.db
+plebiscite.db-shm
+plebiscite.db-wal
+*.db
+*.sqlite
+*.sqlite3
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage
+*.lcov
+
+# Dependency directories
+.pnp
+.pnp.js
+
+# Yarn
+.yarn-integrity
+yarn-error.log*
+
+# Optional npm cache directory
+.npm
+
+# Temp files
+tmp/
+temp/

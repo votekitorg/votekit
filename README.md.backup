@@ -42,48 +42,7 @@ A secure, transparent online voting platform for conducting membership plebiscit
 - **Styling**: Tailwind CSS
 - **Authentication**: Custom session management
 
-## Quick Start with Docker
-
-The easiest way to get VoteKit running is with Docker:
-
-1. **Clone the repository**:
-```bash
-git clone <repository-url>
-cd votekit
-```
-
-2. **Copy environment configuration**:
-```bash
-cp .env.example .env
-```
-
-3. **Configure environment variables**:
-Edit `.env` and set at minimum:
-```env
-ADMIN_PASSWORD=your-secure-admin-password
-```
-All other variables are optional - email and SMS features will gracefully degrade if not configured.
-
-4. **Start with Docker Compose**:
-```bash
-docker compose up -d
-```
-
-5. **Visit the application**:
-Open http://localhost:3000 in your browser.
-
-The SQLite database will be automatically created and persisted in a Docker volume.
-
-### Docker Configuration
-
-The Docker setup includes:
-- **Multi-stage build** with Node.js 22 Alpine
-- **Persistent storage** via Docker volumes for SQLite data
-- **Non-root user** for security
-- **Health checks** for container monitoring
-- **Automatic restart** unless manually stopped
-
-## Manual Installation
+## Installation
 
 ### Prerequisites
 - Node.js 18+ 
@@ -93,8 +52,7 @@ The Docker setup includes:
 
 1. **Clone and install dependencies**:
 ```bash
-git clone <repository-url>
-cd votekit
+cd member-plebiscite
 npm install
 ```
 
@@ -236,20 +194,7 @@ For ranked choice questions, the platform implements proper IRV tabulation:
 
 ## Deployment
 
-### Docker (Recommended)
-Use the provided Docker configuration for easy deployment:
-
-```bash
-# Production deployment
-docker compose up -d
-
-# With custom settings
-cp .env.example .env
-# Edit .env with your configuration
-docker compose up -d
-```
-
-### Vercel
+### Vercel (Recommended)
 1. Push to GitHub
 2. Connect to Vercel
 3. Add environment variables
@@ -264,11 +209,7 @@ docker compose up -d
 ### Database Backup
 The SQLite database file should be backed up regularly:
 ```bash
-# Local installation
 cp plebiscite.db plebiscite-backup-$(date +%Y%m%d).db
-
-# Docker installation
-docker compose exec votekit cp /data/plebiscite.db /data/plebiscite-backup-$(date +%Y%m%d).db
 ```
 
 ## API Endpoints

@@ -1,0 +1,44 @@
+services:
+  votekit:
+    build: .
+    container_name: votekit
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persistent SQLite database storage
+      - votekit_data:/data
+    env_file:
+      - .env
+    environment:
+      # Override database path for container
+      - DATABASE_PATH=/data/plebiscite.db
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  votekit_data:
+    driver: local
+
+# Environment Variables Reference:
+# 
+# REQUIRED:
+# - ADMIN_PASSWORD: Secure password for admin access
+# 
+# OPTIONAL (Email verification via Resend):
+# - RESEND_API_KEY: API key from resend.com
+# - FROM_EMAIL: Sender email address (must be verified domain)
+# 
+# OPTIONAL (SMS authentication via Firebase):
+# - NEXT_PUBLIC_FIREBASE_API_KEY: Firebase web API key
+# - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: Firebase auth domain
+# - NEXT_PUBLIC_FIREBASE_PROJECT_ID: Firebase project ID
+# - FIREBASE_SERVICE_ACCOUNT_KEY: JSON string of service account
+# 
+# SYSTEM (automatically configured):
+# - DATABASE_PATH: SQLite database location (/data/plebiscite.db)
+# - NODE_ENV: Environment mode (production)
