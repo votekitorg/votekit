@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import VoteForm from '@/components/VoteForm';
 import { setupRecaptcha, sendSMSVerification, verifySMSCode, clearRecaptcha } from '@/lib/firebase';
 
@@ -39,7 +39,7 @@ interface VotingPageProps {
   params: { slug: string };
 }
 
-type Step = 'info' | 'identify' | 'choose-method' | 'email' | 'verify-email' | 'sms' | 'verify-sms' | 'vote' | 'complete';
+type Step = 'info' | 'identify' | 'choose-method' | 'email' | 'verify-email' | 'sms' | 'verify-sms' | 'vote' | 'complete' | 'already-voted';
 
 export default function VotingPage({ params }: VotingPageProps) {
   const [step, setStep] = useState<Step>('info');
@@ -47,6 +47,7 @@ export default function VotingPage({ params }: VotingPageProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [tokenValidating, setTokenValidating] = useState(false);
   
   const [identifier, setIdentifier] = useState('');
   const [voterLookup, setVoterLookup] = useState<VoterLookup | null>(null);
@@ -65,6 +66,51 @@ export default function VotingPage({ params }: VotingPageProps) {
   const [receiptCodes, setReceiptCodes] = useState<string[]>([]);
   
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Handle token-based authentication
+  useEffect(() => {
+    const token = searchParams.get('token');
+    if (token && plebiscite && !tokenValidating && step === 'info') {
+      setTokenValidating(true);
+      validateToken(token);
+    }
+  }, [searchParams, plebiscite, step]);
+
+  const validateToken = async (token: string) => {
+    try {
+      const response = await fetch('/api/auth/validate-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          plebisciteSlug: params.slug
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        // Token is valid, go directly to vote step
+        setSelectedMethod('email');
+        setEmail(result.email);
+        setStep('vote');
+      } else {
+        // Handle various error cases
+        if (result.alreadyVoted) {
+          setStep('already-voted');
+        } else if (result.redirectTo) {
+          router.push(result.redirectTo);
+        } else {
+          setError(result.error || 'Invalid or expired token');
+        }
+      }
+    } catch (err) {
+      setError('Failed to validate token. Please try manual verification.');
+    } finally {
+      setTokenValidating(false);
+    }
+  };
 
   useEffect(() => {
     const fetchPlebiscite = async () => {
@@ -439,10 +485,13 @@ export default function VotingPage({ params }: VotingPageProps) {
     });
   };
 
-  if (isLoading) {
+  if (isLoading || tokenValidating) {
     return (
       <div className="min-h-screen bg-gray-50 flex justify-center items-center">
-        <div className="spinner w-8 h-8"></div>
+        <div className="text-center">
+          <div className="spinner w-8 h-8 mx-auto mb-4"></div>
+          {tokenValidating && <p className="text-gray-600">Validating your ballot link...</p>}
+        </div>
       </div>
     );
   }
@@ -487,6 +536,36 @@ export default function VotingPage({ params }: VotingPageProps) {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {step === 'already-voted' && (
+          <div className="max-w-md mx-auto text-center">
+            <div className="w-16 h-16 bg-blue-200 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">You've Already Voted</h2>
+            <p className="text-gray-600 mb-8">
+              You have already cast your vote in <strong>{plebiscite.title}</strong>.
+              Each voter can only vote once.
+            </p>
+
+            <div className="card text-left mb-8">
+              <div className="card-body">
+                <p className="text-sm text-gray-600">
+                  Results will be published after voting closes on {formatDate(plebiscite.close_date)}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <button onClick={() => router.push('/')} className="btn-primary w-full">
+                Return Home
+              </button>
+            </div>
+          </div>
+        )}
+
         {step === 'info' && (
           <div className="space-y-8">
             <div className="text-center">

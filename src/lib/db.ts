@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
@@ -267,3 +268,128 @@ const dbProxy = new Proxy({} as Database.Database, {
 });
 
 export default dbProxy;
+
+// Migration for voter_tokens table
+const voterTokenMigrations = [
+  `
+    CREATE TABLE IF NOT EXISTS voter_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      voter_roll_id INTEGER NOT NULL,
+      plebiscite_id INTEGER NOT NULL,
+      token TEXT UNIQUE NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (voter_roll_id) REFERENCES voter_roll (id) ON DELETE CASCADE,
+      FOREIGN KEY (plebiscite_id) REFERENCES plebiscites (id) ON DELETE CASCADE,
+      UNIQUE(voter_roll_id, plebiscite_id)
+    );
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_voter_tokens_token ON voter_tokens(token);
+    CREATE INDEX IF NOT EXISTS idx_voter_tokens_plebiscite ON voter_tokens(plebiscite_id);
+  `
+];
+
+// Run voter token migrations
+function runVoterTokenMigrations() {
+  const database = getDatabase();
+  if (!database) return;
+  
+  voterTokenMigrations.forEach((migration, index) => {
+    try {
+      database.exec(migration);
+      console.log('Voter token migration ' + (index + 1) + ' applied successfully');
+    } catch (error: any) {
+      if (error?.message?.includes('already exists')) {
+        console.log('Voter token migration ' + (index + 1) + ' skipped (already exists)');
+      } else {
+        console.error('Failed to apply voter token migration:', error);
+      }
+    }
+  });
+}
+
+// Call this after main migrations
+runVoterTokenMigrations();
+
+export function generateSecureToken(): string {
+  return crypto.randomUUID();
+}
+
+export function getOrCreateVoterToken(voterRollId: number, plebisciteId: number): string {
+  const database = getDatabase();
+  if (!database) throw new Error('Database not available');
+  
+  // Check if token already exists
+  const existing = database.prepare(`
+    SELECT token FROM voter_tokens WHERE voter_roll_id = ? AND plebiscite_id = ?
+  `).get(voterRollId, plebisciteId) as { token: string } | undefined;
+  
+  if (existing) return existing.token;
+  
+  // Create new token
+  const token = generateSecureToken();
+  database.prepare(`
+    INSERT INTO voter_tokens (voter_roll_id, plebiscite_id, token)
+    VALUES (?, ?, ?)
+  `).run(voterRollId, plebisciteId, token);
+  
+  return token;
+}
+
+export function getVoterByToken(token: string): { voterRollId: number; plebisciteId: number; email: string; phone?: string } | null {
+  const database = getDatabase();
+  if (!database) return null;
+  
+  const result = database.prepare(`
+    SELECT vt.voter_roll_id, vt.plebiscite_id, vr.email, vr.phone
+    FROM voter_tokens vt
+    JOIN voter_roll vr ON vr.id = vt.voter_roll_id
+    WHERE vt.token = ?
+  `).get(token) as { voter_roll_id: number; plebiscite_id: number; email: string; phone?: string } | undefined;
+  
+  if (!result) return null;
+  
+  return {
+    voterRollId: result.voter_roll_id,
+    plebisciteId: result.plebiscite_id,
+    email: result.email,
+    phone: result.phone
+  };
+}
+
+export function hasVoterVoted(voterRollId: number, plebisciteId: number): boolean {
+  const database = getDatabase();
+  if (!database) return false;
+  
+  const result = database.prepare(`
+    SELECT id FROM participation WHERE voter_roll_id = ? AND plebiscite_id = ?
+  `).get(voterRollId, plebisciteId);
+  
+  return !!result;
+}
+
+export function getVotersWithEmail(plebisciteId: number): Array<{ id: number; email: string; phone?: string }> {
+  const database = getDatabase();
+  if (!database) return [];
+  
+  return database.prepare(`
+    SELECT id, email, phone FROM voter_roll 
+    WHERE plebiscite_id = ? AND email IS NOT NULL AND email != ''
+  `).all(plebisciteId) as Array<{ id: number; email: string; phone?: string }>;
+}
+
+export function getVotersWhoHaventVoted(plebisciteId: number): Array<{ id: number; email: string; phone?: string }> {
+  const database = getDatabase();
+  if (!database) return [];
+  
+  return database.prepare(`
+    SELECT vr.id, vr.email, vr.phone FROM voter_roll vr
+    WHERE vr.plebiscite_id = ? 
+      AND vr.email IS NOT NULL 
+      AND vr.email != ''
+      AND NOT EXISTS (
+        SELECT 1 FROM participation p 
+        WHERE p.voter_roll_id = vr.id AND p.plebiscite_id = ?
+      )
+  `).all(plebisciteId, plebisciteId) as Array<{ id: number; email: string; phone?: string }>;
+}

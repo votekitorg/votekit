@@ -145,3 +145,175 @@ export function cleanupEmailRateLimit(): void {
 export function generateVerificationCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
+
+export async function sendBallotLinkEmail(
+  email: string,
+  plebisciteTitle: string,
+  plebisciteDescription: string,
+  ballotUrl: string
+): Promise<EmailResult> {
+  const fromEmail = process.env.FROM_EMAIL || 'noreply@example.com';
+  
+  try {
+    const result = await getResend().emails.send({
+      from: fromEmail,
+      to: email,
+      subject: `Your Ballot: ${plebisciteTitle}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #00843D; margin: 0;">VoteKit Election Platform</h1>
+          </div>
+          
+          <div style="background-color: #f8f9fa; border-radius: 8px; padding: 30px; margin-bottom: 20px;">
+            <h2 style="color: #1B5E20; margin-top: 0;">Your Ballot is Ready</h2>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">
+              You are invited to vote in: <strong>${plebisciteTitle}</strong>
+            </p>
+            <p style="color: #666; font-size: 14px; line-height: 1.5;">
+              ${plebisciteDescription.substring(0, 300)}${plebisciteDescription.length > 300 ? '...' : ''}
+            </p>
+            <div style="text-align: center; margin: 25px 0;">
+              <a href="${ballotUrl}" style="background-color: #00843D; color: white; font-size: 18px; font-weight: bold; padding: 15px 30px; border-radius: 5px; text-decoration: none; display: inline-block;">
+                Cast Your Vote
+              </a>
+            </div>
+            <p style="color: #666; font-size: 14px; line-height: 1.4; text-align: center;">
+              Or copy this link: <a href="${ballotUrl}" style="color: #00843D;">${ballotUrl}</a>
+            </p>
+          </div>
+          
+          <div style="background-color: #e8f5e9; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+            <p style="color: #1B5E20; font-size: 14px; margin: 0;">
+              <strong>🔒 Secure & Private:</strong> This unique link is tied to your voter registration. 
+              Your vote is anonymous once submitted.
+            </p>
+          </div>
+          
+          <div style="border-top: 1px solid #e0e0e0; padding-top: 20px; text-align: center;">
+            <p style="color: #999; font-size: 12px; margin: 0;">
+              This is an automated message from VoteKit. Do not reply to this email.
+            </p>
+          </div>
+        </div>
+      `,
+      text: `
+        VoteKit Election Platform
+        
+        Your Ballot is Ready
+        
+        You are invited to vote in: ${plebisciteTitle}
+        
+        ${plebisciteDescription.substring(0, 300)}${plebisciteDescription.length > 300 ? '...' : ''}
+        
+        Cast your vote here: ${ballotUrl}
+        
+        This unique link is tied to your voter registration. Your vote is anonymous once submitted.
+        
+        This is an automated message from VoteKit. Do not reply to this email.
+      `
+    });
+
+    return {
+      success: true,
+      messageId: result.data?.id
+    };
+  } catch (error) {
+    console.error('Failed to send ballot link email:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
+}
+
+export async function sendReminderEmail(
+  email: string,
+  plebisciteTitle: string,
+  plebisciteDescription: string,
+  ballotUrl: string,
+  closeDate: string
+): Promise<EmailResult> {
+  const fromEmail = process.env.FROM_EMAIL || 'noreply@example.com';
+  
+  const formattedCloseDate = new Date(closeDate).toLocaleDateString('en-AU', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Australia/Brisbane'
+  });
+  
+  try {
+    const result = await getResend().emails.send({
+      from: fromEmail,
+      to: email,
+      subject: `Reminder: Cast your vote - ${plebisciteTitle}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #00843D; margin: 0;">VoteKit Election Platform</h1>
+          </div>
+          
+          <div style="background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+            <p style="color: #856404; font-size: 14px; margin: 0;">
+              <strong>⏰ Reminder:</strong> You haven't voted yet! Voting closes on ${formattedCloseDate}.
+            </p>
+          </div>
+          
+          <div style="background-color: #f8f9fa; border-radius: 8px; padding: 30px; margin-bottom: 20px;">
+            <h2 style="color: #1B5E20; margin-top: 0;">Don't Forget to Vote</h2>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">
+              You're registered to vote in: <strong>${plebisciteTitle}</strong>
+            </p>
+            <p style="color: #666; font-size: 14px; line-height: 1.5;">
+              ${plebisciteDescription.substring(0, 200)}${plebisciteDescription.length > 200 ? '...' : ''}
+            </p>
+            <div style="text-align: center; margin: 25px 0;">
+              <a href="${ballotUrl}" style="background-color: #00843D; color: white; font-size: 18px; font-weight: bold; padding: 15px 30px; border-radius: 5px; text-decoration: none; display: inline-block;">
+                Vote Now
+              </a>
+            </div>
+            <p style="color: #666; font-size: 14px; line-height: 1.4; text-align: center;">
+              Your unique voting link: <a href="${ballotUrl}" style="color: #00843D;">${ballotUrl}</a>
+            </p>
+          </div>
+          
+          <div style="border-top: 1px solid #e0e0e0; padding-top: 20px; text-align: center;">
+            <p style="color: #999; font-size: 12px; margin: 0;">
+              This is an automated reminder from VoteKit. Do not reply to this email.
+            </p>
+          </div>
+        </div>
+      `,
+      text: `
+        VoteKit Election Platform
+        
+        REMINDER: You haven't voted yet!
+        Voting closes on ${formattedCloseDate}.
+        
+        Don't Forget to Vote
+        
+        You're registered to vote in: ${plebisciteTitle}
+        
+        ${plebisciteDescription.substring(0, 200)}${plebisciteDescription.length > 200 ? '...' : ''}
+        
+        Vote now: ${ballotUrl}
+        
+        This is an automated reminder from VoteKit. Do not reply to this email.
+      `
+    });
+
+    return {
+      success: true,
+      messageId: result.data?.id
+    };
+  } catch (error) {
+    console.error('Failed to send reminder email:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
+}

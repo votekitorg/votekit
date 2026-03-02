@@ -19,6 +19,14 @@ interface StatusInfo {
   message: string;
 }
 
+interface SendResult {
+  totalVoters: number;
+  sentCount: number;
+  failedCount: number;
+  errors?: string[];
+  message?: string;
+}
+
 export default function PlebisciteManager({ 
   plebiscite, 
   statusInfo 
@@ -32,6 +40,12 @@ export default function PlebisciteManager({
   const [copied, setCopied] = useState(false);
   const [smsEnabled, setSmsEnabled] = useState(!!plebiscite.sms_enabled);
   const [smsToggling, setSmsToggling] = useState(false);
+  
+  // Ballot sending states
+  const [sendingBallots, setSendingBallots] = useState(false);
+  const [sendingReminders, setSendingReminders] = useState(false);
+  const [sendResult, setSendResult] = useState<SendResult | null>(null);
+  const [showSendResult, setShowSendResult] = useState(false);
 
   async function handleAction(action: string) {
     if (!confirm('Are you sure you want to ' + action + ' this election?')) return;
@@ -73,6 +87,56 @@ export default function PlebisciteManager({
     }
   }
 
+  async function handleSendBallots() {
+    if (!confirm('Send ballot link emails to ALL voters with email addresses? This may take a moment.')) return;
+    
+    setSendingBallots(true);
+    setError('');
+    setSendResult(null);
+    setShowSendResult(false);
+    
+    try {
+      const res = await fetch('/api/admin/plebiscites/send-ballots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plebisciteId: plebiscite.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSendResult(data);
+      setShowSendResult(true);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSendingBallots(false);
+    }
+  }
+
+  async function handleSendReminders() {
+    if (!confirm('Send reminder emails to voters who have NOT yet voted?')) return;
+    
+    setSendingReminders(true);
+    setError('');
+    setSendResult(null);
+    setShowSendResult(false);
+    
+    try {
+      const res = await fetch('/api/admin/plebiscites/send-reminders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plebisciteId: plebiscite.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSendResult(data);
+      setShowSendResult(true);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSendingReminders(false);
+    }
+  }
+
   async function handleDelete() {
     if (!confirm('Delete this election? This cannot be undone.')) return;
     
@@ -103,6 +167,38 @@ export default function PlebisciteManager({
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
           {error}
+        </div>
+      )}
+
+      {showSendResult && sendResult && (
+        <div className={`border rounded-lg p-4 text-sm ${sendResult.failedCount > 0 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
+          <div className="flex items-start justify-between">
+            <div>
+              <h4 className={`font-semibold ${sendResult.failedCount > 0 ? 'text-yellow-800' : 'text-green-800'}`}>
+                {sendResult.message || 'Emails Sent'}
+              </h4>
+              <p className={sendResult.failedCount > 0 ? 'text-yellow-700' : 'text-green-700'}>
+                {sendResult.sentCount} of {sendResult.totalVoters} emails sent successfully
+                {sendResult.failedCount > 0 && ` (${sendResult.failedCount} failed)`}
+              </p>
+              {sendResult.errors && sendResult.errors.length > 0 && (
+                <details className="mt-2">
+                  <summary className="text-xs text-yellow-600 cursor-pointer">View errors</summary>
+                  <ul className="mt-1 text-xs text-yellow-600 list-disc list-inside">
+                    {sendResult.errors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+            <button 
+              onClick={() => setShowSendResult(false)} 
+              className="text-gray-400 hover:text-gray-600"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
 
@@ -153,6 +249,47 @@ export default function PlebisciteManager({
           >
             {copied ? 'Copied!' : 'Copy Voting URL'}
           </button>
+          
+          {/* Ballot Link Buttons */}
+          <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
+            <h4 className="text-sm font-medium text-blue-900 mb-3">📧 Email Ballot Links</h4>
+            <div className="space-y-2">
+              <button
+                onClick={handleSendBallots}
+                disabled={sendingBallots || sendingReminders}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
+              >
+                {sendingBallots ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Sending...
+                  </>
+                ) : 'Send Ballot Links to All Voters'}
+              </button>
+              <button
+                onClick={handleSendReminders}
+                disabled={sendingBallots || sendingReminders}
+                className="w-full px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 flex items-center justify-center"
+              >
+                {sendingReminders ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Sending...
+                  </>
+                ) : 'Send Reminders (Non-Voters Only)'}
+              </button>
+            </div>
+            <p className="text-xs text-blue-700 mt-2">
+              Ballot links allow voters to skip email verification and go straight to voting.
+            </p>
+          </div>
+          
           <button
             onClick={() => handleAction('close')}
             disabled={loading}
