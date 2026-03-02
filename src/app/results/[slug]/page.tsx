@@ -204,7 +204,7 @@ export default async function ResultsPage({ params }: { params: { slug: string }
               </div>
               <div>
                 <h1 className="text-lg font-semibold text-gray-900">Plebiscite Results</h1>
-                <p className="text-sm text-gray-600">Member Plebiscite Platform</p>
+                <p className="text-sm text-gray-600">VoteKit Election Platform</p>
               </div>
             </div>
             

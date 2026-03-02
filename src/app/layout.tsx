@@ -2,10 +2,10 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Member Plebiscite Platform',
+  title: 'VoteKit Election Platform',
   description: 'Secure online voting platform for membership plebiscites and surveys',
   keywords: ['voting', 'plebiscite', 'survey', 'democracy', 'election'],
-  authors: [{ name: 'Member Plebiscite Platform' }],
+  authors: [{ name: 'VoteKit Election Platform' }],
   viewport: 'width=device-width, initial-scale=1',
   robots: 'noindex, nofollow', // Prevent search engine indexing
   themeColor: '#00843D',
@@ -31,7 +31,7 @@ export default function RootLayout({
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">
               <p className="text-sm text-gray-600">
-                &copy; {new Date().getFullYear()} Member Plebiscite Platform. 
+                &copy; {new Date().getFullYear()} VoteKit Election Platform. 
                 Secure, transparent, democratic.
               </p>
               <p className="text-xs text-gray-500 mt-2">
