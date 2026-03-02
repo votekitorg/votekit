@@ -23,7 +23,8 @@ export default function CreatePlebiscite() {
     description: '',
     info_url: '',
     open_date: defaultOpenDate,
-    close_date: defaultCloseDate
+    close_date: defaultCloseDate,
+    timezone: 'Australia/Brisbane'
   });
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,6 +37,24 @@ export default function CreatePlebiscite() {
     { id: 1, name: 'Basic Information', description: 'Title, dates, and description' },
     { id: 2, name: 'Questions', description: 'Add questions and voting methods' },
     { id: 3, name: 'Review', description: 'Preview before publishing' }
+  ];
+
+  
+  const timezoneOptions = [
+    { value: 'Australia/Brisbane', label: 'Brisbane (AEST, UTC+10)' },
+    { value: 'Australia/Sydney', label: 'Sydney (AEST/AEDT, UTC+10/+11)' },
+    { value: 'Australia/Melbourne', label: 'Melbourne (AEST/AEDT, UTC+10/+11)' },
+    { value: 'Australia/Adelaide', label: 'Adelaide (ACST/ACDT, UTC+9:30/+10:30)' },
+    { value: 'Australia/Perth', label: 'Perth (AWST, UTC+8)' },
+    { value: 'Australia/Darwin', label: 'Darwin (ACST, UTC+9:30)' },
+    { value: 'Australia/Hobart', label: 'Hobart (AEST/AEDT, UTC+10/+11)' },
+    { value: 'Pacific/Auckland', label: 'Auckland (NZST/NZDT, UTC+12/+13)' },
+    { value: 'Asia/Singapore', label: 'Singapore (SGT, UTC+8)' },
+    { value: 'Asia/Tokyo', label: 'Tokyo (JST, UTC+9)' },
+    { value: 'Europe/London', label: 'London (GMT/BST, UTC+0/+1)' },
+    { value: 'America/New_York', label: 'New York (EST/EDT, UTC-5/-4)' },
+    { value: 'America/Los_Angeles', label: 'Los Angeles (PST/PDT, UTC-8/-7)' },
+    { value: 'UTC', label: 'UTC' },
   ];
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -359,6 +378,26 @@ export default function CreatePlebiscite() {
                       <p className="text-xs text-blue-700 mt-1">When voting ends</p>
                     </div>
                   </div>
+
+                  <div className="mt-4">
+                    <label htmlFor="timezone" className="block text-sm font-medium text-blue-800 mb-2">
+                      Timezone *
+                    </label>
+                    <select
+                      id="timezone"
+                      name="timezone"
+                      value={formData.timezone}
+                      onChange={(e) => setFormData(prev => ({ ...prev, timezone: e.target.value }))}
+                      className="input-field"
+                    >
+                      {timezoneOptions.map(tz => (
+                        <option key={tz.value} value={tz.value}>{tz.label}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-blue-700 mt-1">
+                      The opening and closing times above will be interpreted in this timezone
+                    </p>
+                  </div>
                   <p className="text-xs text-blue-700 mt-2">
                     💡 Allow adequate time for members to participate. Consider timezone differences for your membership.
                   </p>
@@ -622,6 +661,7 @@ export default function CreatePlebiscite() {
                         <dt className="text-sm font-medium text-gray-500">Voting Period</dt>
                         <dd className="text-sm text-gray-900">
                           {new Date(formData.open_date).toLocaleDateString()} - {new Date(formData.close_date).toLocaleDateString()}
+                          <span className="text-gray-500 ml-1">({formData.timezone})</span>
                         </dd>
                       </div>
                       <div className="sm:col-span-2">

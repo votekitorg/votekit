@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title, description, info_url, open_date, close_date, questions = [], sms_enabled = false } = body;
+    const { title, description, info_url, open_date, close_date, timezone, questions = [], sms_enabled = false } = body;
 
     if (!title || !description || !open_date || !close_date) {
       return NextResponse.json(
@@ -90,11 +90,11 @@ export async function POST(request: NextRequest) {
     const slug = generateUniqueSlug(title);
 
     const createPlebiscite = db.prepare(`
-      INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, status, sms_enabled)
-      VALUES (?, ?, ?, ?, ?, ?, 'draft', ?)
+      INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, status, sms_enabled, timezone)
+      VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?)
     `);
 
-    const result = createPlebiscite.run(slug, title, description, info_url, open_date, close_date, sms_enabled ? 1 : 0);
+    const result = createPlebiscite.run(slug, title, description, info_url, open_date, close_date, sms_enabled ? 1 : 0, timezone || 'UTC');
     const plebisciteId = result.lastInsertRowid;
 
     const createQuestion = db.prepare(`
@@ -124,6 +124,7 @@ export async function POST(request: NextRequest) {
         info_url,
         open_date,
         close_date,
+        timezone: timezone || 'UTC',
         status: 'draft',
         sms_enabled
       }
