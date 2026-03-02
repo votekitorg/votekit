@@ -36,7 +36,7 @@ export const dynamic = 'force-dynamic';
 
 async function getResults(slug: string): Promise<ResultsData | null> {
   try {
-    const response = await fetch(`${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'http://localhost:3006'}/api/results/${slug}`, {
+    const response = await fetch(`${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'http://localhost:3000'}/api/results/${slug}`, {
       cache: 'no-store'
     });
 
