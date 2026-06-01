@@ -10,6 +10,7 @@ export interface IRVRound {
   votes: { [candidate: string]: number };
   eliminated: string[];
   winner?: string;
+  tiedCandidates?: string[];
 }
 
 export interface IRVResult {
@@ -90,11 +91,16 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
       break;
     }
 
-    // If only two candidates remain, the one with more votes wins
+    // If only two candidates remain, the one with more votes wins. A true tie
+    // is reported as a tie for administrators to resolve under election rules.
     if (remainingCandidates.length === 2) {
-      const winner = sortedCandidates[0][1] > sortedCandidates[1][1] 
-        ? sortedCandidates[0][0] 
-        : sortedCandidates[1][0];
+      if (sortedCandidates[0][1] === sortedCandidates[1][1]) {
+        roundData.tiedCandidates = sortedCandidates.map(([candidate]) => candidate).sort();
+        result.rounds.push(roundData);
+        break;
+      }
+
+      const winner = sortedCandidates[0][0];
       roundData.winner = winner;
       result.winner = winner;
       result.rounds.push(roundData);
@@ -107,11 +113,10 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
       .filter(([, count]) => count === lowestVoteCount)
       .map(([candidate]) => candidate);
 
-    // If all remaining candidates are tied, pick the first one alphabetically as winner
+    // If all remaining candidates are tied, report the tie rather than silently
+    // selecting by candidate order/alphabetical order.
     if (candidatesToEliminate.length === remainingCandidates.length) {
-      const winner = remainingCandidates.sort()[0];
-      roundData.winner = winner;
-      result.winner = winner;
+      roundData.tiedCandidates = [...remainingCandidates].sort();
       result.rounds.push(roundData);
       break;
     }
@@ -143,7 +148,7 @@ export function validateIRVVote(vote: string[], candidates: string[]): boolean {
   // Check for duplicates
   const uniquePreferences = new Set(validPreferences);
   
-  return validPreferences.length === uniquePreferences.size;
+  return validPreferences.length === vote.length && validPreferences.length === uniquePreferences.size;
 }
 
 // Helper function to format IRV results for display

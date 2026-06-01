@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdminPassword, createAdminSession, setAdminCookie, clearAdminCookie, checkAdminBruteForce, recordAdminLoginAttempt, clearAdminFailedAttempts } from '@/lib/auth';
+import { verifyAdminPassword, createAdminSession, checkAdminBruteForce, recordAdminLoginAttempt, clearAdminFailedAttempts, getAdminSession } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
@@ -88,9 +88,8 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   // Check if admin is already logged in
   const sessionId = request.cookies.get('admin-session')?.value;
-  
-  if (sessionId) {
-    // TODO: Validate session
+
+  if (getAdminSession(sessionId)) {
     return NextResponse.json({ authenticated: true });
   }
 

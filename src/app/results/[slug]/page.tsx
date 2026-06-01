@@ -22,6 +22,14 @@ interface QuestionResult {
   options: string[];
   totalVotes: number;
   results: any;
+  publicBallots: Array<{
+    receiptCode: string;
+    ballot: {
+      choice?: string;
+      choices?: string[];
+      preferences?: string[];
+    };
+  }>;
 }
 
 interface ResultsData {
@@ -88,6 +96,15 @@ function IRVResultsDisplay({ results }: { results: any }) {
         </div>
       )}
 
+      {!results.winner && results.rounds.some((round: any) => round.tiedCandidates?.length > 0) && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <h4 className="text-lg font-semibold text-yellow-900">Tie reported</h4>
+          <p className="text-yellow-800">
+            {results.rounds.find((round: any) => round.tiedCandidates?.length > 0)?.tiedCandidates.join(', ')} are tied. This result needs to be resolved under the election rules.
+          </p>
+        </div>
+      )}
+
       {/* Round by Round */}
       <div>
         <h4 className="text-md font-semibold text-gray-900 mb-4">Round-by-Round Results</h4>
@@ -99,6 +116,11 @@ function IRVResultsDisplay({ results }: { results: any }) {
                 {round.eliminated.length > 0 && (
                   <span className="text-sm text-red-600">
                     Eliminated: {round.eliminated.join(', ')}
+                  </span>
+                )}
+                {round.tiedCandidates?.length > 0 && (
+                  <span className="text-sm text-yellow-700">
+                    Tied: {round.tiedCandidates.join(', ')}
                   </span>
                 )}
               </div>
@@ -124,7 +146,7 @@ function IRVResultsDisplay({ results }: { results: any }) {
                             isEliminated ? 'text-red-700' : 'text-gray-900'
                           }`}>
                             {candidate}
-                            {isWinner && ' 🏆'}
+                            {isWinner && ' (winner)'}
                           </span>
                         </div>
                         <span className="text-sm text-gray-600">
@@ -159,6 +181,44 @@ function IRVResultsDisplay({ results }: { results: any }) {
             <span className="ml-2 text-gray-900">Instant Runoff Voting (IRV)</span>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function formatBallot(ballot: QuestionResult['publicBallots'][number]['ballot']): string {
+  if (ballot.choice) return ballot.choice;
+  if (ballot.choices) return ballot.choices.join(', ');
+  if (ballot.preferences) return ballot.preferences.join(' > ');
+  return 'No recorded selection';
+}
+
+function PublicBallotsDisplay({ ballots }: { ballots: QuestionResult['publicBallots'] }) {
+  if (!ballots || ballots.length === 0) return null;
+
+  return (
+    <div className="mt-6 border-t border-gray-200 pt-6">
+      <h4 className="text-md font-semibold text-gray-900 mb-2">Anonymous Ballot Verification</h4>
+      <p className="text-sm text-gray-600 mb-4">
+        Find your saved receipt code below to confirm your ballot was included and recorded correctly. Receipt codes are published with ballots only, not with voter identities.
+      </p>
+      <div className="overflow-x-auto border border-gray-200 rounded-lg">
+        <table className="min-w-full divide-y divide-gray-200 text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left font-medium text-gray-700">Receipt Code</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-700">Published Ballot</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-100">
+            {ballots.map((ballot) => (
+              <tr key={ballot.receiptCode}>
+                <td className="px-4 py-3 font-mono text-xs text-gray-800 whitespace-nowrap">{ballot.receiptCode}</td>
+                <td className="px-4 py-3 text-gray-900">{formatBallot(ballot.ballot)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -293,21 +353,36 @@ export default async function ResultsPage({ params }: { params: { slug: string }
                     </div>
                     <div className="card-body">
                       <IRVResultsDisplay results={question.results} />
+                      <PublicBallotsDisplay ballots={question.publicBallots} />
                     </div>
                   </div>
                 ) : question.type === 'condorcet' ? (
-                  <CondorcetResults
-                    title={`${index + 1}. ${question.title}`}
-                    results={question.results}
-                    options={question.options}
-                  />
+                  <div className="space-y-0">
+                    <CondorcetResults
+                      title={`${index + 1}. ${question.title}`}
+                      results={question.results}
+                      options={question.options}
+                    />
+                    <div className="card mt-4">
+                      <div className="card-body">
+                        <PublicBallotsDisplay ballots={question.publicBallots} />
+                      </div>
+                    </div>
+                  </div>
                 ) : (
-                  <ResultsChart
-                    data={question.results}
-                    type={question.type}
-                    title={`${index + 1}. ${question.title}`}
-                    totalVotes={question.totalVotes}
-                  />
+                  <>
+                    <ResultsChart
+                      data={question.results}
+                      type={question.type}
+                      title={`${index + 1}. ${question.title}`}
+                      totalVotes={question.totalVotes}
+                    />
+                    <div className="card mt-4">
+                      <div className="card-body">
+                      <PublicBallotsDisplay ballots={question.publicBallots} />
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
             ))

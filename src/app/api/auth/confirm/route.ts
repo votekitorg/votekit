@@ -98,8 +98,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if email is in voter roll
-    const voter = db.prepare('SELECT * FROM voter_roll WHERE email = ?').get(normalizedEmail) as any;
+    // Check if email is in this election's voter roll
+    const voter = db.prepare(`
+      SELECT * FROM voter_roll
+      WHERE email = ? AND (plebiscite_id = ? OR plebiscite_id IS NULL)
+      ORDER BY CASE WHEN plebiscite_id = ? THEN 0 ELSE 1 END
+      LIMIT 1
+    `).get(normalizedEmail, plebiscite.id, plebiscite.id) as any;
     if (!voter) {
       return NextResponse.json(
         { error: 'Email address not found in voter roll' },

@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 
 // Only initialize database if not in build process
 let db: Database.Database | null = null;
@@ -49,7 +50,7 @@ const migrations = [
       plebiscite_id INTEGER NOT NULL,
       title TEXT NOT NULL,
       description TEXT,
-      type TEXT CHECK(type IN ('yes_no', 'multiple_choice', 'ranked_choice')) NOT NULL,
+      type TEXT CHECK(type IN ('yes_no', 'multiple_choice', 'ranked_choice', 'condorcet')) NOT NULL,
       options TEXT NOT NULL, -- JSON array
       display_order INTEGER NOT NULL,
       FOREIGN KEY (plebiscite_id) REFERENCES plebiscites (id) ON DELETE CASCADE
@@ -78,7 +79,6 @@ const migrations = [
       question_id INTEGER NOT NULL,
       vote_data TEXT NOT NULL, -- JSON containing vote choices/rankings
       receipt_code TEXT UNIQUE NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (question_id) REFERENCES questions (id) ON DELETE CASCADE
     );
   `,
@@ -87,8 +87,6 @@ const migrations = [
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       plebiscite_id INTEGER NOT NULL,
       voter_roll_id INTEGER NOT NULL,
-      voted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      receipt_codes TEXT NOT NULL, -- JSON array of receipt codes for verification
       FOREIGN KEY (plebiscite_id) REFERENCES plebiscites (id) ON DELETE CASCADE,
       FOREIGN KEY (voter_roll_id) REFERENCES voter_roll (id) ON DELETE CASCADE,
       UNIQUE(plebiscite_id, voter_roll_id)
@@ -182,9 +180,115 @@ function runMigrations() {
         }
       }
     });
+
   });
   
   migrate();
+  runPrivacyMigrations(database);
+}
+
+function tableInfo(database: Database.Database, tableName: string): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {
+  return database.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }>;
+}
+
+function tableSql(database: Database.Database, tableName: string): string {
+  const row = database.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`).get(tableName) as { sql: string } | undefined;
+  return row?.sql || '';
+}
+
+function hasColumn(database: Database.Database, tableName: string, columnName: string): boolean {
+  return tableInfo(database, tableName).some(column => column.name === columnName);
+}
+
+function runPrivacyMigrations(database: Database.Database): void {
+  const previousForeignKeys = (database.pragma('foreign_keys', { simple: true }) as number) === 1;
+  database.pragma('foreign_keys = OFF');
+  try {
+    const migratePrivacy = database.transaction(() => {
+      migrateQuestionsConstraint(database);
+      migrateVotesPrivacy(database);
+      migrateParticipationPrivacy(database);
+    });
+
+    migratePrivacy();
+  } finally {
+    if (previousForeignKeys) {
+      database.pragma('foreign_keys = ON');
+    }
+  }
+}
+
+function migrateQuestionsConstraint(database: Database.Database): void {
+  const sql = tableSql(database, 'questions');
+  if (!sql || sql.includes("'condorcet'")) return;
+
+  database.exec(`
+    CREATE TABLE questions_privacy_migration (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plebiscite_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      type TEXT CHECK(type IN ('yes_no', 'multiple_choice', 'ranked_choice', 'condorcet')) NOT NULL,
+      options TEXT NOT NULL,
+      display_order INTEGER NOT NULL,
+      preferential_type TEXT CHECK(preferential_type IN ('compulsory', 'optional')) DEFAULT 'compulsory',
+      FOREIGN KEY (plebiscite_id) REFERENCES plebiscites (id) ON DELETE CASCADE
+    );
+
+    INSERT INTO questions_privacy_migration (id, plebiscite_id, title, description, type, options, display_order, preferential_type)
+    SELECT id, plebiscite_id, title, description, type, options, display_order,
+           COALESCE(preferential_type, 'compulsory')
+    FROM questions;
+
+    DROP TABLE questions;
+    ALTER TABLE questions_privacy_migration RENAME TO questions;
+    CREATE INDEX IF NOT EXISTS idx_questions_plebiscite ON questions(plebiscite_id);
+  `);
+}
+
+function migrateVotesPrivacy(database: Database.Database): void {
+  if (!hasColumn(database, 'votes', 'created_at')) return;
+
+  database.exec(`
+    CREATE TABLE votes_privacy_migration (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      question_id INTEGER NOT NULL,
+      vote_data TEXT NOT NULL,
+      receipt_code TEXT UNIQUE NOT NULL,
+      FOREIGN KEY (question_id) REFERENCES questions (id) ON DELETE CASCADE
+    );
+
+    INSERT INTO votes_privacy_migration (id, question_id, vote_data, receipt_code)
+    SELECT id, question_id, vote_data, receipt_code
+    FROM votes;
+
+    DROP TABLE votes;
+    ALTER TABLE votes_privacy_migration RENAME TO votes;
+    CREATE INDEX IF NOT EXISTS idx_votes_question ON votes(question_id);
+  `);
+}
+
+function migrateParticipationPrivacy(database: Database.Database): void {
+  if (!hasColumn(database, 'participation', 'receipt_codes') && !hasColumn(database, 'participation', 'voted_at')) return;
+
+  database.exec(`
+    CREATE TABLE participation_privacy_migration (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plebiscite_id INTEGER NOT NULL,
+      voter_roll_id INTEGER NOT NULL,
+      FOREIGN KEY (plebiscite_id) REFERENCES plebiscites (id) ON DELETE CASCADE,
+      FOREIGN KEY (voter_roll_id) REFERENCES voter_roll (id) ON DELETE CASCADE,
+      UNIQUE(plebiscite_id, voter_roll_id)
+    );
+
+    INSERT OR IGNORE INTO participation_privacy_migration (id, plebiscite_id, voter_roll_id)
+    SELECT id, plebiscite_id, voter_roll_id
+    FROM participation;
+
+    DROP TABLE participation;
+    ALTER TABLE participation_privacy_migration RENAME TO participation;
+    CREATE INDEX IF NOT EXISTS idx_participation_plebiscite ON participation(plebiscite_id);
+  `);
 }
 
 // Utility functions
@@ -211,7 +315,7 @@ export function generateUniqueSlug(title: string): string {
 }
 
 export function generateReceiptCode(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  return crypto.randomBytes(16).toString('hex');
 }
 
 export function cleanupExpiredCodes(): void {

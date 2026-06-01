@@ -199,7 +199,7 @@ export default function VoteForm({ questions, onSubmit, disabled = false }: Vote
                     </div>
                   )}
 
-                  {question.type === 'ranked_choice' || question.type === 'condorcet' && (
+                  {(question.type === 'ranked_choice' || question.type === 'condorcet') && (
                     <div>
                       <div className="font-medium text-gray-900 mb-2">Your ranking:</div>
                       <ol className="list-decimal list-inside text-gray-700 space-y-1">

@@ -166,6 +166,13 @@ export async function PUT(request: NextRequest) {
     }
 
     if (action === 'open') {
+      if (plebiscite.status !== 'draft') {
+        return NextResponse.json(
+          { error: 'Only draft plebiscites can be opened' },
+          { status: 400 }
+        );
+      }
+
       // Open plebiscite
       db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?')
         .run('open', id);
@@ -174,6 +181,13 @@ export async function PUT(request: NextRequest) {
     }
 
     if (action === 'close') {
+      if (plebiscite.status !== 'open') {
+        return NextResponse.json(
+          { error: 'Only open plebiscites can be closed' },
+          { status: 400 }
+        );
+      }
+
       // Close plebiscite
       db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?')
         .run('closed', id);

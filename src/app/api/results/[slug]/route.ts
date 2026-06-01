@@ -21,18 +21,12 @@ export async function GET(
       );
     }
 
-    // Check if plebiscite is closed (results only visible after closing)
+    // Results and anonymous ballot receipts are only public after an admin closes the election.
     if (plebiscite.status !== 'closed') {
-      // Check if close date has passed
-      const now = new Date();
-      const closeDate = new Date(plebiscite.close_date);
-      
-      if (now < closeDate) {
-        return NextResponse.json(
-          { error: 'Results not yet available. Voting is still active.' },
-          { status: 403 }
-        );
-      }
+      return NextResponse.json(
+        { error: 'Results not yet available. Voting is still active.' },
+        { status: 403 }
+      );
     }
 
     // Get questions
@@ -61,10 +55,16 @@ export async function GET(
     for (const question of questions as any[]) {
       const options = JSON.parse(question.options);
       
-      // Get votes for this question
+      // Get anonymous votes for this question. Receipt codes are deliberately
+      // selected from the ballot table only, not from participation/voter data.
       const votes = db.prepare(`
-        SELECT vote_data FROM votes WHERE question_id = ?
+        SELECT receipt_code, vote_data FROM votes WHERE question_id = ? ORDER BY receipt_code
       `).all(question.id) as any[];
+
+      const publicBallots = votes.map((vote: any) => ({
+        receiptCode: vote.receipt_code,
+        ballot: JSON.parse(vote.vote_data)
+      }));
 
       const questionResult = {
         id: question.id,
@@ -74,7 +74,8 @@ export async function GET(
         options: options,
         preferentialType: question.preferential_type,
         totalVotes: votes.length,
-        results: {} as any
+        results: {} as any,
+        publicBallots
       };
 
       if (question.type === 'yes_no') {
@@ -97,6 +98,11 @@ export async function GET(
           Object.entries(counts).forEach(([option, count]) => {
             const percentage = votes.length > 0 ? ((count / votes.length) * 100).toFixed(1) : '0.0';
             csvData += `"${option}",${count},${percentage}%\n`;
+          });
+          csvData += 'Anonymous Ballots\n';
+          csvData += 'Receipt Code,Choice\n';
+          publicBallots.forEach(({ receiptCode, ballot }) => {
+            csvData += `"${receiptCode}","${ballot.choice || ''}"\n`;
           });
           csvData += '\n';
         }
@@ -127,6 +133,11 @@ export async function GET(
             const percentage = totalSelections > 0 ? ((count / totalSelections) * 100).toFixed(1) : '0.0';
             csvData += `"${option}",${count},${percentage}%\n`;
           });
+          csvData += 'Anonymous Ballots\n';
+          csvData += 'Receipt Code,Choices\n';
+          publicBallots.forEach(({ receiptCode, ballot }) => {
+            csvData += `"${receiptCode}","${(ballot.choices || []).join(' | ')}"\n`;
+          });
           csvData += '\n';
         }
 
@@ -150,6 +161,11 @@ export async function GET(
           csvData += `Question: ${question.title}\n`;
           csvData += `Type: Ranked Choice (IRV)\n`;
           csvData += exportIRVResultsCSV(irvResult);
+          csvData += 'Anonymous Ballots\n';
+          csvData += 'Receipt Code,Preferences\n';
+          publicBallots.forEach(({ receiptCode, ballot }) => {
+            csvData += `"${receiptCode}","${(ballot.preferences || []).join(' > ')}"\n`;
+          });
           csvData += '\n';
         }
       } else if (question.type === 'condorcet') {
@@ -175,6 +191,11 @@ export async function GET(
           csvData += `Question: ${question.title}\n`;
           csvData += `Type: Condorcet (${condorcetResult.method})\n`;
           csvData += exportCondorcetResultsCSV(condorcetResult);
+          csvData += 'Anonymous Ballots\n';
+          csvData += 'Receipt Code,Preferences\n';
+          publicBallots.forEach(({ receiptCode, ballot }) => {
+            csvData += `"${receiptCode}","${(ballot.preferences || []).join(' > ')}"\n`;
+          });
           csvData += '\n';
         }
       }

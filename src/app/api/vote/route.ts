@@ -4,6 +4,28 @@ import { getVoterSessionFromRequest } from '@/lib/auth';
 import { validateIRVVote } from '@/lib/irv';
 import { validateCondorcetVote } from '@/lib/condorcet';
 
+function validatePreferentialLength(voteValue: unknown, options: string[], preferentialType: string | null | undefined, questionTitle: string): string | null {
+  if (!Array.isArray(voteValue)) {
+    return `Invalid ranking for question: ${questionTitle}`;
+  }
+
+  if (preferentialType === 'optional') {
+    if (voteValue.length === 0) {
+      return `Please rank at least one option for question: ${questionTitle}`;
+    }
+    if (voteValue.length > options.length) {
+      return `Too many rankings for question: ${questionTitle}`;
+    }
+    return null;
+  }
+
+  if (voteValue.length !== options.length) {
+    return `Must rank all options for question: ${questionTitle}`;
+  }
+
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -45,7 +67,12 @@ export async function POST(request: NextRequest) {
     // Status check is sufficient - admin controls open/close manually
 
     // Get voter from roll
-    const voter = db.prepare('SELECT * FROM voter_roll WHERE email = ?').get(session.email) as any;
+    const voter = db.prepare(`
+      SELECT * FROM voter_roll
+      WHERE email = ? AND (plebiscite_id = ? OR plebiscite_id IS NULL)
+      ORDER BY CASE WHEN plebiscite_id = ? THEN 0 ELSE 1 END
+      LIMIT 1
+    `).get(session.email, plebiscite.id, plebiscite.id) as any;
     if (!voter) {
       return NextResponse.json(
         { error: 'Voter not found' },
@@ -134,15 +161,16 @@ export async function POST(request: NextRequest) {
         });
 
       } else if (question.type === 'ranked_choice') {
-        if (!Array.isArray(voteValue) || voteValue.length !== options.length) {
+        const lengthError = validatePreferentialLength(voteValue, options, question.preferential_type, question.title);
+        if (lengthError) {
           return NextResponse.json(
-            { error: `Must rank all options for question: ${question.title}` },
+            { error: lengthError },
             { status: 400 }
           );
         }
 
         // Validate IRV vote
-        if (!validateIRVVote(voteValue, options)) {
+        if (!validateIRVVote(voteValue as string[], options)) {
           return NextResponse.json(
             { error: `Invalid ranking for question: ${question.title}` },
             { status: 400 }
@@ -155,14 +183,15 @@ export async function POST(request: NextRequest) {
         });
 
       } else if (question.type === 'condorcet') {
-        if (!Array.isArray(voteValue) || voteValue.length !== options.length) {
+        const lengthError = validatePreferentialLength(voteValue, options, question.preferential_type, question.title);
+        if (lengthError) {
           return NextResponse.json(
-            { error: `Must rank all options for question: ${question.title}` },
+            { error: lengthError },
             { status: 400 }
           );
         }
 
-        if (!validateCondorcetVote(voteValue, options)) {
+        if (!validateCondorcetVote(voteValue as string[], options)) {
           return NextResponse.json(
             { error: `Invalid ranking for question: ${question.title}` },
             { status: 400 }
@@ -173,6 +202,11 @@ export async function POST(request: NextRequest) {
           questionId: question.id,
           voteData: { preferences: voteValue }
         });
+      } else {
+        return NextResponse.json(
+          { error: `Unsupported question type for question: ${question.title}` },
+          { status: 400 }
+        );
       }
     }
 
@@ -180,7 +214,21 @@ export async function POST(request: NextRequest) {
     const submitVotes = db.transaction((validatedVotes, participationData) => {
       const receiptCodes = [];
 
-      // Insert vote records
+      // Record participation first. This enforces one vote per voter inside the
+      // same transaction, without storing any receipt code or ballot linkage on
+      // the voter identity record.
+      const insertParticipation = db.prepare(`
+        INSERT INTO participation (plebiscite_id, voter_roll_id)
+        VALUES (?, ?)
+      `);
+
+      insertParticipation.run(
+        participationData.plebisciteId,
+        participationData.voterRollId
+      );
+
+      // Insert anonymous vote records. Receipt codes belong only to ballots and
+      // are returned to the voter once; they are not retained against identity.
       const insertVote = db.prepare(`
         INSERT INTO votes (question_id, vote_data, receipt_code)
         VALUES (?, ?, ?)
@@ -196,18 +244,6 @@ export async function POST(request: NextRequest) {
         receiptCodes.push(receiptCode);
       }
 
-      // Record participation (without linking to specific votes)
-      const insertParticipation = db.prepare(`
-        INSERT INTO participation (plebiscite_id, voter_roll_id, receipt_codes)
-        VALUES (?, ?, ?)
-      `);
-
-      insertParticipation.run(
-        participationData.plebisciteId,
-        participationData.voterRollId,
-        JSON.stringify(receiptCodes)
-      );
-
       return receiptCodes;
     });
 
@@ -215,6 +251,11 @@ export async function POST(request: NextRequest) {
       plebisciteId: plebiscite.id,
       voterRollId: voter.id
     });
+
+    const sessionId = request.cookies.get(`voter-session-${plebisciteSlug}`)?.value;
+    if (sessionId) {
+      db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+    }
 
     // Clear voter session (they can only vote once)
     const response = NextResponse.json({
@@ -230,6 +271,13 @@ export async function POST(request: NextRequest) {
     return response;
 
   } catch (error) {
+    if ((error as any)?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return NextResponse.json(
+        { error: 'You have already voted in this plebiscite' },
+        { status: 409 }
+      );
+    }
+
     console.error('Vote submission error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

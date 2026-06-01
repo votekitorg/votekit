@@ -241,7 +241,7 @@ export function tabulateCondorcet(votes: CondorcetVote[], candidates: string[]):
 export function validateCondorcetVote(vote: string[], candidates: string[]): boolean {
   const validPreferences = vote.filter(pref => candidates.includes(pref));
   const uniquePreferences = new Set(validPreferences);
-  return validPreferences.length === uniquePreferences.size && validPreferences.length >= 1;
+  return validPreferences.length === vote.length && validPreferences.length === uniquePreferences.size && validPreferences.length >= 1;
 }
 
 export function exportCondorcetResultsCSV(result: CondorcetResult): string {
