@@ -128,7 +128,7 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
   const statusInfo = getStatusInfo(plebiscite);
 
   return (
-    <AdminLayout>
+    <AdminLayout currentUser={adminSession}>
       <div className="space-y-8">
         {/* Header */}
         <div className="flex justify-between items-start">
@@ -297,20 +297,29 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
               <PlebisciteManager 
                 plebiscite={{id: plebiscite.id, slug: plebiscite.slug, title: plebiscite.title, status: plebiscite.status}}
                 statusInfo={{status: statusInfo.status, color: statusInfo.color, canOpen: statusInfo.canOpen, canClose: statusInfo.canClose, message: statusInfo.message}}
+                canManage={adminSession.role === 'admin'}
               />
             </div>
           </div>
         </div>
 
         {/* Voter Management */}
-        <div className="card">
-          <div className="card-body">
-            <ElectionVoterManager 
-              plebisciteId={plebiscite.id}
-              plebisciteTitle={plebiscite.title}
-            />
+        {adminSession.role === 'admin' ? (
+          <div className="card">
+            <div className="card-body">
+              <ElectionVoterManager 
+                plebisciteId={plebiscite.id}
+                plebisciteTitle={plebiscite.title}
+              />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="card">
+            <div className="card-body text-sm text-gray-600">
+              Observer access is read-only. Ask an admin to manage this election's voter roll.
+            </div>
+          </div>
+        )}
 
         {/* Questions */}
         <div className="card">

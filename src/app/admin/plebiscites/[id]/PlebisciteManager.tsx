@@ -20,10 +20,12 @@ interface StatusInfo {
 
 export default function PlebisciteManager({ 
   plebiscite, 
-  statusInfo 
+  statusInfo,
+  canManage = true
 }: { 
   plebiscite: Plebiscite; 
   statusInfo: StatusInfo;
+  canManage?: boolean;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -84,7 +86,13 @@ export default function PlebisciteManager({
         </div>
       )}
 
-      {statusInfo.canOpen && (
+      {!canManage && (
+        <p className="text-sm text-gray-500 text-center">
+          Observer access is read-only.
+        </p>
+      )}
+
+      {canManage && statusInfo.canOpen && (
         <button
           onClick={() => handleAction('open')}
           disabled={loading}
@@ -94,7 +102,7 @@ export default function PlebisciteManager({
         </button>
       )}
 
-      {statusInfo.canClose && (
+      {canManage && statusInfo.canClose && (
         <>
           <button
             onClick={copyUrl}
@@ -112,7 +120,7 @@ export default function PlebisciteManager({
         </>
       )}
 
-      {plebiscite.status === 'draft' && (
+      {canManage && plebiscite.status === 'draft' && (
         <button
           onClick={handleDelete}
           disabled={loading}

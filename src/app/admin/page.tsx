@@ -82,7 +82,7 @@ export default async function AdminDashboard() {
   const { plebiscites, stats } = await getDashboardData();
 
   return (
-    <AdminLayout>
+    <AdminLayout currentUser={adminSession}>
       <div className="space-y-8">
         {/* Header */}
         <div>
@@ -159,6 +159,7 @@ export default async function AdminDashboard() {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {adminSession.role === 'admin' && (
           <Link href="/admin/plebiscites/new" className="card hover:shadow-lg transition-shadow duration-200">
             <div className="card-body text-center">
               <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center mx-auto mb-4">
@@ -170,6 +171,7 @@ export default async function AdminDashboard() {
               <p className="text-gray-600">Set up a new election with questions and voting options</p>
             </div>
           </Link>
+          )}
 
           <div className="card">
             <div className="card-body text-center">
@@ -189,18 +191,24 @@ export default async function AdminDashboard() {
           <div className="card-header">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold text-gray-900">Recent Elections</h2>
-              <Link href="/admin/plebiscites/new" className="btn-primary">
-                Create New
-              </Link>
+              {adminSession.role === 'admin' && (
+                <Link href="/admin/plebiscites/new" className="btn-primary">
+                  Create New
+                </Link>
+              )}
             </div>
           </div>
           <div className="card-body p-0">
             {plebiscites.length === 0 ? (
               <div className="text-center py-8">
                 <div className="text-gray-500 mb-4">No elections created yet</div>
-                <Link href="/admin/plebiscites/new" className="btn-primary">
-                  Create Your First Election
-                </Link>
+                {adminSession.role === 'admin' ? (
+                  <Link href="/admin/plebiscites/new" className="btn-primary">
+                    Create Your First Election
+                  </Link>
+                ) : (
+                  <p className="text-sm text-gray-600">Ask an admin to create the first election.</p>
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto">

@@ -158,6 +158,48 @@ const migrations = [
   `,
   `
     CREATE INDEX IF NOT EXISTS idx_voter_roll_plebiscite ON voter_roll(plebiscite_id);
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS admin_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE NOT NULL,
+      name TEXT,
+      password_hash TEXT NOT NULL,
+      role TEXT CHECK(role IN ('admin', 'observer')) NOT NULL DEFAULT 'observer',
+      active BOOLEAN DEFAULT TRUE,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_login_at DATETIME NULL
+    );
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users(email);
+    CREATE INDEX IF NOT EXISTS idx_admin_users_role ON admin_users(role);
+  `,
+  `
+    ALTER TABLE sessions ADD COLUMN admin_user_id INTEGER REFERENCES admin_users(id) ON DELETE SET NULL;
+  `,
+  `
+    ALTER TABLE sessions ADD COLUMN admin_role TEXT CHECK(admin_role IN ('admin', 'observer'));
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_sessions_admin_user ON sessions(admin_user_id);
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS admin_audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      admin_user_id INTEGER,
+      action TEXT NOT NULL,
+      target_type TEXT,
+      target_id TEXT,
+      details TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE SET NULL
+    );
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_admin_audit_user ON admin_audit_log(admin_user_id);
+    CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_log(created_at);
   `
 ];
 

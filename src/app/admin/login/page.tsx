@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function AdminLogin() {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -13,8 +14,8 @@ export default function AdminLogin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!password) {
-      setError('Password is required');
+    if (!email || !password) {
+      setError('Email and password are required');
       return;
     }
 
@@ -24,6 +25,7 @@ export default function AdminLogin() {
     try {
       const formData = new FormData();
       formData.append('action', 'login');
+      formData.append('email', email);
       formData.append('password', password);
 
       const response = await fetch('/api/admin/auth', {
@@ -60,13 +62,32 @@ export default function AdminLogin() {
           Admin Login
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
-          Enter the admin password to access the management panel
+          Sign in with your admin account to access the management panel
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
           <form className="space-y-6" onSubmit={handleSubmit}>
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                Email
+              </label>
+              <div className="mt-1">
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="username"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="input-field"
+                  placeholder="admin@example.org"
+                />
+              </div>
+            </div>
+
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Password
@@ -125,7 +146,7 @@ export default function AdminLogin() {
 
             <div className="mt-4 text-center">
               <p className="text-sm text-gray-600">
-                Contact your system administrator if you've forgotten the password.
+                Contact an admin if you need access or have forgotten your password.
               </p>
             </div>
           </div>

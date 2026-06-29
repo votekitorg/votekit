@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminSessionFromRequest } from '@/lib/auth';
+import { getAdminSessionFromRequest, requireAdminRole } from '@/lib/auth';
 import db, { generateUniqueSlug } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
@@ -34,6 +34,9 @@ export async function POST(request: NextRequest) {
   const adminSession = getAdminSessionFromRequest(request);
   if (!adminSession) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!requireAdminRole(adminSession)) {
+    return NextResponse.json({ error: 'Admin role required' }, { status: 403 });
   }
 
   try {
@@ -144,6 +147,9 @@ export async function PUT(request: NextRequest) {
   if (!adminSession) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  if (!requireAdminRole(adminSession)) {
+    return NextResponse.json({ error: 'Admin role required' }, { status: 403 });
+  }
 
   try {
     const body = await request.json();
@@ -252,6 +258,9 @@ export async function DELETE(request: NextRequest) {
   const adminSession = getAdminSessionFromRequest(request);
   if (!adminSession) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!requireAdminRole(adminSession)) {
+    return NextResponse.json({ error: 'Admin role required' }, { status: 403 });
   }
 
   try {

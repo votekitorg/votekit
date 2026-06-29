@@ -5,11 +5,17 @@ import { usePathname } from 'next/navigation';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
+  currentUser?: {
+    email: string;
+    name: string | null;
+    role: 'admin' | 'observer';
+  };
 }
 
 const navigation = [
-  { name: 'Dashboard', href: '/admin', icon: 'home' },
-  { name: 'Create Election', href: '/admin/plebiscites/new', icon: 'plus' },
+  { name: 'Dashboard', href: '/admin', icon: 'home', roles: ['admin', 'observer'] },
+  { name: 'Create Election', href: '/admin/plebiscites/new', icon: 'plus', roles: ['admin'] },
+  { name: 'Admin Users', href: '/admin/users', icon: 'users', roles: ['admin'] },
 ];
 
 function getIcon(iconName: string) {
@@ -44,8 +50,10 @@ function getIcon(iconName: string) {
   return icons[iconName as keyof typeof icons] || icons.clipboard;
 }
 
-export default function AdminLayout({ children }: AdminLayoutProps) {
+export default function AdminLayout({ children, currentUser }: AdminLayoutProps) {
   const pathname = usePathname();
+  const user = currentUser || { email: 'admin', name: null, role: 'admin' as const };
+  const visibleNavigation = navigation.filter(item => item.roles.includes(user.role));
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -69,7 +77,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {/* Navigation */}
         <nav className="p-4">
           <div className="space-y-1">
-            {navigation.map((item) => {
+            {visibleNavigation.map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link
@@ -123,7 +131,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               </Link>
               <div className="flex items-center">
                 <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                <span className="text-sm text-gray-600">Logged in as Admin</span>
+                <span className="text-sm text-gray-600">
+                  {user.name || user.email} ({user.role === 'admin' ? 'Admin' : 'Observer'})
+                </span>
               </div>
             </div>
           </div>
