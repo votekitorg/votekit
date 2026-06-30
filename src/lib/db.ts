@@ -67,10 +67,12 @@ const migrations = [
     CREATE TABLE IF NOT EXISTS verification_codes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT NOT NULL,
+      plebiscite_id INTEGER,
       code TEXT NOT NULL,
       expires_at DATETIME NOT NULL,
       used BOOLEAN DEFAULT FALSE,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (plebiscite_id) REFERENCES plebiscites (id) ON DELETE CASCADE
     );
   `,
   `
@@ -200,6 +202,27 @@ const migrations = [
   `
     CREATE INDEX IF NOT EXISTS idx_admin_audit_user ON admin_audit_log(admin_user_id);
     CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_log(created_at);
+  `,
+  `
+    ALTER TABLE verification_codes ADD COLUMN plebiscite_id INTEGER REFERENCES plebiscites(id) ON DELETE CASCADE;
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_verification_codes_plebiscite ON verification_codes(plebiscite_id);
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS voter_verification_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      plebiscite_id INTEGER NOT NULL,
+      success BOOLEAN DEFAULT FALSE,
+      attempted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      locked_until DATETIME NULL,
+      FOREIGN KEY (plebiscite_id) REFERENCES plebiscites(id) ON DELETE CASCADE
+    );
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_voter_attempts_email_plebiscite ON voter_verification_attempts(email, plebiscite_id);
+    CREATE INDEX IF NOT EXISTS idx_voter_attempts_time ON voter_verification_attempts(attempted_at);
   `
 ];
 

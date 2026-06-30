@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { csrfFetch } from '@/lib/csrf-client';
 
 interface Voter {
   id: number;
@@ -36,7 +37,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
 
   const fetchVoters = useCallback(async () => {
     try {
-      const response = await fetch(`/api/admin/voters?plebiscite_id=${plebisciteId}`);
+      const response = await csrfFetch(`/api/admin/voters?plebiscite_id=${plebisciteId}`);
       const result = await response.json();
       
       if (response.ok) {
@@ -69,7 +70,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
     setSuccess('');
 
     try {
-      const response = await fetch('/api/admin/voters', {
+      const response = await csrfFetch('/api/admin/voters', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -133,7 +134,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
       }
 
       // Upload emails
-      const response = await fetch('/api/admin/voters', {
+      const response = await csrfFetch('/api/admin/voters', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -175,7 +176,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
     }
 
     try {
-      const response = await fetch(`/api/admin/voters?id=${id}&plebiscite_id=${plebisciteId}`, {
+      const response = await csrfFetch(`/api/admin/voters?id=${id}&plebiscite_id=${plebisciteId}`, {
         method: 'DELETE',
       });
 
@@ -198,7 +199,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
     }
 
     try {
-      const response = await fetch(`/api/admin/voters?action=clear-all&plebiscite_id=${plebisciteId}`, {
+      const response = await csrfFetch(`/api/admin/voters?action=clear-all&plebiscite_id=${plebisciteId}`, {
         method: 'DELETE',
       });
 

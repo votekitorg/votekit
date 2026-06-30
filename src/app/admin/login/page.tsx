@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { csrfFetch } from '@/lib/csrf-client';
 
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
@@ -28,7 +29,7 @@ export default function AdminLogin() {
       formData.append('email', email);
       formData.append('password', password);
 
-      const response = await fetch('/api/admin/auth', {
+      const response = await csrfFetch('/api/admin/auth', {
         method: 'POST',
         body: formData,
       });

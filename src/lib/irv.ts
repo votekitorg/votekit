@@ -20,6 +20,13 @@ export interface IRVResult {
   exhaustedBallots: number;
 }
 
+function sortCandidatesByVotesThenName(entries: [string, number][]): [string, number][] {
+  return [...entries].sort(([candidateA, votesA], [candidateB, votesB]) => {
+    if (votesA !== votesB) return votesB - votesA;
+    return candidateA.localeCompare(candidateB);
+  });
+}
+
 export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
   if (votes.length === 0) {
     return {
@@ -73,8 +80,7 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
     const majority = Math.floor(totalActiveVotes / 2) + 1;
 
     // Check if any candidate has a majority
-    const sortedCandidates = Object.entries(voteCounts)
-      .sort(([, a], [, b]) => b - a);
+    const sortedCandidates = sortCandidatesByVotesThenName(Object.entries(voteCounts));
 
     const roundData: IRVRound = {
       round,
@@ -164,8 +170,7 @@ export function formatIRVResults(result: IRVResult): string {
   result.rounds.forEach(round => {
     output += `Round ${round.round}:\n`;
     
-    const sortedVotes = Object.entries(round.votes)
-      .sort(([, a], [, b]) => b - a);
+    const sortedVotes = sortCandidatesByVotesThenName(Object.entries(round.votes));
     
     sortedVotes.forEach(([candidate, votes]) => {
       const percentage = round.votes && Object.values(round.votes).reduce((sum, count) => sum + count, 0) > 0
@@ -195,8 +200,7 @@ export function exportIRVResultsCSV(result: IRVResult): string {
   result.rounds.forEach(round => {
     const totalVotes = Object.values(round.votes).reduce((sum, count) => sum + count, 0);
     
-    Object.entries(round.votes)
-      .sort(([, a], [, b]) => b - a)
+    sortCandidatesByVotesThenName(Object.entries(round.votes))
       .forEach(([candidate, votes]) => {
         const percentage = totalVotes > 0 ? ((votes / totalVotes) * 100).toFixed(1) : '0.0';
         let status = 'Active';

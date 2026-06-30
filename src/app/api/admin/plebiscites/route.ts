@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminSessionFromRequest, requireAdminRole } from '@/lib/auth';
+import { getAdminSessionFromRequest, requireAdminRole,
+  validateCSRFRequest
+} from '@/lib/auth';
 import db, { generateUniqueSlug } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
@@ -30,6 +32,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  if (!validateCSRFRequest(request)) {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
+  }
+
   // Verify admin authentication
   const adminSession = getAdminSessionFromRequest(request);
   if (!adminSession) {
@@ -142,6 +148,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  if (!validateCSRFRequest(request)) {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
+  }
+
   // Verify admin authentication
   const adminSession = getAdminSessionFromRequest(request);
   if (!adminSession) {
@@ -254,6 +264,10 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  if (!validateCSRFRequest(request)) {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
+  }
+
   // Verify admin authentication
   const adminSession = getAdminSessionFromRequest(request);
   if (!adminSession) {

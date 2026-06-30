@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db, { generateReceiptCode } from '@/lib/db';
-import { getVoterSessionFromRequest } from '@/lib/auth';
+import { getVoterSessionFromRequest,
+  validateCSRFRequest
+} from '@/lib/auth';
 import { validateIRVVote } from '@/lib/irv';
 import { validateCondorcetVote } from '@/lib/condorcet';
 
@@ -27,6 +29,10 @@ function validatePreferentialLength(voteValue: unknown, options: string[], prefe
 }
 
 export async function POST(request: NextRequest) {
+  if (!validateCSRFRequest(request)) {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
     const { plebisciteSlug, votes } = body;
@@ -69,10 +75,9 @@ export async function POST(request: NextRequest) {
     // Get voter from roll
     const voter = db.prepare(`
       SELECT * FROM voter_roll
-      WHERE email = ? AND (plebiscite_id = ? OR plebiscite_id IS NULL)
-      ORDER BY CASE WHEN plebiscite_id = ? THEN 0 ELSE 1 END
+      WHERE email = ? AND plebiscite_id = ?
       LIMIT 1
-    `).get(session.email, plebiscite.id, plebiscite.id) as any;
+    `).get(session.email, plebiscite.id) as any;
     if (!voter) {
       return NextResponse.json(
         { error: 'Voter not found' },

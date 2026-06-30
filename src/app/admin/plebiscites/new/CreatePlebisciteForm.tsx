@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
+import { csrfFetch } from '@/lib/csrf-client';
 
 interface Question {
   title: string;
@@ -191,7 +192,7 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
     setSuccess('');
 
     try {
-      const response = await fetch('/api/admin/plebiscites', {
+      const response = await csrfFetch('/api/admin/plebiscites', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

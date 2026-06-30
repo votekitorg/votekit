@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { csrfFetch } from '@/lib/csrf-client';
 
 type AdminRole = 'admin' | 'observer';
 
@@ -30,7 +31,7 @@ export default function AdminUsersManager({ users }: { users: AdminUser[] }) {
     setSuccess('');
 
     try {
-      const response = await fetch('/api/admin/users', {
+      const response = await csrfFetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form)
@@ -53,7 +54,7 @@ export default function AdminUsersManager({ users }: { users: AdminUser[] }) {
     setSuccess('');
 
     try {
-      const response = await fetch('/api/admin/users', {
+      const response = await csrfFetch('/api/admin/users', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, ...changes })

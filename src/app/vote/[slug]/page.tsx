@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import VoteForm from '@/components/VoteForm';
+import { csrfFetch } from '@/lib/csrf-client';
 
 interface Plebiscite {
   id: number;
@@ -117,7 +118,7 @@ export default function VotingPage({ params }: VotingPageProps) {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/verify', {
+      const response = await csrfFetch('/api/auth/verify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -156,7 +157,7 @@ export default function VotingPage({ params }: VotingPageProps) {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/confirm', {
+      const response = await csrfFetch('/api/auth/confirm', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -184,7 +185,7 @@ export default function VotingPage({ params }: VotingPageProps) {
 
   const handleVoteSubmit = async (votes: { [questionId: number]: any }) => {
     try {
-      const response = await fetch('/api/vote', {
+      const response = await csrfFetch('/api/vote', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -215,7 +216,7 @@ export default function VotingPage({ params }: VotingPageProps) {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/verify', {
+      const response = await csrfFetch('/api/auth/verify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

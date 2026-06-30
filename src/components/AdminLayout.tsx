@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { csrfFetch } from '@/lib/csrf-client';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -55,6 +56,14 @@ export default function AdminLayout({ children, currentUser }: AdminLayoutProps)
   const user = currentUser || { email: 'admin', name: null, role: 'admin' as const };
   const visibleNavigation = navigation.filter(item => item.roles.includes(user.role));
 
+  async function logout() {
+    await csrfFetch('/api/admin/auth', {
+      method: 'POST',
+      body: new URLSearchParams({ action: 'logout' })
+    });
+    window.location.href = '/admin/login';
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
@@ -98,16 +107,14 @@ export default function AdminLayout({ children, currentUser }: AdminLayoutProps)
 
           {/* Logout */}
           <div className="mt-8 pt-4 border-t border-gray-200">
-            <form action="/api/admin/auth" method="POST">
-              <input type="hidden" name="action" value="logout" />
-              <button
-                type="submit"
-                className="flex items-center w-full px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-              >
-                {getIcon('logout')}
-                <span className="ml-3">Logout</span>
-              </button>
-            </form>
+            <button
+              type="button"
+              onClick={logout}
+              className="flex items-center w-full px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              {getIcon('logout')}
+              <span className="ml-3">Logout</span>
+            </button>
           </div>
         </nav>
       </div>

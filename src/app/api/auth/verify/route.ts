@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { validateCSRFRequest } from '@/lib/auth';
 import db, { cleanupExpiredCodes } from '@/lib/db';
 import { sendVerificationEmail, generateVerificationCode, isEmailRateLimited, incrementEmailAttempts, getRemainingEmailAttempts } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
+  if (!validateCSRFRequest(request)) {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
     const { email, plebisciteSlug } = body;
@@ -77,9 +82,9 @@ export async function POST(request: NextRequest) {
 
     // Store verification code
     db.prepare(`
-      INSERT INTO verification_codes (email, code, expires_at)
-      VALUES (?, ?, ?)
-    `).run(normalizedEmail, code, expiresAt);
+      INSERT INTO verification_codes (email, plebiscite_id, code, expires_at)
+      VALUES (?, ?, ?, ?)
+    `).run(normalizedEmail, plebiscite.id, code, expiresAt);
 
     // Send email
     const emailResult = await sendVerificationEmail(normalizedEmail, code, plebiscite.title);

@@ -5,10 +5,15 @@ import {
   checkAdminBruteForce,
   recordAdminLoginAttempt,
   clearAdminFailedAttempts,
-  getAdminSession
+  getAdminSession,
+  validateCSRFRequest
 } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
+  if (!validateCSRFRequest(request)) {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
+  }
+
   try {
     const formData = await request.formData();
     const action = formData.get('action') as string;

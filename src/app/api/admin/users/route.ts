@@ -5,7 +5,8 @@ import {
   listAdminUsers,
   requireAdminRole,
   updateAdminUser,
-  type AdminRole
+  type AdminRole,
+  validateCSRFRequest
 } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
@@ -18,6 +19,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  if (!validateCSRFRequest(request)) {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
+  }
+
   const adminSession = getAdminSessionFromRequest(request);
   if (!adminSession) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -44,6 +49,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  if (!validateCSRFRequest(request)) {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
+  }
+
   const adminSession = getAdminSessionFromRequest(request);
   if (!adminSession) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

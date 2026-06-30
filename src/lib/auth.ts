@@ -394,6 +394,72 @@ export function clearAdminFailedAttempts(ipAddress: string): void {
   db.prepare('DELETE FROM admin_login_attempts WHERE ip_address = ? AND success = FALSE').run(ipAddress);
 }
 
+
+// Voter verification brute-force protection
+const MAX_VOTER_VERIFY_ATTEMPTS = 5;
+const VOTER_VERIFY_LOCKOUT_DURATION = 15 * 60 * 1000;
+
+export function checkVoterVerificationBruteForce(email: string, plebisciteId: number): { blocked: boolean; remaining: number; lockedUntil?: Date } {
+  const normalizedEmail = normalizeEmail(email);
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    DELETE FROM voter_verification_attempts
+    WHERE attempted_at < ? AND locked_until IS NULL
+  `).run(hourAgo);
+
+  const lockoutRecord = db.prepare(`
+    SELECT locked_until FROM voter_verification_attempts
+    WHERE email = ? AND plebiscite_id = ? AND locked_until IS NOT NULL AND locked_until > ?
+    ORDER BY attempted_at DESC LIMIT 1
+  `).get(normalizedEmail, plebisciteId, now) as { locked_until: string } | undefined;
+
+  if (lockoutRecord) {
+    return { blocked: true, remaining: 0, lockedUntil: new Date(lockoutRecord.locked_until) };
+  }
+
+  const recentAttempts = db.prepare(`
+    SELECT COUNT(*) as count FROM voter_verification_attempts
+    WHERE email = ? AND plebiscite_id = ? AND success = FALSE AND attempted_at > ?
+  `).get(normalizedEmail, plebisciteId, hourAgo) as { count: number };
+
+  return {
+    blocked: recentAttempts.count >= MAX_VOTER_VERIFY_ATTEMPTS,
+    remaining: Math.max(0, MAX_VOTER_VERIFY_ATTEMPTS - recentAttempts.count)
+  };
+}
+
+export function recordVoterVerificationAttempt(email: string, plebisciteId: number, success: boolean): void {
+  const normalizedEmail = normalizeEmail(email);
+  const now = new Date().toISOString();
+  let lockedUntil: string | null = null;
+
+  if (!success) {
+    const bruteCheck = checkVoterVerificationBruteForce(normalizedEmail, plebisciteId);
+    if (bruteCheck.remaining <= 1) {
+      lockedUntil = new Date(Date.now() + VOTER_VERIFY_LOCKOUT_DURATION).toISOString();
+      db.prepare(`
+        UPDATE verification_codes
+        SET used = TRUE
+        WHERE email = ? AND plebiscite_id = ? AND used = FALSE
+      `).run(normalizedEmail, plebisciteId);
+    }
+  }
+
+  db.prepare(`
+    INSERT INTO voter_verification_attempts (email, plebiscite_id, success, attempted_at, locked_until)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(normalizedEmail, plebisciteId, success ? 1 : 0, now, lockedUntil);
+}
+
+export function clearVoterVerificationFailedAttempts(email: string, plebisciteId: number): void {
+  db.prepare(`
+    DELETE FROM voter_verification_attempts
+    WHERE email = ? AND plebiscite_id = ? AND success = FALSE
+  `).run(normalizeEmail(email), plebisciteId);
+}
+
 // Request helpers
 export function getAdminSessionFromRequest(request: NextRequest): AdminSession | null {
   const sessionId = request.cookies.get('admin-session')?.value;
@@ -403,6 +469,27 @@ export function getAdminSessionFromRequest(request: NextRequest): AdminSession |
 export function getVoterSessionFromRequest(request: NextRequest, plebisciteSlug: string): Session | null {
   const sessionId = request.cookies.get(`voter-session-${plebisciteSlug}`)?.value;
   return getVoterSession(sessionId);
+}
+
+
+export function createCSRFTokenResponse() {
+  const token = generateCSRFToken();
+  return token;
+}
+
+function safeEqual(a: string, b: string): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+export function validateCSRFRequest(request: NextRequest): boolean {
+  const headerToken = request.headers.get('x-csrf-token') || '';
+  const cookieToken = request.cookies.get('csrf-token')?.value || '';
+  return safeEqual(headerToken, cookieToken);
 }
 
 // CSRF protection helper

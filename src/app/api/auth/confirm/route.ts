@@ -1,49 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db, { cleanupExpiredCodes } from '@/lib/db';
-import { createVoterSession } from '@/lib/auth';
-
-// Brute force protection: track failed attempts per email
-const failedAttempts = new Map<string, { count: number; lockedUntil: number }>();
-const MAX_ATTEMPTS = 5;
-const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 minutes
-
-function checkBruteForce(email: string): { blocked: boolean; remaining: number } {
-  const now = Date.now();
-  const record = failedAttempts.get(email);
-  
-  if (!record) return { blocked: false, remaining: MAX_ATTEMPTS };
-  
-  // Reset if lockout has expired
-  if (record.lockedUntil && now > record.lockedUntil) {
-    failedAttempts.delete(email);
-    return { blocked: false, remaining: MAX_ATTEMPTS };
-  }
-  
-  if (record.count >= MAX_ATTEMPTS) {
-    return { blocked: true, remaining: 0 };
-  }
-  
-  return { blocked: false, remaining: MAX_ATTEMPTS - record.count };
-}
-
-function recordFailedAttempt(email: string): void {
-  const record = failedAttempts.get(email) || { count: 0, lockedUntil: 0 };
-  record.count++;
-  
-  if (record.count >= MAX_ATTEMPTS) {
-    record.lockedUntil = Date.now() + LOCKOUT_DURATION;
-    // Also invalidate all active codes for this email
-    db.prepare('UPDATE verification_codes SET used = TRUE WHERE email = ? AND used = FALSE').run(email);
-  }
-  
-  failedAttempts.set(email, record);
-}
-
-function clearFailedAttempts(email: string): void {
-  failedAttempts.delete(email);
-}
+import { createVoterSession, checkVoterVerificationBruteForce, clearVoterVerificationFailedAttempts, recordVoterVerificationAttempt, validateCSRFRequest } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
+  if (!validateCSRFRequest(request)) {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
     const { email, code, plebisciteSlug } = body;
@@ -57,15 +20,6 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Check brute force lockout
-    const bruteCheck = checkBruteForce(normalizedEmail);
-    if (bruteCheck.blocked) {
-      return NextResponse.json(
-        { error: 'Too many failed attempts. Please request a new verification code after 15 minutes.' },
-        { status: 429 }
-      );
-    }
-
     // Clean up expired codes first
     cleanupExpiredCodes();
 
@@ -78,18 +32,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check brute force lockout
+    const bruteCheck = checkVoterVerificationBruteForce(normalizedEmail, plebiscite.id);
+    if (bruteCheck.blocked) {
+      return NextResponse.json(
+        { error: 'Too many failed attempts. Please request a new verification code after 15 minutes.' },
+        { status: 429 }
+      );
+    }
+
     // Status check is sufficient - admin controls open/close manually
     const now = new Date();
 
     // Verify code
     const verification = db.prepare(`
       SELECT * FROM verification_codes 
-      WHERE email = ? AND code = ? AND expires_at > ? AND used = FALSE
-    `).get(normalizedEmail, code, now.toISOString()) as any;
+      WHERE email = ? AND plebiscite_id = ? AND code = ? AND expires_at > ? AND used = FALSE
+    `).get(normalizedEmail, plebiscite.id, code, now.toISOString()) as any;
 
     if (!verification) {
-      recordFailedAttempt(normalizedEmail);
-      const remaining = checkBruteForce(normalizedEmail).remaining;
+      recordVoterVerificationAttempt(normalizedEmail, plebiscite.id, false);
+      const remaining = checkVoterVerificationBruteForce(normalizedEmail, plebiscite.id).remaining;
       return NextResponse.json(
         { error: remaining > 0 
             ? `Invalid or expired verification code. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`
@@ -101,10 +64,9 @@ export async function POST(request: NextRequest) {
     // Check if email is in this election's voter roll
     const voter = db.prepare(`
       SELECT * FROM voter_roll
-      WHERE email = ? AND (plebiscite_id = ? OR plebiscite_id IS NULL)
-      ORDER BY CASE WHEN plebiscite_id = ? THEN 0 ELSE 1 END
+      WHERE email = ? AND plebiscite_id = ?
       LIMIT 1
-    `).get(normalizedEmail, plebiscite.id, plebiscite.id) as any;
+    `).get(normalizedEmail, plebiscite.id) as any;
     if (!voter) {
       return NextResponse.json(
         { error: 'Email address not found in voter roll' },
@@ -124,7 +86,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Clear failed attempts on success
-    clearFailedAttempts(normalizedEmail);
+    clearVoterVerificationFailedAttempts(normalizedEmail, plebiscite.id);
+
+    recordVoterVerificationAttempt(normalizedEmail, plebiscite.id, true);
 
     // Mark code as used
     db.prepare('UPDATE verification_codes SET used = TRUE WHERE id = ?').run(verification.id);
