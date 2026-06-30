@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -6,8 +6,12 @@ export const metadata: Metadata = {
   description: 'Secure online voting platform for membership plebiscites and surveys',
   keywords: ['voting', 'plebiscite', 'survey', 'democracy', 'election'],
   authors: [{ name: 'Member Plebiscite Platform' }],
-  viewport: 'width=device-width, initial-scale=1',
   robots: 'noindex, nofollow', // Prevent search engine indexing
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
   themeColor: '#00843D',
 };
 
