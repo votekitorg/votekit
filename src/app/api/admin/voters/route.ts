@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminSessionFromRequest, requireAdminRole,
+import { getAdminSessionFromRequest, recordAdminAuditLog, requireAdminRole,
   validateCSRFRequest
 } from '@/lib/auth';
 import db from '@/lib/db';
@@ -116,6 +116,13 @@ export async function POST(request: NextRequest) {
       });
 
       insertMany(validEmails, plebiscite_id);
+      recordAdminAuditLog({
+        adminUserId: adminSession.adminUserId,
+        action: 'voter_roll.upload',
+        targetType: 'plebiscite',
+        targetId: plebiscite_id,
+        details: { inserted: insertedCount, duplicates: duplicateCount, invalid: emails.length - validEmails.length }
+      });
 
       return NextResponse.json({
         success: true,
@@ -144,7 +151,15 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        db.prepare('INSERT INTO voter_roll (email, plebiscite_id) VALUES (?, ?)').run(email.trim().toLowerCase(), plebiscite_id);
+        const normalizedEmail = email.trim().toLowerCase();
+        const result = db.prepare('INSERT INTO voter_roll (email, plebiscite_id) VALUES (?, ?)').run(normalizedEmail, plebiscite_id);
+        recordAdminAuditLog({
+          adminUserId: adminSession.adminUserId,
+          action: 'voter_roll.add',
+          targetType: 'voter_roll',
+          targetId: Number(result.lastInsertRowid),
+          details: { plebisciteId: plebiscite_id, email: normalizedEmail }
+        });
         return NextResponse.json({ success: true });
       } catch (error: any) {
         if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
@@ -209,7 +224,14 @@ export async function DELETE(request: NextRequest) {
         );
       }
 
-      db.prepare('DELETE FROM voter_roll WHERE plebiscite_id = ?').run(plebisciteId);
+      const result = db.prepare('DELETE FROM voter_roll WHERE plebiscite_id = ?').run(plebisciteId);
+      recordAdminAuditLog({
+        adminUserId: adminSession.adminUserId,
+        action: 'voter_roll.clear',
+        targetType: 'plebiscite',
+        targetId: plebisciteId,
+        details: { removed: result.changes }
+      });
       return NextResponse.json({ success: true, message: 'All voters removed from this election' });
     }
 
@@ -230,6 +252,8 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    const voter = db.prepare('SELECT email, plebiscite_id FROM voter_roll WHERE id = ?').get(id) as any | undefined;
+
     // Delete voter
     const result = db.prepare('DELETE FROM voter_roll WHERE id = ?').run(id);
     
@@ -239,6 +263,14 @@ export async function DELETE(request: NextRequest) {
         { status: 404 }
       );
     }
+
+    recordAdminAuditLog({
+      adminUserId: adminSession.adminUserId,
+      action: 'voter_roll.delete',
+      targetType: 'voter_roll',
+      targetId: id,
+      details: voter ? { email: voter.email, plebisciteId: voter.plebiscite_id } : null
+    });
 
     return NextResponse.json({ success: true });
 

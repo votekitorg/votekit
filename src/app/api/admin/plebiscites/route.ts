@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminSessionFromRequest, requireAdminRole,
+import { getAdminSessionFromRequest, recordAdminAuditLog, requireAdminRole,
   validateCSRFRequest
 } from '@/lib/auth';
 import db, { closePlebisciteWithPrivacyHardening, generateUniqueSlug } from '@/lib/db';
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     `);
 
     const result = createPlebiscite.run(slug, title, description, info_url, open_date, close_date);
-    const plebisciteId = result.lastInsertRowid;
+    const plebisciteId = Number(result.lastInsertRowid);
 
     // Create questions
     const createQuestion = db.prepare(`
@@ -122,6 +122,14 @@ export async function POST(request: NextRequest) {
         index,
         question.preferentialType || 'compulsory'
       );
+    });
+
+    recordAdminAuditLog({
+      adminUserId: adminSession.adminUserId,
+      action: 'plebiscite.create',
+      targetType: 'plebiscite',
+      targetId: plebisciteId,
+      details: { slug, title, questionCount: questions.length }
     });
 
     return NextResponse.json({
@@ -192,6 +200,13 @@ export async function PUT(request: NextRequest) {
       // Open plebiscite
       db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?')
         .run('open', id);
+      recordAdminAuditLog({
+        adminUserId: adminSession.adminUserId,
+        action: 'plebiscite.open',
+        targetType: 'plebiscite',
+        targetId: id,
+        details: { slug: plebiscite.slug }
+      });
 
       return NextResponse.json({ success: true, status: 'open' });
     }
@@ -207,6 +222,13 @@ export async function PUT(request: NextRequest) {
       // Close and harden atomically: shuffle anonymous ballots and purge
       // voter sessions/used verification codes for this plebiscite.
       closePlebisciteWithPrivacyHardening(Number(id));
+      recordAdminAuditLog({
+        adminUserId: adminSession.adminUserId,
+        action: 'plebiscite.close',
+        targetType: 'plebiscite',
+        targetId: id,
+        details: { slug: plebiscite.slug }
+      });
 
       return NextResponse.json({ success: true, status: 'closed' });
     }
@@ -250,6 +272,13 @@ export async function PUT(request: NextRequest) {
       updateValues.push(id);
       db.prepare(`UPDATE plebiscites SET ${updateFields.join(', ')} WHERE id = ?`)
         .run(...updateValues);
+      recordAdminAuditLog({
+        adminUserId: adminSession.adminUserId,
+        action: 'plebiscite.update',
+        targetType: 'plebiscite',
+        targetId: id,
+        details: { fields: updateFields.map(field => field.split(' = ')[0]) }
+      });
     }
 
     return NextResponse.json({ success: true });
@@ -307,6 +336,13 @@ export async function DELETE(request: NextRequest) {
 
     // Delete plebiscite (cascade will delete questions)
     db.prepare('DELETE FROM plebiscites WHERE id = ?').run(id);
+    recordAdminAuditLog({
+      adminUserId: adminSession.adminUserId,
+      action: 'plebiscite.delete',
+      targetType: 'plebiscite',
+      targetId: id,
+      details: { slug: plebiscite.slug }
+    });
 
     return NextResponse.json({ success: true });
 

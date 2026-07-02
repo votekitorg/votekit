@@ -3,6 +3,7 @@ import {
   createAdminUser,
   getAdminSessionFromRequest,
   listAdminUsers,
+  recordAdminAuditLog,
   requireAdminRole,
   updateAdminUser,
   type AdminRole,
@@ -38,6 +39,13 @@ export async function POST(request: NextRequest) {
       password: body.password,
       name: body.name,
       role: body.role as AdminRole
+    });
+    recordAdminAuditLog({
+      adminUserId: adminSession.adminUserId,
+      action: 'admin_user.create',
+      targetType: 'admin_user',
+      targetId: user.id,
+      details: { email: user.email, role: user.role }
     });
 
     return NextResponse.json({ success: true, user });
@@ -77,6 +85,16 @@ export async function PUT(request: NextRequest) {
       role: body.role as AdminRole | undefined,
       active: body.active,
       password: body.password
+    });
+    recordAdminAuditLog({
+      adminUserId: adminSession.adminUserId,
+      action: 'admin_user.update',
+      targetType: 'admin_user',
+      targetId: user.id,
+      details: {
+        fields: Object.keys(body).filter(key => key !== 'id' && key !== 'password'),
+        passwordChanged: Boolean(body.password)
+      }
     });
 
     return NextResponse.json({ success: true, user });

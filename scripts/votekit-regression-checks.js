@@ -21,6 +21,9 @@ const irv = read('src/lib/irv.ts');
 const condorcet = read('src/lib/condorcet.ts');
 const email = read('src/lib/email.ts');
 const auth = read('src/lib/auth.ts');
+const adminAuthRoute = read('src/app/api/admin/auth/route.ts');
+const adminUsersRoute = read('src/app/api/admin/users/route.ts');
+const adminVotersRoute = read('src/app/api/admin/voters/route.ts');
 const verifyRoute = read('src/app/api/auth/verify/route.ts');
 const confirmRoute = read('src/app/api/auth/confirm/route.ts');
 const electionsRoute = read('src/app/api/elections/[slug]/route.ts');
@@ -80,6 +83,15 @@ assert(!readme.includes('Vercel (Recommended)'), 'README does not recommend Verc
 assert(!readme.includes('production-ready voting platform'), 'README no longer claims production-ready status before Phase 2 is complete');
 assert(!readme.includes('JWT_SECRET') && !envExample.includes('JWT_SECRET'), 'unused JWT_SECRET docs are removed');
 assert(readme.includes('Double-submit cookie'), 'README describes actual double-submit-cookie CSRF protection');
+assert(auth.includes('getAdminRequestIp') && auth.includes("TRUST_PROXY_HEADERS === 'true'"), 'admin IP handling only trusts proxy headers when configured');
+assert(auth.includes('email = ? OR ip_address = ?'), 'admin lockout checks both email and IP buckets');
+assert(db.includes('ALTER TABLE admin_login_attempts ADD COLUMN email'), 'admin login attempts support per-email lockout');
+assert(auth.includes('recordAdminAuditLog'), 'admin audit log helper exists');
+assert(adminAuthRoute.includes('admin.login.success') && adminAuthRoute.includes('admin.login.failure'), 'admin login success and failure are audited');
+assert(adminPlebiscitesRoute.includes('plebiscite.open') && adminPlebiscitesRoute.includes('plebiscite.close'), 'plebiscite lifecycle changes are audited');
+assert(adminVotersRoute.includes('voter_roll.upload') && adminVotersRoute.includes('voter_roll.delete'), 'voter-roll changes are audited');
+assert(adminUsersRoute.includes('admin_user.create') && adminUsersRoute.includes('admin_user.update'), 'admin-user changes are audited');
+assert(!auth.includes('const csrfTokens') && !auth.includes('validateCSRFToken('), 'dead in-memory CSRF token store is removed');
 
 if (process.exitCode) {
   process.exit(process.exitCode);

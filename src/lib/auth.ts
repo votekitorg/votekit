@@ -336,15 +336,40 @@ export { cleanupExpiredSessions };
 const MAX_ADMIN_ATTEMPTS = 5;
 const ADMIN_LOCKOUT_DURATION = 15 * 60 * 1000;
 
-export function checkAdminBruteForce(ipAddress: string): { blocked: boolean; remaining: number; lockedUntil?: Date } {
-  const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  db.prepare('DELETE FROM admin_login_attempts WHERE attempted_at < ? AND locked_until IS NULL').run(hourAgo.toISOString());
+export function getAdminRequestIp(request: NextRequest): string {
+  // Only trust proxy-supplied client IPs when the deployment explicitly says a
+  // known reverse proxy is in front of the app. Otherwise all clients share the
+  // conservative direct bucket and per-email lockout carries the main load.
+  if (process.env.TRUST_PROXY_HEADERS === 'true') {
+    const forwarded = request.headers.get('x-forwarded-for');
+    if (forwarded) return forwarded.split(',')[0].trim();
+    const realIp = request.headers.get('x-real-ip');
+    if (realIp) return realIp.trim();
+  }
 
+  return 'direct';
+}
+
+function adminLoginWhereClause(email: string, ipAddress: string): { clause: string; params: string[] } {
+  const normalizedEmail = normalizeEmail(email);
+  return {
+    clause: '(email = ? OR ip_address = ?)',
+    params: [normalizedEmail, ipAddress]
+  };
+}
+
+export function checkAdminBruteForce(email: string, ipAddress: string): { blocked: boolean; remaining: number; lockedUntil?: Date } {
+  const normalizedEmail = normalizeEmail(email);
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const now = new Date().toISOString();
+  db.prepare('DELETE FROM admin_login_attempts WHERE attempted_at < ? AND locked_until IS NULL').run(hourAgo);
+
+  const { clause, params } = adminLoginWhereClause(normalizedEmail, ipAddress);
   const lockoutRecord = db.prepare(`
     SELECT locked_until FROM admin_login_attempts
-    WHERE ip_address = ? AND locked_until IS NOT NULL AND locked_until > ?
-    ORDER BY attempted_at DESC LIMIT 1
-  `).get(ipAddress, new Date().toISOString()) as { locked_until: string } | undefined;
+    WHERE ${clause} AND locked_until IS NOT NULL AND locked_until > ?
+    ORDER BY locked_until DESC LIMIT 1
+  `).get(...params, now) as { locked_until: string } | undefined;
 
   if (lockoutRecord) {
     return {
@@ -356,42 +381,42 @@ export function checkAdminBruteForce(ipAddress: string): { blocked: boolean; rem
 
   const recentAttempts = db.prepare(`
     SELECT COUNT(*) as count FROM admin_login_attempts
-    WHERE ip_address = ? AND success = FALSE AND attempted_at > ?
-  `).get(ipAddress, hourAgo.toISOString()) as { count: number };
-
-  const remaining = Math.max(0, MAX_ADMIN_ATTEMPTS - recentAttempts.count);
+    WHERE ${clause} AND success = FALSE AND attempted_at > ?
+  `).get(...params, hourAgo) as { count: number };
 
   return {
     blocked: recentAttempts.count >= MAX_ADMIN_ATTEMPTS,
-    remaining
+    remaining: Math.max(0, MAX_ADMIN_ATTEMPTS - recentAttempts.count)
   };
 }
 
-export function recordAdminLoginAttempt(ipAddress: string, success: boolean): void {
+export function recordAdminLoginAttempt(email: string, ipAddress: string, success: boolean): void {
+  const normalizedEmail = normalizeEmail(email);
   const now = new Date().toISOString();
   let lockedUntil: string | null = null;
 
   if (!success) {
-    const bruteCheck = checkAdminBruteForce(ipAddress);
+    const bruteCheck = checkAdminBruteForce(normalizedEmail, ipAddress);
     if (bruteCheck.remaining <= 1) {
       lockedUntil = new Date(Date.now() + ADMIN_LOCKOUT_DURATION).toISOString();
     }
   }
 
   db.prepare(`
-    INSERT INTO admin_login_attempts (ip_address, success, attempted_at, locked_until)
-    VALUES (?, ?, ?, ?)
-  `).run(ipAddress, success ? 1 : 0, now, lockedUntil);
+    INSERT INTO admin_login_attempts (email, ip_address, success, attempted_at, locked_until)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(normalizedEmail, ipAddress, success ? 1 : 0, now, lockedUntil);
 
   if (success) {
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    db.prepare('DELETE FROM admin_login_attempts WHERE ip_address = ? AND success = 1 AND attempted_at < ?')
-      .run(ipAddress, weekAgo.toISOString());
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare('DELETE FROM admin_login_attempts WHERE email = ? AND ip_address = ? AND success = 1 AND attempted_at < ?')
+      .run(normalizedEmail, ipAddress, weekAgo);
   }
 }
 
-export function clearAdminFailedAttempts(ipAddress: string): void {
-  db.prepare('DELETE FROM admin_login_attempts WHERE ip_address = ? AND success = FALSE').run(ipAddress);
+export function clearAdminFailedAttempts(email: string, ipAddress: string): void {
+  db.prepare('DELETE FROM admin_login_attempts WHERE (email = ? OR ip_address = ?) AND success = FALSE')
+    .run(normalizeEmail(email), ipAddress);
 }
 
 
@@ -460,6 +485,25 @@ export function clearVoterVerificationFailedAttempts(email: string, plebisciteId
   `).run(normalizeEmail(email), plebisciteId);
 }
 
+export function recordAdminAuditLog(input: {
+  adminUserId?: number | null;
+  action: string;
+  targetType?: string | null;
+  targetId?: string | number | null;
+  details?: Record<string, any> | null;
+}): void {
+  db.prepare(`
+    INSERT INTO admin_audit_log (admin_user_id, action, target_type, target_id, details)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    input.adminUserId ?? null,
+    input.action,
+    input.targetType ?? null,
+    input.targetId == null ? null : String(input.targetId),
+    input.details ? JSON.stringify(input.details) : null
+  );
+}
+
 // Request helpers
 export function getAdminSessionFromRequest(request: NextRequest): AdminSession | null {
   const sessionId = request.cookies.get('admin-session')?.value;
@@ -497,17 +541,3 @@ export function generateCSRFToken(): string {
   return uuidv4();
 }
 
-const csrfTokens = new Set<string>();
-
-export function addCSRFToken(token: string): void {
-  csrfTokens.add(token);
-  setTimeout(() => csrfTokens.delete(token), 60 * 60 * 1000);
-}
-
-export function validateCSRFToken(token: string): boolean {
-  const valid = csrfTokens.has(token);
-  if (valid) {
-    csrfTokens.delete(token);
-  }
-  return valid;
-}

@@ -147,6 +147,12 @@ const migrations = [
     CREATE INDEX IF NOT EXISTS idx_admin_attempts_time ON admin_login_attempts(attempted_at);
   `,
   `
+    ALTER TABLE admin_login_attempts ADD COLUMN email TEXT;
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_admin_attempts_email ON admin_login_attempts(email);
+  `,
+  `
     CREATE TABLE IF NOT EXISTS email_rate_limits (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT NOT NULL,

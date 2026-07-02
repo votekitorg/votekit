@@ -5,7 +5,9 @@ import {
   checkAdminBruteForce,
   recordAdminLoginAttempt,
   clearAdminFailedAttempts,
+  getAdminRequestIp,
   getAdminSession,
+  recordAdminAuditLog,
   validateCSRFRequest
 } from '@/lib/auth';
 
@@ -29,12 +31,9 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const forwarded = request.headers.get('x-forwarded-for');
-      const ipAddress = forwarded ? forwarded.split(',')[0].trim() :
-                       request.headers.get('x-real-ip') ||
-                       '127.0.0.1';
+      const ipAddress = getAdminRequestIp(request);
 
-      const bruteCheck = checkAdminBruteForce(ipAddress);
+      const bruteCheck = checkAdminBruteForce(email, ipAddress);
       if (bruteCheck.blocked) {
         const minutesLeft = bruteCheck.lockedUntil ? Math.ceil((bruteCheck.lockedUntil.getTime() - Date.now()) / (60 * 1000)) : 15;
         return NextResponse.json(
@@ -45,10 +44,17 @@ export async function POST(request: NextRequest) {
 
       const adminUser = await verifyAdminLogin(email, password);
 
-      recordAdminLoginAttempt(ipAddress, Boolean(adminUser));
+      recordAdminLoginAttempt(email, ipAddress, Boolean(adminUser));
+      recordAdminAuditLog({
+        adminUserId: adminUser?.id ?? null,
+        action: adminUser ? 'admin.login.success' : 'admin.login.failure',
+        targetType: 'admin_user',
+        targetId: adminUser?.id ?? email.trim().toLowerCase(),
+        details: { email: email.trim().toLowerCase(), ipAddress }
+      });
 
       if (!adminUser) {
-        const remaining = checkAdminBruteForce(ipAddress).remaining;
+        const remaining = checkAdminBruteForce(email, ipAddress).remaining;
         return NextResponse.json(
           { error: remaining > 0
               ? `Invalid email or password. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before lockout.`
@@ -57,7 +63,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      clearAdminFailedAttempts(ipAddress);
+      clearAdminFailedAttempts(email, ipAddress);
 
       const sessionId = createAdminSession(adminUser);
 
@@ -81,6 +87,17 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'logout') {
+      const sessionId = request.cookies.get('admin-session')?.value;
+      const session = getAdminSession(sessionId);
+      if (session) {
+        recordAdminAuditLog({
+          adminUserId: session.adminUserId,
+          action: 'admin.logout',
+          targetType: 'admin_user',
+          targetId: session.adminUserId
+        });
+      }
+
       const response = NextResponse.redirect(new URL('/admin', request.url));
       response.cookies.delete('admin-session');
       return response;
