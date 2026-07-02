@@ -1,60 +1,21 @@
-import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import ResultsChart from '@/components/ResultsChart';
 import CondorcetResults from '@/components/CondorcetResults';
+import { getPlebisciteResults, ResultsUnavailableError, type PlebisciteResultsData } from '@/lib/results';
 
-interface Plebiscite {
-  id: number;
-  slug: string;
-  title: string;
-  description: string;
-  info_url?: string;
-  open_date: string;
-  close_date: string;
-  status: string;
-}
-
-interface QuestionResult {
-  id: number;
-  title: string;
-  description?: string;
-  type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
-  options: string[];
-  totalVotes: number;
-  results: any;
-  publicBallots: Array<{
-    receiptCode: string;
-    ballot: {
-      choice?: string;
-      choices?: string[];
-      preferences?: string[];
-    };
-  }>;
-}
-
-interface ResultsData {
-  plebiscite: Plebiscite;
-  participation: {
-    totalVotes: number;
-  };
-  questions: QuestionResult[];
-}
+type QuestionResult = PlebisciteResultsData['questions'][number];
 
 export const dynamic = 'force-dynamic';
 
-async function getResults(slug: string): Promise<ResultsData | null> {
+async function getResults(slug: string): Promise<PlebisciteResultsData | null> {
   try {
-    const response = await fetch(`${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'http://localhost:3006'}/api/results/${slug}`, {
-      cache: 'no-store'
-    });
-
-    if (!response.ok) {
+    return getPlebisciteResults(slug);
+  } catch (error) {
+    if (error instanceof ResultsUnavailableError) {
       return null;
     }
 
-    return await response.json();
-  } catch (error) {
-    console.error('Failed to fetch results:', error);
+    console.error('Failed to load results:', error);
     return null;
   }
 }

@@ -26,7 +26,7 @@ A secure, transparent online voting platform for conducting membership plebiscit
 - **Rate Limiting**: Max 3 verification codes per email per hour
 - **Code Expiration**: Verification codes expire after 10 minutes
 - **Anonymous Storage**: No linkage between voter identity and actual votes
-- **CSRF Protection**: Built-in Next.js security features
+- **CSRF Protection**: Double-submit cookie protection on state-changing routes
 
 ### 📱 **Mobile-First Design**
 - **Responsive Layout**: Works seamlessly on all devices
@@ -70,11 +70,8 @@ ADMIN_PASSWORD=your-secure-admin-password-here
 RESEND_API_KEY=your-resend-api-key-here
 FROM_EMAIL=noreply@yourorganization.com
 
-# Database (automatically created)
+# Database (persistent SQLite file, automatically created)
 DATABASE_PATH=./plebiscite.db
-
-# Security (generate a random string)
-JWT_SECRET=your-jwt-secret-key-for-sessions
 
 # Environment
 NODE_ENV=production
@@ -204,22 +201,23 @@ For ranked choice questions, the platform implements proper IRV tabulation:
 
 ## Deployment
 
-### Vercel (Recommended)
-1. Push to GitHub
-2. Connect to Vercel
-3. Add environment variables
-4. Deploy automatically
+### Supported production model
+VoteKit currently supports real elections only on a persistent single server with durable SQLite storage, regular backups, and a process manager such as PM2 or systemd.
 
-### Traditional Hosting
 1. Build the application: `npm run build`
-2. Upload to your server
-3. Configure environment variables
-4. Use PM2 or similar for process management
+2. Deploy the project to a persistent server
+3. Configure environment variables, including a durable `DATABASE_PATH`
+4. Start with `npm start` under PM2, systemd, or an equivalent process manager
+5. Configure HTTPS and a reverse proxy in front of the Node process
+6. Back up the SQLite database file before, during, and after live elections
+
+### Unsupported for real elections: Vercel/serverless
+Do not run real elections on Vercel or other serverless hosts while VoteKit uses a local SQLite file. Serverless instances do not provide the durable shared local database semantics this app currently requires. Vercel may still be useful for demos or static review deployments only.
 
 ### Database Backup
-The SQLite database file should be backed up regularly:
+The SQLite database file should be backed up regularly and before any live election lifecycle action:
 ```bash
-cp plebiscite.db plebiscite-backup-$(date +%Y%m%d).db
+cp plebiscite.db plebiscite-backup-$(date +%Y%m%d-%H%M%S).db
 ```
 
 ## API Endpoints
@@ -260,7 +258,7 @@ All components are in `src/components/` and use Tailwind CSS for styling.
 1. **Database Connection**: Ensure DATABASE_PATH directory exists and is writable
 2. **Email Delivery**: Verify Resend API key and FROM_EMAIL domain verification
 3. **Build Errors**: Check TypeScript types and ensure all dependencies are installed
-4. **Session Issues**: Verify JWT_SECRET is set and cookies are enabled
+4. **Session Issues**: Verify cookies are enabled and the SQLite database is writable
 
 ### Development Mode
 
@@ -278,7 +276,7 @@ Check application logs for debugging:
 
 ## Contributing
 
-This is a production-ready voting platform. Key areas for enhancement:
+This platform has completed the Phase 1 hardening pass, but should not be described as production-ready until the remaining Phase 2 items are complete and the deployment has been operationally reviewed. Key areas for enhancement:
 
 1. **Advanced Security**: Two-factor authentication, encryption at rest
 2. **Scalability**: PostgreSQL support, Redis sessions
