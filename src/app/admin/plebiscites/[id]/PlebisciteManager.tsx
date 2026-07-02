@@ -9,6 +9,7 @@ interface Plebiscite {
   slug: string;
   title: string;
   status: 'draft' | 'open' | 'closed';
+  open_date: string;
 }
 
 interface StatusInfo {
@@ -34,7 +35,11 @@ export default function PlebisciteManager({
   const [copied, setCopied] = useState(false);
 
   async function handleAction(action: string) {
-    if (!confirm(`Are you sure you want to ${action} this election?`)) return;
+    const openingEarly = action === 'open' && new Date(plebiscite.open_date) > new Date();
+    const message = openingEarly
+      ? 'The scheduled open date has not been reached yet. Open voting early? The scheduled dates will not be changed.'
+      : `Are you sure you want to ${action} this election?`;
+    if (!confirm(message)) return;
     
     setLoading(true);
     setError('');

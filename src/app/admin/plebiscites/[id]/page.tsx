@@ -295,7 +295,7 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
             </div>
             <div className="card-body">
               <PlebisciteManager 
-                plebiscite={{id: plebiscite.id, slug: plebiscite.slug, title: plebiscite.title, status: plebiscite.status}}
+                plebiscite={{id: plebiscite.id, slug: plebiscite.slug, title: plebiscite.title, status: plebiscite.status, open_date: plebiscite.open_date}}
                 statusInfo={{status: statusInfo.status, color: statusInfo.color, canOpen: statusInfo.canOpen, canClose: statusInfo.canClose, message: statusInfo.message}}
                 canManage={adminSession.role === 'admin'}
               />

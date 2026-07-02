@@ -115,7 +115,8 @@ export async function GET(
         votes.forEach((vote: any) => {
           const voteData = JSON.parse(vote.vote_data);
           if (voteData.choices && Array.isArray(voteData.choices)) {
-            voteData.choices.forEach((choice: string) => {
+            // Ballots stored before duplicate rejection may contain repeats.
+            new Set<string>(voteData.choices).forEach((choice: string) => {
               if (counts.hasOwnProperty(choice)) {
                 counts[choice]++;
               }
@@ -184,7 +185,8 @@ export async function GET(
           pairwiseMatrix: condorcetResult.pairwiseMatrix,
           rounds: condorcetResult.rounds,
           totalVotes: condorcetResult.totalVotes,
-          rankings: condorcetResult.rankings
+          rankings: condorcetResult.rankings,
+          tiedCandidates: condorcetResult.tiedCandidates
         };
 
         if (format === 'csv') {

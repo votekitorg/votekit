@@ -17,6 +17,15 @@ export async function GET(
       );
     }
 
+    // Draft elections are not publicly visible; respond exactly like a
+    // missing election so guessed slugs reveal nothing.
+    if (plebiscite.status === 'draft') {
+      return NextResponse.json(
+        { error: 'Election not found' },
+        { status: 404 }
+      );
+    }
+
     const questions = db.prepare(
       'SELECT * FROM questions WHERE plebiscite_id = ? ORDER BY display_order'
     ).all(plebiscite.id) as any[];

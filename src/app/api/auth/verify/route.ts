@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateCSRFRequest } from '@/lib/auth';
 import db, { cleanupExpiredCodes } from '@/lib/db';
+import { votingClosedError } from '@/lib/election-window';
 import { sendVerificationEmail, generateVerificationCode, isEmailRateLimited, incrementEmailAttempts, getRemainingEmailAttempts } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
@@ -54,7 +55,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Status check is sufficient - admin controls open/close manually
+    const closedError = votingClosedError(plebiscite);
+    if (closedError) {
+      return NextResponse.json({ error: closedError }, { status: 403 });
+    }
 
     // Check if email is in this election's voter roll
     const voter = db.prepare('SELECT * FROM voter_roll WHERE email = ? AND plebiscite_id = ?').get(normalizedEmail, plebiscite.id) as any;

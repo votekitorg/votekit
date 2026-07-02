@@ -17,6 +17,7 @@ export interface CondorcetRound {
   pairwise?: PairwiseResult[];
   eliminated?: string[];
   winner?: string;
+  tiedCandidates?: string[];
 }
 
 export interface CondorcetResult {
@@ -27,6 +28,7 @@ export interface CondorcetResult {
   rounds: CondorcetRound[];
   totalVotes: number;
   rankings: { candidate: string; wins: number; losses: number; ties: number }[];
+  tiedCandidates?: string[];
 }
 
 /**
@@ -93,7 +95,7 @@ function findCondorcetWinner(
 function schulze(
   matrix: { [a: string]: { [b: string]: number } },
   candidates: string[]
-): string[] {
+): { candidate: string; count: number }[] {
   const n = candidates.length;
   const idx: { [c: string]: number } = {};
   candidates.forEach((c, i) => { idx[c] = i; });
@@ -141,7 +143,7 @@ function schulze(
   });
 
   wins.sort((a, b) => b.count - a.count);
-  return wins.map(w => w.candidate);
+  return wins;
 }
 
 export function tabulateCondorcet(votes: CondorcetVote[], candidates: string[]): CondorcetResult {
@@ -218,8 +220,36 @@ export function tabulateCondorcet(votes: CondorcetVote[], candidates: string[]):
     description: 'No candidate beats all others head-to-head (cyclical preferences detected). Resolving via the Schulze method, which finds the strongest paths of preference through all candidates.'
   });
 
-  const schulzeRanking = schulze(matrix, candidates);
-  const winner = schulzeRanking[0];
+  const schulzeScores = schulze(matrix, candidates);
+  const topScore = schulzeScores[0].count;
+  const tiedForFirst = schulzeScores
+    .filter(score => score.count === topScore)
+    .map(score => score.candidate);
+
+  // A true tie is reported as a tie for administrators to resolve under
+  // election rules, never resolved by candidate order.
+  if (tiedForFirst.length > 1) {
+    const tiedCandidates = [...tiedForFirst].sort();
+
+    rounds.push({
+      round: 3,
+      description: `No single winner: ${tiedCandidates.join(', ')} are tied under the Schulze method (equal strongest-path strength). The tie is reported for resolution under election rules.`,
+      tiedCandidates
+    });
+
+    return {
+      winner: null,
+      condorcetWinner: false,
+      method: 'schulze',
+      pairwiseMatrix: matrix,
+      rounds,
+      totalVotes: votes.length,
+      rankings,
+      tiedCandidates
+    };
+  }
+
+  const winner = schulzeScores[0].candidate;
 
   rounds.push({
     round: 3,
@@ -261,6 +291,9 @@ export function exportCondorcetResultsCSV(result: CondorcetResult): string {
     csv += `${i + 1},"${r.candidate}",${r.wins},${r.losses},${r.ties}\n`;
   });
 
-  csv += `\nMethod,Winner\n"${result.method}","${result.winner}"\n`;
+  const winnerCell = result.tiedCandidates && result.tiedCandidates.length > 0
+    ? `Tie: ${result.tiedCandidates.join(' / ')}`
+    : `${result.winner}`;
+  csv += `\nMethod,Winner\n"${result.method}","${winnerCell}"\n`;
   return csv;
 }

@@ -3,6 +3,7 @@ import db, { generateReceiptCode } from '@/lib/db';
 import { getVoterSessionFromRequest,
   validateCSRFRequest
 } from '@/lib/auth';
+import { votingClosedError } from '@/lib/election-window';
 import { validateIRVVote } from '@/lib/irv';
 import { validateCondorcetVote } from '@/lib/condorcet';
 
@@ -70,7 +71,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Status check is sufficient - admin controls open/close manually
+    const closedError = votingClosedError(plebiscite);
+    if (closedError) {
+      return NextResponse.json({ error: closedError }, { status: 403 });
+    }
 
     // Get voter from roll
     const voter = db.prepare(`
@@ -146,6 +150,13 @@ export async function POST(request: NextRequest) {
         if (!Array.isArray(voteValue) || voteValue.length === 0) {
           return NextResponse.json(
             { error: `At least one selection required for question: ${question.title}` },
+            { status: 400 }
+          );
+        }
+
+        if (new Set(voteValue).size !== voteValue.length) {
+          return NextResponse.json(
+            { error: `Duplicate selections are not allowed for question: ${question.title}` },
             { status: 400 }
           );
         }

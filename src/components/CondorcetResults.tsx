@@ -12,6 +12,7 @@ interface CondorcetRound {
   description: string;
   pairwise?: PairwiseResult[];
   winner?: string;
+  tiedCandidates?: string[];
 }
 
 interface Ranking {
@@ -31,6 +32,7 @@ interface CondorcetResultsProps {
     rounds: CondorcetRound[];
     totalVotes: number;
     rankings: Ranking[];
+    tiedCandidates?: string[];
   };
   options: string[];
 }
@@ -65,9 +67,20 @@ export default function CondorcetResults({ title, results, options }: CondorcetR
             </div>
             <div className="text-2xl font-bold text-green-800">{results.winner}</div>
             <div className="text-sm text-green-600 mt-1">
-              {results.condorcetWinner 
-                ? 'Beats every other option in head-to-head comparison' 
+              {results.condorcetWinner
+                ? 'Beats every other option in head-to-head comparison'
                 : 'No option beats all others; resolved via strongest paths'}
+            </div>
+          </div>
+        )}
+
+        {/* Tied result */}
+        {!results.winner && results.tiedCandidates && results.tiedCandidates.length > 0 && (
+          <div className="text-center bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+            <div className="text-sm text-yellow-700 font-medium mb-1">Tied Result (Schulze Method)</div>
+            <div className="text-2xl font-bold text-yellow-800">{results.tiedCandidates.join(' / ')}</div>
+            <div className="text-sm text-yellow-700 mt-1">
+              These options are tied under the Schulze method. Election rules determine how the tie is resolved.
             </div>
           </div>
         )}

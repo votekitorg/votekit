@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db, { cleanupExpiredCodes } from '@/lib/db';
 import { createVoterSession, checkVoterVerificationBruteForce, clearVoterVerificationFailedAttempts, recordVoterVerificationAttempt, validateCSRFRequest } from '@/lib/auth';
+import { votingClosedError } from '@/lib/election-window';
 
 export async function POST(request: NextRequest) {
   if (!validateCSRFRequest(request)) {
@@ -32,6 +33,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const closedError = votingClosedError(plebiscite);
+    if (closedError) {
+      return NextResponse.json({ error: closedError }, { status: 403 });
+    }
+
     // Check brute force lockout
     const bruteCheck = checkVoterVerificationBruteForce(normalizedEmail, plebiscite.id);
     if (bruteCheck.blocked) {
@@ -41,7 +47,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Status check is sufficient - admin controls open/close manually
     const now = new Date();
 
     // Verify code

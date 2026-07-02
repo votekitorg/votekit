@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import crypto from 'crypto';
 import db from './db';
 
 let _resend: Resend | null = null;
@@ -143,5 +144,5 @@ export function cleanupEmailRateLimit(): void {
 
 // Generate 6-digit verification code
 export function generateVerificationCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }

@@ -7,7 +7,7 @@ import crypto from 'crypto';
 let db: Database.Database | null = null;
 
 function getDatabase() {
-  if (!db && process.env.NODE_ENV !== 'test' && typeof window === 'undefined') {
+  if (!db && (process.env.NODE_ENV !== 'test' || process.env.DATABASE_PATH) && typeof window === 'undefined') {
     const dbPath = process.env.DATABASE_PATH || './plebiscite.db';
     const dbDir = path.dirname(dbPath);
 
@@ -273,6 +273,7 @@ function runPrivacyMigrations(database: Database.Database): void {
       migrateQuestionsConstraint(database);
       migrateVotesPrivacy(database);
       migrateParticipationPrivacy(database);
+      migrateVoterRollUniqueness(database);
     });
 
     migratePrivacy();
@@ -353,6 +354,34 @@ function migrateParticipationPrivacy(database: Database.Database): void {
     DROP TABLE participation;
     ALTER TABLE participation_privacy_migration RENAME TO participation;
     CREATE INDEX IF NOT EXISTS idx_participation_plebiscite ON participation(plebiscite_id);
+  `);
+}
+
+function migrateVoterRollUniqueness(database: Database.Database): void {
+  const sql = tableSql(database, 'voter_roll');
+  if (!sql || sql.includes('UNIQUE(email, plebiscite_id)')) return;
+
+  // Rebuild voter_roll so uniqueness is per election instead of global.
+  // IDs are preserved because participation.voter_roll_id references them.
+  // Legacy rows with NULL plebiscite_id are carried over unchanged; the old
+  // global UNIQUE(email) guarantees the copy cannot conflict.
+  database.exec(`
+    CREATE TABLE voter_roll_multi_election_migration (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      plebiscite_id INTEGER REFERENCES plebiscites(id) ON DELETE CASCADE,
+      UNIQUE(email, plebiscite_id)
+    );
+
+    INSERT INTO voter_roll_multi_election_migration (id, email, added_at, plebiscite_id)
+    SELECT id, email, added_at, plebiscite_id
+    FROM voter_roll;
+
+    DROP TABLE voter_roll;
+    ALTER TABLE voter_roll_multi_election_migration RENAME TO voter_roll;
+    CREATE INDEX IF NOT EXISTS idx_voter_roll_email ON voter_roll(email);
+    CREATE INDEX IF NOT EXISTS idx_voter_roll_plebiscite ON voter_roll(plebiscite_id);
   `);
 }
 
