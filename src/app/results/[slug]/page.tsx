@@ -199,7 +199,7 @@ export default async function ResultsPage({ params }: { params: { slug: string }
           </div>
           <h2 className="text-lg font-semibold text-gray-900 mb-2">Results Not Available</h2>
           <p className="text-gray-600 mb-4">
-            This plebiscite may not exist, or results may not yet be published.
+            This election may not exist, or results may not yet be published.
           </p>
           <Link href="/" className="btn-primary">
             Return Home
@@ -224,8 +224,8 @@ export default async function ResultsPage({ params }: { params: { slug: string }
                 </svg>
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-gray-900">Plebiscite Results</h1>
-                <p className="text-sm text-gray-600">Member Plebiscite Platform</p>
+                <h1 className="text-lg font-semibold text-gray-900">Election Results</h1>
+                <p className="text-sm text-gray-600">VoteKit</p>
               </div>
             </div>
             
@@ -240,7 +240,7 @@ export default async function ResultsPage({ params }: { params: { slug: string }
                 Download CSV
               </a>
               <Link href="/" className="btn-primary">
-                View More Plebiscites
+                View More Elections
               </Link>
             </div>
           </div>
@@ -285,7 +285,7 @@ export default async function ResultsPage({ params }: { params: { slug: string }
         <div className="space-y-12">
           {questions.length === 0 ? (
             <div className="text-center py-8">
-              <div className="text-gray-500">No questions found for this plebiscite</div>
+              <div className="text-gray-500">No questions found for this election</div>
             </div>
           ) : (
             questions.map((question, index) => (

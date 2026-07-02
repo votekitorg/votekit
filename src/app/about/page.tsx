@@ -1,8 +1,8 @@
 import Link from 'next/link';
 
 export const metadata = {
-  title: 'How It Works - VoteKit Election Platform',
-  description: 'Learn how the VoteKit Election Platform works, including voting methods, security, and the complete workflow.',
+  title: 'How It Works - VoteKit',
+  description: 'Learn how VoteKit works, including voting methods, safeguards, and the election workflow.',
 };
 
 export default function AboutPage() {
@@ -17,7 +17,7 @@ export default function AboutPage() {
                   <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
                 </svg>
               </div>
-              <h1 className="text-xl font-bold text-gray-900">VoteKit Election Platform</h1>
+              <h1 className="text-xl font-bold text-gray-900">VoteKit</h1>
             </Link>
             <Link href="/" className="text-sm text-gray-600 hover:text-primary transition-colors">
               Back to Home
@@ -31,8 +31,8 @@ export default function AboutPage() {
         <div className="text-center mb-16">
           <h2 className="text-4xl font-bold text-gray-900 mb-4">How It Works</h2>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            A simple, secure platform for members to have their say on the issues that matter. 
-            Here&apos;s everything you need to know.
+            A practical, open-source voting system for member organisations.
+            This page explains the process, the safeguards, and the limits of what the system can do.
           </p>
         </div>
 
@@ -509,7 +509,7 @@ export default function AboutPage() {
               <p className="text-gray-600 text-sm">
                 That depends on the organisation running the election. Each election description 
                 will state whether it is binding or advisory. The platform itself is simply a tool 
-                for conducting secure, transparent votes.
+                for conducting carefully managed elections.
               </p>
             </div>
           </div>
@@ -517,22 +517,22 @@ export default function AboutPage() {
 
         {/* CTA */}
         <div className="text-center bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-          <h3 className="text-2xl font-bold text-gray-900 mb-3">Ready to participate?</h3>
+          <h3 className="text-2xl font-bold text-gray-900 mb-3">Current elections</h3>
           <p className="text-gray-600 mb-6">
-            Check the home page for any active elections, or wait for a voting link to be shared with you.
+            Check the home page for active elections, or use the voting link provided by your organisation.
           </p>
           <Link
             href="/"
             className="inline-flex items-center px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary-dark transition-colors"
           >
-            View Active Plebiscites
+            View Active Elections
           </Link>
         </div>
       </main>
 
       <footer className="bg-white border-t border-gray-200 py-8 mt-12">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-sm text-gray-600">&copy; {new Date().getFullYear()} Member Plebiscite Platform. Secure, transparent, democratic.</p>
+          <p className="text-sm text-gray-600">&copy; {new Date().getFullYear()} VoteKit. Open-source election software.</p>
         </div>
       </footer>
     </div>

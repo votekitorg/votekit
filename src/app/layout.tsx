@@ -2,10 +2,10 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Member Plebiscite Platform',
-  description: 'Secure online voting platform for membership plebiscites and surveys',
-  keywords: ['voting', 'plebiscite', 'survey', 'democracy', 'election'],
-  authors: [{ name: 'Member Plebiscite Platform' }],
+  title: 'VoteKit',
+  description: 'Open-source election software for member organisations',
+  keywords: ['voting', 'election', 'ballot', 'governance'],
+  authors: [{ name: 'VoteKit' }],
   robots: 'noindex, nofollow', // Prevent search engine indexing
 };
 
@@ -35,11 +35,11 @@ export default function RootLayout({
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">
               <p className="text-sm text-gray-600">
-                &copy; {new Date().getFullYear()} Member Plebiscite Platform. 
-                Secure, transparent, democratic.
+                &copy; {new Date().getFullYear()} VoteKit.
+                Open-source election software for member organisations.
               </p>
               <p className="text-xs text-gray-500 mt-2">
-                All votes are confidential and securely encrypted.
+                Ballots are handled separately from voter identities to protect privacy.
               </p>
             </div>
           </div>

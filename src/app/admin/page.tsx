@@ -181,12 +181,12 @@ export default async function AdminDashboard() {
                 </svg>
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">View Reports</h3>
-              <p className="text-gray-600">Analyze participation and results across all plebiscites</p>
+              <p className="text-gray-600">Analyze participation and results across all elections</p>
             </div>
           </div>
         </div>
 
-        {/* Recent Plebiscites */}
+        {/* Recent Elections */}
         <div className="card">
           <div className="card-header">
             <div className="flex justify-between items-center">

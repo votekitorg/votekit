@@ -299,14 +299,14 @@ export default function VotingPage({ params }: VotingPageProps) {
             </div>
             <div>
               <h1 className="text-lg font-semibold text-gray-900">VoteKit Election</h1>
-              <p className="text-sm text-gray-600">Secure Online Voting</p>
+              <p className="text-sm text-gray-600">Secure election voting</p>
             </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Plebiscite Information */}
+        {/* Election Information */}
         {step === 'info' && (
           <div className="space-y-8">
             <div className="text-center">
@@ -330,7 +330,7 @@ export default function VotingPage({ params }: VotingPageProps) {
 
                 {plebiscite.info_url && (
                   <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm font-medium text-blue-900 mb-2">Additional Information:</p>
+                    <p className="text-sm font-medium text-blue-900 mb-2">Additional information:</p>
                     <a 
                       href={plebiscite.info_url}
                       target="_blank"
@@ -343,7 +343,7 @@ export default function VotingPage({ params }: VotingPageProps) {
                 )}
 
                 <div className="mt-8 bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 className="text-sm font-medium text-green-900 mb-2">How Voting Works:</h4>
+                  <h4 className="text-sm font-medium text-green-900 mb-2">How voting works:</h4>
                   <ol className="text-sm text-green-800 space-y-1 list-decimal list-inside">
                     <li>Enter your registered email address</li>
                     <li>Check your email for a 6-digit verification code</li>
@@ -361,7 +361,7 @@ export default function VotingPage({ params }: VotingPageProps) {
                 onClick={() => setStep('email')}
                 className="btn-primary px-8"
               >
-                Begin Voting
+                Begin
               </button>
             </div>
           </div>
@@ -373,7 +373,7 @@ export default function VotingPage({ params }: VotingPageProps) {
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Enter Your Email</h2>
               <p className="text-gray-600">
-                We'll send a verification code to confirm your identity
+                We'll send a verification code to confirm your eligibility
               </p>
             </div>
 
@@ -395,7 +395,7 @@ export default function VotingPage({ params }: VotingPageProps) {
                       required
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      Must be registered in the voter roll
+                      Use the email address on the voter roll
                     </p>
                   </div>
 
@@ -523,7 +523,7 @@ export default function VotingPage({ params }: VotingPageProps) {
         {step === 'vote' && (
           <div className="space-y-8">
             <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Cast Your Vote</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Cast your vote</h2>
               <p className="text-gray-600">
                 Answer all questions below. You can review your choices before submitting.
               </p>
@@ -545,9 +545,9 @@ export default function VotingPage({ params }: VotingPageProps) {
               </svg>
             </div>
 
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Vote Submitted Successfully!</h2>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Vote Submitted</h2>
             <p className="text-lg text-gray-600 mb-8">
-              Thank you for participating in: <strong>{plebiscite.title}</strong>
+              Your ballot has been recorded for: <strong>{plebiscite.title}</strong>
             </p>
 
             <div className="card text-left mb-8">
@@ -556,7 +556,7 @@ export default function VotingPage({ params }: VotingPageProps) {
               </div>
               <div className="card-body">
                 <p className="text-sm text-gray-600 mb-4">
-                  Save these receipt codes. You can use them to verify your vote was counted without revealing how you voted.
+                  Save these receipt codes. They can be used to verify that your ballot was included without revealing your choices.
                 </p>
                 <div className="bg-gray-50 rounded-lg p-4">
                   {receiptCodes.map((code, index) => (

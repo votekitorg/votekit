@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     if (!plebisciteSlug || !votes) {
       return NextResponse.json(
-        { error: 'Plebiscite slug and votes are required' },
+        { error: 'Election link and votes are required' },
         { status: 400 }
       );
     }
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     const plebiscite = db.prepare('SELECT * FROM plebiscites WHERE slug = ? AND status = ?').get(plebisciteSlug, 'open') as any;
     if (!plebiscite) {
       return NextResponse.json(
-        { error: 'Plebiscite not found or not currently open' },
+        { error: 'Election not found or not currently open' },
         { status: 404 }
       );
     }
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     // Verify session matches plebiscite
     if (session.plebisciteId !== plebiscite.id) {
       return NextResponse.json(
-        { error: 'Invalid session for this plebiscite' },
+        { error: 'Invalid session for this election' },
         { status: 403 }
       );
     }
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     
     if (hasVoted) {
       return NextResponse.json(
-        { error: 'You have already voted in this plebiscite' },
+        { error: 'You have already voted in this election' },
         { status: 409 }
       );
     }
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
 
     if (questions.length === 0) {
       return NextResponse.json(
-        { error: 'No questions found for this plebiscite' },
+        { error: 'No questions found for this election' },
         { status: 400 }
       );
     }
@@ -289,7 +289,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if ((error as any)?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       return NextResponse.json(
-        { error: 'You have already voted in this plebiscite' },
+        { error: 'You have already voted in this election' },
         { status: 409 }
       );
     }

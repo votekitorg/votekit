@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     if (!email || !plebisciteSlug) {
       return NextResponse.json(
-        { error: 'Email and plebiscite slug are required' },
+        { error: 'Email and election link are required' },
         { status: 400 }
       );
     }
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     const plebiscite = db.prepare('SELECT * FROM plebiscites WHERE slug = ? AND status = ?').get(plebisciteSlug, 'open') as any;
     if (!plebiscite) {
       return NextResponse.json(
-        { error: 'Plebiscite not found or not currently open' },
+        { error: 'Election not found or not currently open' },
         { status: 404 }
       );
     }

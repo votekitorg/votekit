@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     if (!plebisciteId) {
       return NextResponse.json(
-        { error: 'plebiscite_id parameter is required' },
+        { error: 'Election ID is required' },
         { status: 400 }
       );
     }
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     if (!plebiscite_id) {
       return NextResponse.json(
-        { error: 'plebiscite_id is required' },
+        { error: 'Election ID is required' },
         { status: 400 }
       );
     }
@@ -212,7 +212,7 @@ export async function DELETE(request: NextRequest) {
     if (action === 'clear-all') {
       if (!plebisciteId) {
         return NextResponse.json(
-          { error: 'plebiscite_id is required for clear-all action' },
+          { error: 'Election ID is required for this action' },
           { status: 400 }
         );
       }
@@ -250,7 +250,7 @@ export async function DELETE(request: NextRequest) {
     
     if (participation.count > 0) {
       return NextResponse.json(
-        { error: 'Cannot remove voter who has participated in plebiscites' },
+        { error: 'Cannot remove voter who has participated in elections' },
         { status: 400 }
       );
     }

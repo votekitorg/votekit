@@ -49,7 +49,7 @@ export class ResultsUnavailableError extends Error {
 export function getPlebisciteResults(slug: string): PlebisciteResultsData {
   const plebiscite = db.prepare('SELECT * FROM plebiscites WHERE slug = ?').get(slug) as any;
   if (!plebiscite) {
-    throw new ResultsUnavailableError('Plebiscite not found', 404);
+    throw new ResultsUnavailableError('Election not found', 404);
   }
 
   // Results and anonymous ballot receipts are only public after an admin closes the election.
@@ -64,7 +64,7 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
   `).all(plebiscite.id) as any[];
 
   if (questions.length === 0) {
-    throw new ResultsUnavailableError('No questions found for this plebiscite', 404);
+    throw new ResultsUnavailableError('No questions found for this election', 404);
   }
 
   const participationCount = db.prepare(`

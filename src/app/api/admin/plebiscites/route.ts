@@ -175,7 +175,7 @@ export async function PUT(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json(
-        { error: 'Plebiscite ID is required' },
+        { error: 'Election ID is required' },
         { status: 400 }
       );
     }
@@ -184,7 +184,7 @@ export async function PUT(request: NextRequest) {
     const plebiscite = db.prepare('SELECT * FROM plebiscites WHERE id = ?').get(id) as any;
     if (!plebiscite) {
       return NextResponse.json(
-        { error: 'Plebiscite not found' },
+        { error: 'Election not found' },
         { status: 404 }
       );
     }
@@ -192,7 +192,7 @@ export async function PUT(request: NextRequest) {
     if (action === 'open') {
       if (plebiscite.status !== 'draft') {
         return NextResponse.json(
-          { error: 'Only draft plebiscites can be opened' },
+          { error: 'Only draft elections can be opened' },
           { status: 400 }
         );
       }
@@ -214,7 +214,7 @@ export async function PUT(request: NextRequest) {
     if (action === 'close') {
       if (plebiscite.status !== 'open') {
         return NextResponse.json(
-          { error: 'Only open plebiscites can be closed' },
+          { error: 'Only open elections can be closed' },
           { status: 400 }
         );
       }
@@ -239,7 +239,7 @@ export async function PUT(request: NextRequest) {
     // Validation for regular updates
     if ((plebiscite as any).status !== 'draft') {
       return NextResponse.json(
-        { error: 'Can only edit draft plebiscites' },
+        { error: 'Can only edit draft elections' },
         { status: 400 }
       );
     }
@@ -312,7 +312,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json(
-        { error: 'Plebiscite ID is required' },
+        { error: 'Election ID is required' },
         { status: 400 }
       );
     }
@@ -321,7 +321,7 @@ export async function DELETE(request: NextRequest) {
     const plebiscite = db.prepare('SELECT * FROM plebiscites WHERE id = ?').get(id) as any;
     if (!plebiscite) {
       return NextResponse.json(
-        { error: 'Plebiscite not found' },
+        { error: 'Election not found' },
         { status: 404 }
       );
     }
@@ -329,7 +329,7 @@ export async function DELETE(request: NextRequest) {
     const voteCount = db.prepare('SELECT COUNT(*) as count FROM participation WHERE plebiscite_id = ?').get(id) as { count: number };
     if (voteCount.count > 0) {
       return NextResponse.json(
-        { error: 'Cannot delete plebiscite with existing votes' },
+        { error: 'Cannot delete election with existing votes' },
         { status: 400 }
       );
     }

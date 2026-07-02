@@ -80,7 +80,7 @@ export default async function HomePage() {
                   <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
                 </svg>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900">VoteKit Election Platform</h1>
+              <h1 className="text-2xl font-bold text-gray-900">VoteKit</h1>
             </div>
             <div className="flex items-center space-x-4">
               <Link 
@@ -105,11 +105,11 @@ export default async function HomePage() {
         {/* Welcome Section */}
         <div className="text-center mb-12">
           <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Have Your Voice Heard
+            Elections for organisations that need care and trust
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Participate in democratic decision-making through secure, transparent online elections. 
-            Your privacy is protected while ensuring election integrity.
+            A sober, privacy-conscious voting system for member organisations.
+            VoteKit is designed to make elections easier to run while keeping ballots private, auditable, and clear.
           </p>
         </div>
 
@@ -123,7 +123,7 @@ export default async function HomePage() {
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Elections</h3>
             <p className="text-gray-600">
-              There are currently no active elections. Check back later or contact your organization for updates.
+              There are currently no active elections. Check back later or contact your organisation for updates.
             </p>
           </div>
         ) : (
@@ -182,7 +182,7 @@ export default async function HomePage() {
                       href={`/vote/${plebiscite.slug}`}
                       className="btn-primary w-full text-center"
                     >
-                      Vote Now
+                      Vote
                     </Link>
                   ) : (
                     <Link
@@ -206,9 +206,9 @@ export default async function HomePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </div>
-            <h4 className="text-lg font-semibold text-gray-900 mb-2">Secure & Private</h4>
+            <h4 className="text-lg font-semibold text-gray-900 mb-2">Private by design</h4>
             <p className="text-gray-600">
-              Your vote is encrypted and anonymous. No one can trace your vote back to you.
+              Votes are stored separately from voter identities, with safeguards to protect ballot secrecy.
             </p>
           </div>
           
@@ -218,9 +218,9 @@ export default async function HomePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h4 className="text-lg font-semibold text-gray-900 mb-2">Verifiable</h4>
+            <h4 className="text-lg font-semibold text-gray-900 mb-2">Verifiable records</h4>
             <p className="text-gray-600">
-              Receive a receipt code to verify your vote was counted without revealing your choices.
+              Receipt codes let voters check that their ballot was included without revealing their choices.
             </p>
           </div>
           
@@ -230,9 +230,9 @@ export default async function HomePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
-            <h4 className="text-lg font-semibold text-gray-900 mb-2">Member-Only</h4>
+            <h4 className="text-lg font-semibold text-gray-900 mb-2">Controlled eligibility</h4>
             <p className="text-gray-600">
-              Only verified members can participate. Email verification ensures election integrity.
+              Only eligible voters on the roll can participate, with email verification and rate limits to reduce abuse.
             </p>
           </div>
         </div>
