@@ -8,12 +8,16 @@ let db: Database.Database | null = null;
 
 function getDatabase() {
   if (!db && (process.env.NODE_ENV !== 'test' || process.env.DATABASE_PATH) && typeof window === 'undefined') {
+    // Tests point DATABASE_PATH at an isolated temp file or ':memory:'.
     const dbPath = process.env.DATABASE_PATH || './plebiscite.db';
-    const dbDir = path.dirname(dbPath);
 
-    // Ensure directory exists
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
+    if (dbPath !== ':memory:') {
+      const dbDir = path.dirname(dbPath);
+
+      // Ensure directory exists
+      if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
+      }
     }
 
     db = new Database(dbPath);
@@ -383,6 +387,64 @@ function migrateVoterRollUniqueness(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_voter_roll_email ON voter_roll(email);
     CREATE INDEX IF NOT EXISTS idx_voter_roll_plebiscite ON voter_roll(plebiscite_id);
   `);
+}
+
+function shuffleVotesForPlebiscite(database: Database.Database, plebisciteId: number): void {
+  const rows = database.prepare(`
+    SELECT v.question_id, v.vote_data, v.receipt_code
+    FROM votes v
+    JOIN questions q ON q.id = v.question_id
+    WHERE q.plebiscite_id = ?
+    ORDER BY v.id
+  `).all(plebisciteId) as Array<{ question_id: number; vote_data: string; receipt_code: string }>;
+
+  if (rows.length === 0) return;
+
+  // Fisher-Yates with cryptographic randomness.
+  for (let i = rows.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [rows[i], rows[j]] = [rows[j], rows[i]];
+  }
+
+  database.prepare(`
+    DELETE FROM votes
+    WHERE question_id IN (SELECT id FROM questions WHERE plebiscite_id = ?)
+  `).run(plebisciteId);
+
+  const insertVote = database.prepare(
+    'INSERT INTO votes (question_id, vote_data, receipt_code) VALUES (?, ?, ?)'
+  );
+  for (const row of rows) {
+    insertVote.run(row.question_id, row.vote_data, row.receipt_code);
+  }
+}
+
+// Close-time privacy hardening (VK-007). Anonymous ballot rows are rebuilt in
+// cryptographically shuffled order with fresh row IDs so the post-close
+// database no longer preserves ballot insertion order, and voter sessions and
+// used verification codes for the plebiscite are purged. Everything runs in
+// one transaction with the status transition: if any step fails, the
+// plebiscite stays open and no data changes. The status-guarded UPDATE makes
+// the hardening run exactly once, on the open -> closed transition.
+export function closePlebisciteWithPrivacyHardening(plebisciteId: number): void {
+  const database = getDatabase();
+  if (!database) throw new Error('Database not available');
+
+  const close = database.transaction((id: number) => {
+    const updated = database.prepare(
+      `UPDATE plebiscites SET status = 'closed' WHERE id = ? AND status = 'open'`
+    ).run(id);
+    if (updated.changes === 0) {
+      throw new Error('Only open plebiscites can be closed');
+    }
+
+    shuffleVotesForPlebiscite(database, id);
+
+    database.prepare('DELETE FROM verification_codes WHERE plebiscite_id = ? AND used = TRUE').run(id);
+    database.prepare('DELETE FROM sessions WHERE plebiscite_id = ?').run(id);
+  });
+
+  close(plebisciteId);
 }
 
 // Utility functions

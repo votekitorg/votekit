@@ -24,6 +24,7 @@ const verifyRoute = read('src/app/api/auth/verify/route.ts');
 const confirmRoute = read('src/app/api/auth/confirm/route.ts');
 const electionsRoute = read('src/app/api/elections/[slug]/route.ts');
 const electionWindow = read('src/lib/election-window.ts');
+const adminPlebiscitesRoute = read('src/app/api/admin/plebiscites/route.ts');
 
 const participationCreate = db.match(/CREATE TABLE IF NOT EXISTS participation \([\s\S]*?\);/);
 assert(Boolean(participationCreate), 'participation table definition exists');
@@ -66,6 +67,9 @@ assert(confirmRoute.includes('votingClosedError'), 'code confirmation enforces t
 assert(!electionWindow.includes('not_yet_open') && !electionWindow.includes('plebiscite.open_date'), 'open_date is not enforced as a voting blocker (status=open is authoritative)');
 assert(resultsRoute.includes("plebiscite.status !== 'closed'"), 'results remain unavailable until the election is closed');
 assert(electionWindow.includes("`${trimmed}+10:00`"), 'timezone-naive close dates are interpreted as Australia/Brisbane time');
+assert(db.includes('closePlebisciteWithPrivacyHardening'), 'close-time privacy hardening exists in the db layer');
+assert(adminPlebiscitesRoute.includes('closePlebisciteWithPrivacyHardening'), 'admin close action shuffles ballots and purges identity artifacts');
+assert(db.includes('crypto.randomInt('), 'ballot shuffle uses cryptographic randomness');
 
 if (process.exitCode) {
   process.exit(process.exitCode);

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSessionFromRequest, requireAdminRole,
   validateCSRFRequest
 } from '@/lib/auth';
-import db, { generateUniqueSlug } from '@/lib/db';
+import db, { closePlebisciteWithPrivacyHardening, generateUniqueSlug } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   // Verify admin authentication
@@ -204,9 +204,9 @@ export async function PUT(request: NextRequest) {
         );
       }
 
-      // Close plebiscite
-      db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?')
-        .run('closed', id);
+      // Close and harden atomically: shuffle anonymous ballots and purge
+      // voter sessions/used verification codes for this plebiscite.
+      closePlebisciteWithPrivacyHardening(Number(id));
 
       return NextResponse.json({ success: true, status: 'closed' });
     }

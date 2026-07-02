@@ -178,9 +178,19 @@ For ranked choice questions, the platform implements proper IRV tabulation:
 ## Security Considerations
 
 ### Vote Privacy
-- Votes are stored in separate table from voter participation
+- Votes are stored in a separate table from voter participation
 - Receipt codes allow verification without revealing choices
 - No database foreign keys link voters to their specific votes
+- When an admin closes an election, its anonymous ballot rows are rebuilt in
+  cryptographically shuffled order with fresh row IDs, and voter sessions and
+  used verification codes for that election are purged. The post-close
+  database and all published exports therefore do not preserve ballot
+  insertion order.
+- Known residual risk: **before** close, ballot rows are stored in insertion
+  order, so a database administrator or anyone holding a live database
+  snapshot taken during voting could correlate that order with participation
+  records. Until stronger pre-close unlinkability exists, the database host
+  must be treated as trusted while voting is open.
 
 ### Rate Limiting
 - Maximum 3 verification codes per email per hour
