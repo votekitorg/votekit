@@ -159,13 +159,12 @@ describe('close-time privacy hardening', () => {
     }
   });
 
-  it('purges voter sessions and used verification codes for the closed plebiscite only', () => {
+  it('purges voter sessions and verification codes for the closed plebiscite only', () => {
     expect(db.prepare('SELECT COUNT(*) as c FROM sessions WHERE plebiscite_id = ?').get(plebisciteA).c).toBe(0);
     expect(db.prepare('SELECT COUNT(*) as c FROM sessions WHERE id = ?').get('admin-session-1').c).toBe(1);
     expect(db.prepare('SELECT COUNT(*) as c FROM sessions WHERE id = ?').get('voter-b-1').c).toBe(1);
 
-    expect(db.prepare('SELECT COUNT(*) as c FROM verification_codes WHERE plebiscite_id = ? AND used = 1').get(plebisciteA).c).toBe(0);
-    expect(db.prepare('SELECT COUNT(*) as c FROM verification_codes WHERE plebiscite_id = ? AND used = 0').get(plebisciteA).c).toBe(1);
+    expect(db.prepare('SELECT COUNT(*) as c FROM verification_codes WHERE plebiscite_id = ?').get(plebisciteA).c).toBe(0);
     expect(db.prepare('SELECT COUNT(*) as c FROM verification_codes WHERE plebiscite_id = ?').get(plebisciteB).c).toBe(1);
   });
 

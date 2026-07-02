@@ -1,8 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validateCSRFRequest } from '@/lib/auth';
+import { getTrustedRequestIp, validateCSRFRequest } from '@/lib/auth';
 import db, { cleanupExpiredCodes } from '@/lib/db';
 import { votingClosedError } from '@/lib/election-window';
-import { sendVerificationEmail, generateVerificationCode, isEmailRateLimited, incrementEmailAttempts, getRemainingEmailAttempts } from '@/lib/email';
+import {
+  sendVerificationEmail,
+  generateVerificationCode,
+  isEmailRateLimited,
+  incrementEmailAttempts,
+  getRemainingEmailAttempts,
+  isRateLimitKeyLimited,
+  incrementRateLimitKey,
+  MAX_VERIFICATION_IP_ATTEMPTS,
+  MAX_VERIFICATION_GLOBAL_ATTEMPTS
+} from '@/lib/email';
+
+const NEUTRAL_VERIFICATION_MESSAGE = 'If that email is eligible, a verification code will be sent shortly.';
+
+function neutralVerificationResponse() {
+  return NextResponse.json({
+    success: true,
+    message: NEUTRAL_VERIFICATION_MESSAGE
+  });
+}
 
 export async function POST(request: NextRequest) {
   if (!validateCSRFRequest(request)) {
@@ -30,21 +49,35 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const requestIp = getTrustedRequestIp(request);
+    const ipRateLimitKey = `ip:${requestIp}`;
+    const globalRateLimitKey = `global:${plebisciteSlug}`;
 
     // Clean up expired codes first
     cleanupExpiredCodes();
 
-    // Check rate limiting
-    if (isEmailRateLimited(normalizedEmail)) {
+    if (
+      isEmailRateLimited(normalizedEmail) ||
+      isRateLimitKeyLimited(ipRateLimitKey, MAX_VERIFICATION_IP_ATTEMPTS) ||
+      isRateLimitKeyLimited(globalRateLimitKey, MAX_VERIFICATION_GLOBAL_ATTEMPTS)
+    ) {
       const remaining = getRemainingEmailAttempts(normalizedEmail);
       return NextResponse.json(
-        { 
-          error: `Too many verification attempts. You can request ${remaining} more code${remaining !== 1 ? 's' : ''} in the next hour.`,
+        {
+          error: remaining > 0
+            ? 'Too many verification attempts from this network. Please try again later.'
+            : `Too many verification attempts. You can request ${remaining} more code${remaining !== 1 ? 's' : ''} in the next hour.`,
           rateLimited: true
         },
         { status: 429 }
       );
     }
+
+    // Count all syntactically valid requests against email, IP, and global
+    // throttles before any eligibility branch, so voter-roll probing is not free.
+    incrementEmailAttempts(normalizedEmail);
+    incrementRateLimitKey(ipRateLimitKey);
+    incrementRateLimitKey(globalRateLimitKey);
 
     // Get plebiscite
     const plebiscite = db.prepare('SELECT * FROM plebiscites WHERE slug = ? AND status = ?').get(plebisciteSlug, 'open') as any;
@@ -60,24 +93,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: closedError }, { status: 403 });
     }
 
-    // Check if email is in this election's voter roll
+    // Use a neutral response for eligibility/voted-state failures so this route
+    // cannot be used to enumerate the voter roll or who has already voted.
     const voter = db.prepare('SELECT * FROM voter_roll WHERE email = ? AND plebiscite_id = ?').get(normalizedEmail, plebiscite.id) as any;
     if (!voter) {
-      return NextResponse.json(
-        { error: 'Email address not found in this election\'s voter roll' },
-        { status: 403 }
-      );
+      return neutralVerificationResponse();
     }
 
-    // Check if user has already voted
     const hasVoted = db.prepare('SELECT * FROM participation WHERE plebiscite_id = ? AND voter_roll_id = ?')
       .get(plebiscite.id, voter.id) as any;
-    
+
     if (hasVoted) {
-      return NextResponse.json(
-        { error: 'You have already voted in this plebiscite' },
-        { status: 409 }
-      );
+      return neutralVerificationResponse();
     }
 
     // Generate verification code
@@ -103,9 +130,6 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-
-    // Increment rate limiting counter
-    incrementEmailAttempts(normalizedEmail);
 
     return NextResponse.json({
       success: true,

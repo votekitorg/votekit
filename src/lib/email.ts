@@ -91,49 +91,57 @@ export async function sendVerificationEmail(
 const MAX_EMAIL_ATTEMPTS = 3;
 const RATE_LIMIT_WINDOW_HOURS = 1;
 
-export function isEmailRateLimited(email: string): boolean {
-  // Clean up expired rate limits first
+export const MAX_VERIFICATION_IP_ATTEMPTS = 20;
+export const MAX_VERIFICATION_GLOBAL_ATTEMPTS = 200;
+
+export function isRateLimitKeyLimited(key: string, maxAttempts: number): boolean {
   cleanupEmailRateLimit();
-  
   const record = db.prepare(`
-    SELECT attempt_count, reset_time FROM email_rate_limits 
+    SELECT attempt_count FROM email_rate_limits
     WHERE email = ? AND reset_time > ?
-  `).get(email, new Date().toISOString()) as { attempt_count: number; reset_time: string } | undefined;
-  
-  return record ? record.attempt_count >= MAX_EMAIL_ATTEMPTS : false;
+  `).get(key, new Date().toISOString()) as { attempt_count: number } | undefined;
+
+  return record ? record.attempt_count >= maxAttempts : false;
 }
 
-export function incrementEmailAttempts(email: string): void {
+export function incrementRateLimitKey(key: string): void {
   const now = new Date();
   const resetTime = new Date(now.getTime() + (RATE_LIMIT_WINDOW_HOURS * 60 * 60 * 1000));
-  
-  // Try to update existing record first
+
   const updated = db.prepare(`
-    UPDATE email_rate_limits 
-    SET attempt_count = attempt_count + 1 
+    UPDATE email_rate_limits
+    SET attempt_count = attempt_count + 1
     WHERE email = ? AND reset_time > ?
-  `).run(email, now.toISOString());
-  
-  // If no existing record, create a new one
+  `).run(key, now.toISOString());
+
   if (updated.changes === 0) {
     db.prepare(`
       INSERT INTO email_rate_limits (email, attempt_count, reset_time)
       VALUES (?, 1, ?)
-    `).run(email, resetTime.toISOString());
+    `).run(key, resetTime.toISOString());
   }
 }
 
-export function getRemainingEmailAttempts(email: string): number {
+export function getRemainingRateLimitAttempts(key: string, maxAttempts: number): number {
   const record = db.prepare(`
-    SELECT attempt_count FROM email_rate_limits 
+    SELECT attempt_count FROM email_rate_limits
     WHERE email = ? AND reset_time > ?
-  `).get(email, new Date().toISOString()) as { attempt_count: number } | undefined;
-  
-  if (!record) {
-    return MAX_EMAIL_ATTEMPTS;
-  }
-  
-  return Math.max(0, MAX_EMAIL_ATTEMPTS - record.attempt_count);
+  `).get(key, new Date().toISOString()) as { attempt_count: number } | undefined;
+
+  if (!record) return maxAttempts;
+  return Math.max(0, maxAttempts - record.attempt_count);
+}
+
+export function isEmailRateLimited(email: string): boolean {
+  return isRateLimitKeyLimited(email, MAX_EMAIL_ATTEMPTS);
+}
+
+export function incrementEmailAttempts(email: string): void {
+  incrementRateLimitKey(email);
+}
+
+export function getRemainingEmailAttempts(email: string): number {
+  return getRemainingRateLimitAttempts(email, MAX_EMAIL_ATTEMPTS);
 }
 
 // Cleanup function to remove expired rate limit entries

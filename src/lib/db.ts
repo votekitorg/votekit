@@ -428,7 +428,7 @@ function shuffleVotesForPlebiscite(database: Database.Database, plebisciteId: nu
 // Close-time privacy hardening (VK-007). Anonymous ballot rows are rebuilt in
 // cryptographically shuffled order with fresh row IDs so the post-close
 // database no longer preserves ballot insertion order, and voter sessions and
-// used verification codes for the plebiscite are purged. Everything runs in
+// verification codes for the plebiscite are purged. Everything runs in
 // one transaction with the status transition: if any step fails, the
 // plebiscite stays open and no data changes. The status-guarded UPDATE makes
 // the hardening run exactly once, on the open -> closed transition.
@@ -446,7 +446,7 @@ export function closePlebisciteWithPrivacyHardening(plebisciteId: number): void 
 
     shuffleVotesForPlebiscite(database, id);
 
-    database.prepare('DELETE FROM verification_codes WHERE plebiscite_id = ? AND used = TRUE').run(id);
+    database.prepare('DELETE FROM verification_codes WHERE plebiscite_id = ?').run(id);
     database.prepare('DELETE FROM sessions WHERE plebiscite_id = ?').run(id);
   });
 

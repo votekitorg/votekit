@@ -336,10 +336,10 @@ export { cleanupExpiredSessions };
 const MAX_ADMIN_ATTEMPTS = 5;
 const ADMIN_LOCKOUT_DURATION = 15 * 60 * 1000;
 
-export function getAdminRequestIp(request: NextRequest): string {
+export function getTrustedRequestIp(request: NextRequest): string {
   // Only trust proxy-supplied client IPs when the deployment explicitly says a
   // known reverse proxy is in front of the app. Otherwise all clients share the
-  // conservative direct bucket and per-email lockout carries the main load.
+  // conservative direct bucket and per-email throttles carry the main load.
   if (process.env.TRUST_PROXY_HEADERS === 'true') {
     const forwarded = request.headers.get('x-forwarded-for');
     if (forwarded) return forwarded.split(',')[0].trim();
@@ -348,6 +348,10 @@ export function getAdminRequestIp(request: NextRequest): string {
   }
 
   return 'direct';
+}
+
+export function getAdminRequestIp(request: NextRequest): string {
+  return getTrustedRequestIp(request);
 }
 
 function adminLoginWhereClause(email: string, ipAddress: string): { clause: string; params: string[] } {

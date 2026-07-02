@@ -10,6 +10,9 @@ export async function GET(request: NextRequest) {
   if (!adminSession) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  if (!requireAdminRole(adminSession)) {
+    return NextResponse.json({ error: 'Admin role required' }, { status: 403 });
+  }
 
   try {
     const url = new URL(request.url);
