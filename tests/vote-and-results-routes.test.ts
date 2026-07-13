@@ -14,7 +14,7 @@ const CSRF = 'test-csrf-token';
 
 let db: any;
 let votePost: (request: NextRequest) => Promise<Response>;
-let resultsGet: (request: NextRequest, ctx: { params: { slug: string } }) => Promise<Response>;
+let resultsGet: (request: NextRequest, ctx: { params: Promise<{ slug: string }> }) => Promise<Response>;
 let plebisciteId: number;
 let questionId: number;
 
@@ -107,7 +107,7 @@ describe('POST /api/vote (multiple choice)', () => {
 
 describe('GET /api/results/[slug]', () => {
   it('returns 403 while the election is still open', async () => {
-    const response = await resultsGet(resultsRequest(), { params: { slug: SLUG } });
+    const response = await resultsGet(resultsRequest(), { params: Promise.resolve({ slug: SLUG }) });
     expect(response.status).toBe(403);
   });
 
@@ -118,7 +118,7 @@ describe('GET /api/results/[slug]', () => {
 
     db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?').run('closed', plebisciteId);
 
-    const response = await resultsGet(resultsRequest(), { params: { slug: SLUG } });
+    const response = await resultsGet(resultsRequest(), { params: Promise.resolve({ slug: SLUG }) });
     const body = await response.json();
 
     expect(response.status).toBe(200);

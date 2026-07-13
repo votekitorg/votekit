@@ -6,17 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "type-check": "tsc --noEmit",
+    "lint": "eslint . --ext .js,.ts,.tsx",
+    "type-check": "next typegen && tsc --noEmit",
     "regression-check": "node scripts/votekit-regression-checks.js",
     "test": "vitest run"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.6.2",
-    "next": "14.2.35",
-    "react": "^18",
-    "react-dom": "^18",
+    "next": "15.5.20",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "resend": "^6.9.2",
     "uuid": "^13.0.0"
   },
@@ -24,18 +24,26 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.19.33",
-    "@types/react": "^18.3.28",
-    "@types/react-dom": "^18.3.7",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.4.24",
     "eslint": "^8.57.1",
-    "eslint-config-next": "^14.2.35",
+    "eslint-config-next": "15.5.20",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.9.3",
     "vitest": "^4.1.9"
   },
-  "description": "This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.10"
+    }
+  },
+  "description": "Open-source election platform with anonymous ballots and receipt-based verification.",
   "main": "index.js",
   "keywords": [],
   "author": "",

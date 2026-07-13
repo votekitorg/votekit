@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       const email = formData.get('email') as string;
       const password = formData.get('password') as string;
 
-      if (!email || !password) {
+      if (!email || !password || email.length > 254 || password.length > 1024) {
         return NextResponse.json(
           { error: 'Email and password are required' },
           { status: 400 }

@@ -4,8 +4,8 @@ import CreatePlebisciteForm from './CreatePlebisciteForm';
 
 export const dynamic = 'force-dynamic';
 
-export default function CreatePlebiscitePage() {
-  const adminSession = getAdminSessionFromCookies();
+export default async function CreatePlebiscitePage() {
+  const adminSession = await getAdminSessionFromCookies();
   if (!adminSession) {
     redirect('/admin/login');
   }

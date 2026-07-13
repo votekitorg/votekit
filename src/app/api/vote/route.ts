@@ -7,6 +7,8 @@ import { votingClosedError } from '@/lib/election-window';
 import { validateIRVVote } from '@/lib/irv';
 import { validateCondorcetVote } from '@/lib/condorcet';
 
+class ElectionClosedDuringSubmissionError extends Error {}
+
 function validatePreferentialLength(voteValue: unknown, options: string[], preferentialType: string | null | undefined, questionTitle: string): string | null {
   if (!Array.isArray(voteValue)) {
     return `Invalid ranking for question: ${questionTitle}`;
@@ -38,7 +40,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { plebisciteSlug, votes } = body;
 
-    if (!plebisciteSlug || !votes) {
+    if (
+      typeof plebisciteSlug !== 'string' || !plebisciteSlug || plebisciteSlug.length > 80 ||
+      !votes || typeof votes !== 'object' || Array.isArray(votes)
+    ) {
       return NextResponse.json(
         { error: 'Election link and votes are required' },
         { status: 400 }
@@ -230,6 +235,17 @@ export async function POST(request: NextRequest) {
     const submitVotes = db.transaction((validatedVotes, participationData) => {
       const receiptCodes = [];
 
+      // Acquire the write lock before checking lifecycle state. This makes the
+      // vote and close transactions serialize: either this ballot commits and
+      // is included in close-time shuffling, or close wins and this submission
+      // is rejected without writing a partial ballot.
+      const currentElection = db.prepare(
+        'SELECT status, close_date FROM plebiscites WHERE id = ?'
+      ).get(participationData.plebisciteId) as { status: string; close_date: string } | undefined;
+      if (!currentElection || currentElection.status !== 'open' || votingClosedError(currentElection)) {
+        throw new ElectionClosedDuringSubmissionError('Voting has closed for this election');
+      }
+
       // Record participation first. This enforces one vote per voter inside the
       // same transaction, without storing any receipt code or ballot linkage on
       // the voter identity record.
@@ -263,7 +279,7 @@ export async function POST(request: NextRequest) {
       return receiptCodes;
     });
 
-    const receiptCodes = submitVotes(validatedVotes, {
+    const receiptCodes = submitVotes.immediate(validatedVotes, {
       plebisciteId: plebiscite.id,
       voterRollId: voter.id
     });
@@ -287,6 +303,13 @@ export async function POST(request: NextRequest) {
     return response;
 
   } catch (error) {
+    if (error instanceof ElectionClosedDuringSubmissionError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 403 }
+      );
+    }
+
     if ((error as any)?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       return NextResponse.json(
         { error: 'You have already voted in this election' },

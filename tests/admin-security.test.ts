@@ -48,8 +48,12 @@ describe('admin login hardening and audit logging', () => {
     expect(getAdminRequestIp(request)).toBe('direct');
 
     process.env.TRUST_PROXY_HEADERS = 'true';
-    expect(getAdminRequestIp(request)).toBe('203.0.113.10');
-    delete process.env.TRUST_PROXY_HEADERS;
+    try {
+      // nginx appends the socket peer; client-supplied values to its left are ignored.
+      expect(getAdminRequestIp(request)).toBe('198.51.100.5');
+    } finally {
+      delete process.env.TRUST_PROXY_HEADERS;
+    }
   });
 
   it('writes an audit row on successful admin login', async () => {

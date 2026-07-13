@@ -5,8 +5,8 @@ import AdminUsersManager from './AdminUsersManager';
 
 export const dynamic = 'force-dynamic';
 
-export default function AdminUsersPage() {
-  const adminSession = getAdminSessionFromCookies();
+export default async function AdminUsersPage() {
+  const adminSession = await getAdminSessionFromCookies();
   if (!adminSession) {
     redirect('/admin/login');
   }

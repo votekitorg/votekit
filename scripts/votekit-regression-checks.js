@@ -32,6 +32,7 @@ const adminPlebiscitesRoute = read('src/app/api/admin/plebiscites/route.ts');
 const resultsPage = read('src/app/results/[slug]/page.tsx');
 const readme = read('README.md');
 const envExample = read('.env.example');
+const csrfRoute = read('src/app/api/csrf/route.ts');
 
 const participationCreate = db.match(/CREATE TABLE IF NOT EXISTS participation \([\s\S]*?\);/);
 assert(Boolean(participationCreate), 'participation table definition exists');
@@ -69,6 +70,7 @@ assert(db.includes('UNIQUE(email, plebiscite_id)'), 'voter roll uniqueness is pe
 assert(db.includes('INSERT INTO voter_roll_multi_election_migration (id, email, added_at, plebiscite_id)'), 'voter roll migration preserves row IDs referenced by participation');
 assert(electionsRoute.includes("plebiscite.status === 'draft'"), 'public election API hides draft elections');
 assert(voteRoute.includes('votingClosedError'), 'vote submission enforces the close-date hard cutoff');
+assert(voteRoute.includes('submitVotes.immediate'), 'vote submission serializes atomically with election closure');
 assert(verifyRoute.includes('votingClosedError'), 'verification enforces the close-date hard cutoff');
 assert(confirmRoute.includes('votingClosedError'), 'code confirmation enforces the close-date hard cutoff');
 assert(!electionWindow.includes('not_yet_open') && !electionWindow.includes('plebiscite.open_date'), 'open_date is not enforced as a voting blocker (status=open is authoritative)');
@@ -84,6 +86,7 @@ assert(!readme.includes('production-ready voting platform'), 'README no longer c
 assert(!readme.includes('JWT_SECRET') && !envExample.includes('JWT_SECRET'), 'unused JWT_SECRET docs are removed');
 assert(readme.includes('Double-submit cookie'), 'README describes actual double-submit-cookie CSRF protection');
 assert(auth.includes('getAdminRequestIp') && auth.includes("TRUST_PROXY_HEADERS === 'true'"), 'admin IP handling only trusts proxy headers when configured');
+assert(auth.includes('.filter(Boolean).pop()'), 'trusted proxy handling ignores spoofable left-most forwarded addresses');
 assert(auth.includes('email = ? OR ip_address = ?'), 'admin lockout checks both email and IP buckets');
 assert(db.includes('ALTER TABLE admin_login_attempts ADD COLUMN email'), 'admin login attempts support per-email lockout');
 assert(auth.includes('recordAdminAuditLog'), 'admin audit log helper exists');
@@ -96,7 +99,10 @@ assert(verifyRoute.includes('NEUTRAL_VERIFICATION_MESSAGE'), 'verification route
 assert(verifyRoute.includes('ipRateLimitKey') && verifyRoute.includes('globalRateLimitKey'), 'verification requests are throttled by IP and global buckets as well as email');
 assert(verifyRoute.includes('incrementRateLimitKey(ipRateLimitKey)') && verifyRoute.includes('incrementRateLimitKey(globalRateLimitKey)'), 'verification route counts requests against IP and global throttles');
 assert(adminVotersRoute.includes('requireAdminRole(adminSession)'), 'observer sessions cannot read voter-roll PII');
+assert(adminVotersRoute.includes('voter roll is locked once an election opens'), 'voter-roll mutations are frozen after opening');
 assert(db.includes('DELETE FROM verification_codes WHERE plebiscite_id = ?'), 'close cleanup purges all verification codes for the plebiscite');
+assert(db.includes('DELETE FROM voter_verification_attempts WHERE plebiscite_id = ?'), 'close cleanup purges voter verification attempts');
+assert(csrfRoute.includes("dynamic = 'force-dynamic'") && csrfRoute.includes("'Cache-Control': 'no-store, max-age=0'"), 'CSRF tokens are never statically generated or cached');
 
 if (process.exitCode) {
   process.exit(process.exitCode);

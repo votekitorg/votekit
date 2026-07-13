@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { csrfFetch } from '@/lib/csrf-client';
+import { parseElectionCloseDate } from '@/lib/election-window';
 
 interface Plebiscite {
   id: number;
@@ -35,7 +36,7 @@ export default function PlebisciteManager({
   const [copied, setCopied] = useState(false);
 
   async function handleAction(action: string) {
-    const openingEarly = action === 'open' && new Date(plebiscite.open_date) > new Date();
+    const openingEarly = action === 'open' && parseElectionCloseDate(plebiscite.open_date) > new Date();
     const message = openingEarly
       ? 'The scheduled open date has not been reached yet. Open voting early? The scheduled dates will not be changed.'
       : `Are you sure you want to ${action} this election?`;

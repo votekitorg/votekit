@@ -3,6 +3,36 @@ import { getAdminSessionFromRequest, recordAdminAuditLog, requireAdminRole,
   validateCSRFRequest
 } from '@/lib/auth';
 import db, { closePlebisciteWithPrivacyHardening, generateUniqueSlug } from '@/lib/db';
+import { parseElectionCloseDate, votingClosedError } from '@/lib/election-window';
+
+const MAX_TITLE_LENGTH = 200;
+const MAX_DESCRIPTION_LENGTH = 20_000;
+const MAX_QUESTIONS = 100;
+const MAX_OPTIONS = 100;
+const MAX_OPTION_LENGTH = 500;
+const QUESTION_TYPES = new Set(['yes_no', 'multiple_choice', 'ranked_choice', 'condorcet']);
+
+function validHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function validateElectionDates(openDate: unknown, closeDate: unknown): string | null {
+  if (typeof openDate !== 'string' || typeof closeDate !== 'string') {
+    return 'Opening and closing dates are required';
+  }
+  const parsedOpen = parseElectionCloseDate(openDate);
+  const parsedClose = parseElectionCloseDate(closeDate);
+  if (Number.isNaN(parsedOpen.getTime()) || Number.isNaN(parsedClose.getTime())) {
+    return 'Opening and closing dates must be valid';
+  }
+  if (parsedOpen >= parsedClose) return 'Close date must be after open date';
+  return null;
+}
 
 export async function GET(request: NextRequest) {
   // Verify admin authentication
@@ -50,34 +80,51 @@ export async function POST(request: NextRequest) {
     const { title, description, info_url, open_date, close_date, questions = [] } = body;
 
     // Validation
-    if (!title || !description || !open_date || !close_date) {
+    if (typeof title !== 'string' || !title.trim() || typeof description !== 'string' || !description.trim()) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
-
-    if (new Date(open_date) >= new Date(close_date)) {
+    if (title.trim().length > MAX_TITLE_LENGTH || description.trim().length > MAX_DESCRIPTION_LENGTH) {
       return NextResponse.json(
-        { error: 'Close date must be after open date' },
+        { error: 'Election title or description is too long' },
         { status: 400 }
       );
     }
+    if (info_url && (typeof info_url !== 'string' || info_url.length > 2048 || !validHttpUrl(info_url))) {
+      return NextResponse.json({ error: 'Information URL must be a valid HTTP or HTTPS URL' }, { status: 400 });
+    }
+    const dateError = validateElectionDates(open_date, close_date);
+    if (dateError) return NextResponse.json({ error: dateError }, { status: 400 });
 
-    if (questions.length === 0) {
+    if (!Array.isArray(questions) || questions.length === 0 || questions.length > MAX_QUESTIONS) {
       return NextResponse.json(
-        { error: 'At least one question is required' },
+        { error: `Between 1 and ${MAX_QUESTIONS} questions are required` },
         { status: 400 }
       );
     }
 
     // Validate questions
     for (const question of questions) {
-      if (!question.title || !question.type || !question.options || question.options.length === 0) {
+      if (
+        typeof question?.title !== 'string' || !question.title.trim() || question.title.trim().length > MAX_TITLE_LENGTH ||
+        !QUESTION_TYPES.has(question?.type) || !Array.isArray(question?.options) ||
+        question.options.length === 0 || question.options.length > MAX_OPTIONS ||
+        question.options.some((option: unknown) => typeof option !== 'string' || !option.trim() || option.trim().length > MAX_OPTION_LENGTH)
+      ) {
         return NextResponse.json(
-          { error: 'Each question must have a title, type, and options' },
+          { error: 'Each question must have a valid title, type, and option list' },
           { status: 400 }
         );
+      }
+
+      const normalizedOptions = question.options.map((option: string) => option.trim());
+      if (new Set(normalizedOptions).size !== normalizedOptions.length) {
+        return NextResponse.json({ error: 'Question options must be unique' }, { status: 400 });
+      }
+      if (question.preferentialType && !['compulsory', 'optional'].includes(question.preferentialType)) {
+        return NextResponse.json({ error: 'Invalid preferential voting rule' }, { status: 400 });
       }
 
       if (question.type === 'yes_no' && question.options.length !== 2) {
@@ -95,51 +142,52 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const slug = generateUniqueSlug(title);
+    const normalizedTitle = title.trim();
+    const normalizedDescription = description.trim();
+    const normalizedInfoUrl = typeof info_url === 'string' ? info_url.trim() || null : null;
+    const slug = generateUniqueSlug(normalizedTitle);
+    const createElection = db.transaction(() => {
+      const result = db.prepare(`
+        INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, status)
+        VALUES (?, ?, ?, ?, ?, ?, 'draft')
+      `).run(slug, normalizedTitle, normalizedDescription, normalizedInfoUrl, open_date, close_date);
+      const plebisciteId = Number(result.lastInsertRowid);
+      const createQuestion = db.prepare(`
+        INSERT INTO questions (plebiscite_id, title, description, type, options, display_order, preferential_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
 
-    // Create plebiscite
-    const createPlebiscite = db.prepare(`
-      INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, status)
-      VALUES (?, ?, ?, ?, ?, ?, 'draft')
-    `);
+      questions.forEach((question: any, index: number) => {
+        createQuestion.run(
+          plebisciteId,
+          question.title.trim(),
+          typeof question.description === 'string' ? question.description.trim() || null : null,
+          question.type,
+          JSON.stringify(question.options.map((option: string) => option.trim())),
+          index,
+          question.preferentialType || 'compulsory'
+        );
+      });
 
-    const result = createPlebiscite.run(slug, title, description, info_url, open_date, close_date);
-    const plebisciteId = Number(result.lastInsertRowid);
-
-    // Create questions
-    const createQuestion = db.prepare(`
-      INSERT INTO questions (plebiscite_id, title, description, type, options, display_order, preferential_type)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    questions.forEach((question: any, index: number) => {
-      createQuestion.run(
-        plebisciteId,
-        question.title,
-        question.description || null,
-        question.type,
-        JSON.stringify(question.options),
-        index,
-        question.preferentialType || 'compulsory'
-      );
+      recordAdminAuditLog({
+        adminUserId: adminSession.adminUserId,
+        action: 'plebiscite.create',
+        targetType: 'plebiscite',
+        targetId: plebisciteId,
+        details: { slug, title: normalizedTitle, questionCount: questions.length }
+      });
+      return plebisciteId;
     });
-
-    recordAdminAuditLog({
-      adminUserId: adminSession.adminUserId,
-      action: 'plebiscite.create',
-      targetType: 'plebiscite',
-      targetId: plebisciteId,
-      details: { slug, title, questionCount: questions.length }
-    });
+    const plebisciteId = createElection.immediate();
 
     return NextResponse.json({
       success: true,
       plebiscite: {
         id: plebisciteId,
         slug,
-        title,
-        description,
-        info_url,
+        title: normalizedTitle,
+        description: normalizedDescription,
+        info_url: normalizedInfoUrl,
         open_date,
         close_date,
         status: 'draft'
@@ -197,6 +245,23 @@ export async function PUT(request: NextRequest) {
         );
       }
 
+      const voterCount = db.prepare('SELECT COUNT(*) AS count FROM voter_roll WHERE plebiscite_id = ?')
+        .get(id) as { count: number };
+      const questionCount = db.prepare('SELECT COUNT(*) AS count FROM questions WHERE plebiscite_id = ?')
+        .get(id) as { count: number };
+      if (voterCount.count === 0 || questionCount.count === 0) {
+        return NextResponse.json(
+          { error: 'An election must have at least one voter and one question before it can open' },
+          { status: 400 }
+        );
+      }
+      if (votingClosedError(plebiscite)) {
+        return NextResponse.json(
+          { error: 'The closing date must be in the future before this election can open' },
+          { status: 400 }
+        );
+      }
+
       // Open plebiscite
       db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?')
         .run('open', id);
@@ -244,20 +309,32 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    if (title !== undefined && (typeof title !== 'string' || !title.trim() || title.trim().length > MAX_TITLE_LENGTH)) {
+      return NextResponse.json({ error: 'Election title is invalid' }, { status: 400 });
+    }
+    if (description !== undefined && (typeof description !== 'string' || !description.trim() || description.trim().length > MAX_DESCRIPTION_LENGTH)) {
+      return NextResponse.json({ error: 'Election description is invalid' }, { status: 400 });
+    }
+    if (info_url !== undefined && info_url !== '' && (typeof info_url !== 'string' || info_url.length > 2048 || !validHttpUrl(info_url))) {
+      return NextResponse.json({ error: 'Information URL must be a valid HTTP or HTTPS URL' }, { status: 400 });
+    }
+    const dateError = validateElectionDates(open_date ?? plebiscite.open_date, close_date ?? plebiscite.close_date);
+    if (dateError) return NextResponse.json({ error: dateError }, { status: 400 });
+
     const updateFields = [];
     const updateValues = [];
 
     if (title !== undefined) {
       updateFields.push('title = ?');
-      updateValues.push(title);
+      updateValues.push(title.trim());
     }
     if (description !== undefined) {
       updateFields.push('description = ?');
-      updateValues.push(description);
+      updateValues.push(description.trim());
     }
     if (info_url !== undefined) {
       updateFields.push('info_url = ?');
-      updateValues.push(info_url);
+      updateValues.push(info_url.trim() || null);
     }
     if (open_date !== undefined) {
       updateFields.push('open_date = ?');
@@ -323,6 +400,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         { error: 'Election not found' },
         { status: 404 }
+      );
+    }
+
+    if (plebiscite.status !== 'draft') {
+      return NextResponse.json(
+        { error: 'Only draft elections can be deleted' },
+        { status: 400 }
       );
     }
 

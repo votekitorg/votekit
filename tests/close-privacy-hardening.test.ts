@@ -14,7 +14,7 @@ const VOTE_COUNT = 30;
 let db: any;
 let closePlebisciteWithPrivacyHardening: (id: number) => void;
 let adminPut: (request: NextRequest) => Promise<Response>;
-let resultsGet: (request: NextRequest, ctx: { params: { slug: string } }) => Promise<Response>;
+let resultsGet: (request: NextRequest, ctx: { params: Promise<{ slug: string }> }) => Promise<Response>;
 
 let plebisciteA: number;
 let plebisciteB: number;
@@ -100,6 +100,10 @@ beforeAll(async () => {
   insertCode.run('a2@example.com', plebisciteA, '222222', futureIso(), 1);
   insertCode.run('a3@example.com', plebisciteA, '333333', futureIso(), 0);
   insertCode.run('b1@example.com', plebisciteB, '444444', futureIso(), 1);
+  db.prepare(`
+    INSERT INTO voter_verification_attempts (email, plebiscite_id, success)
+    VALUES ('a1@example.com', ?, 0), ('b1@example.com', ?, 0)
+  `).run(plebisciteA, plebisciteB);
 });
 
 afterAll(() => {
@@ -159,13 +163,15 @@ describe('close-time privacy hardening', () => {
     }
   });
 
-  it('purges voter sessions and verification codes for the closed plebiscite only', () => {
+  it('purges voter sessions and verification artifacts for the closed plebiscite only', () => {
     expect(db.prepare('SELECT COUNT(*) as c FROM sessions WHERE plebiscite_id = ?').get(plebisciteA).c).toBe(0);
     expect(db.prepare('SELECT COUNT(*) as c FROM sessions WHERE id = ?').get('admin-session-1').c).toBe(1);
     expect(db.prepare('SELECT COUNT(*) as c FROM sessions WHERE id = ?').get('voter-b-1').c).toBe(1);
 
     expect(db.prepare('SELECT COUNT(*) as c FROM verification_codes WHERE plebiscite_id = ?').get(plebisciteA).c).toBe(0);
     expect(db.prepare('SELECT COUNT(*) as c FROM verification_codes WHERE plebiscite_id = ?').get(plebisciteB).c).toBe(1);
+    expect(db.prepare('SELECT COUNT(*) as c FROM voter_verification_attempts WHERE plebiscite_id = ?').get(plebisciteA).c).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) as c FROM voter_verification_attempts WHERE plebiscite_id = ?').get(plebisciteB).c).toBe(1);
   });
 
   it('leaves the unrelated plebiscite completely untouched', () => {
@@ -188,7 +194,7 @@ describe('close-time privacy hardening', () => {
   it('keeps results and receipt verification fully reproducible after hardening', async () => {
     const response = await resultsGet(
       new NextRequest('http://localhost/api/results/close-hardening-a'),
-      { params: { slug: 'close-hardening-a' } }
+      { params: Promise.resolve({ slug: 'close-hardening-a' }) }
     );
     const body = await response.json();
 

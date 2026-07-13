@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { parseElectionCloseDate } from '@/lib/election-window';
 import ResultsChart from '@/components/ResultsChart';
 import CondorcetResults from '@/components/CondorcetResults';
 import { getPlebisciteResults, ResultsUnavailableError, type PlebisciteResultsData } from '@/lib/results';
@@ -21,7 +22,7 @@ async function getResults(slug: string): Promise<PlebisciteResultsData | null> {
 }
 
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-AU', {
+  return parseElectionCloseDate(dateString).toLocaleDateString('en-AU', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -185,8 +186,9 @@ function PublicBallotsDisplay({ ballots }: { ballots: QuestionResult['publicBall
   );
 }
 
-export default async function ResultsPage({ params }: { params: { slug: string } }) {
-  const data = await getResults(params.slug);
+export default async function ResultsPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const data = await getResults(slug);
 
   if (!data) {
     return (
@@ -231,7 +233,7 @@ export default async function ResultsPage({ params }: { params: { slug: string }
             
             <div className="flex items-center space-x-4">
               <a
-                href={`/api/results/${params.slug}?format=csv`}
+                href={`/api/results/${slug}?format=csv`}
                 className="btn-secondary"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -119,12 +119,14 @@ export async function verifyAdminLogin(email: string, password: string): Promise
 export async function createAdminUser(input: { email: string; password: string; name?: string; role: AdminRole }): Promise<AdminUser> {
   await ensureBootstrapAdminUser();
 
+  if (input.name !== undefined && typeof input.name !== 'string') throw new Error('Name must be text');
+
   const email = normalizeEmail(input.email);
-  if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+  if (!email || email.length > 254 || !/^\S+@\S+\.\S+$/.test(email)) {
     throw new Error('A valid email address is required');
   }
-  if (!input.password || input.password.length < 12) {
-    throw new Error('Password must be at least 12 characters');
+  if (!input.password || input.password.length < 12 || input.password.length > 128) {
+    throw new Error('Password must be between 12 and 128 characters');
   }
   if (!isAdminRole(input.role)) {
     throw new Error('Invalid admin role');
@@ -134,7 +136,7 @@ export async function createAdminUser(input: { email: string; password: string; 
   const result = db.prepare(`
     INSERT INTO admin_users (email, name, password_hash, role, active)
     VALUES (?, ?, ?, ?, 1)
-  `).run(email, input.name?.trim() || null, passwordHash, input.role);
+  `).run(email, input.name?.trim().slice(0, 200) || null, passwordHash, input.role);
 
   const user = db.prepare('SELECT * FROM admin_users WHERE id = ?').get(result.lastInsertRowid) as any;
   return publicAdminUser(user);
@@ -143,22 +145,35 @@ export async function createAdminUser(input: { email: string; password: string; 
 export async function updateAdminUser(id: number, input: { email?: string; name?: string; role?: AdminRole; active?: boolean; password?: string }): Promise<AdminUser> {
   await ensureBootstrapAdminUser();
 
+  if (input.email !== undefined && typeof input.email !== 'string') throw new Error('Email must be text');
+  if (input.name !== undefined && typeof input.name !== 'string') throw new Error('Name must be text');
+  if (input.active !== undefined && typeof input.active !== 'boolean') throw new Error('Active must be true or false');
+  if (input.password !== undefined && typeof input.password !== 'string') throw new Error('Password must be text');
+
   const existing = db.prepare('SELECT * FROM admin_users WHERE id = ?').get(id) as any | undefined;
   if (!existing) throw new Error('Admin user not found');
+
+  const removesActiveAdmin = existing.role === 'admin' && Boolean(existing.active) &&
+    (input.role === 'observer' || input.active === false);
+  if (removesActiveAdmin) {
+    const activeAdmins = db.prepare("SELECT COUNT(*) AS count FROM admin_users WHERE role = 'admin' AND active = 1")
+      .get() as { count: number };
+    if (activeAdmins.count <= 1) throw new Error('At least one active admin account is required');
+  }
 
   const fields: string[] = [];
   const values: any[] = [];
 
   if (input.email !== undefined) {
     const email = normalizeEmail(input.email);
-    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error('A valid email address is required');
+    if (email.length > 254 || !/^\S+@\S+\.\S+$/.test(email)) throw new Error('A valid email address is required');
     fields.push('email = ?');
     values.push(email);
   }
 
   if (input.name !== undefined) {
     fields.push('name = ?');
-    values.push(input.name.trim() || null);
+    values.push(input.name.trim().slice(0, 200) || null);
   }
 
   if (input.role !== undefined) {
@@ -173,7 +188,7 @@ export async function updateAdminUser(id: number, input: { email?: string; name?
   }
 
   if (input.password !== undefined && input.password !== '') {
-    if (input.password.length < 12) throw new Error('Password must be at least 12 characters');
+    if (input.password.length < 12 || input.password.length > 128) throw new Error('Password must be between 12 and 128 characters');
     fields.push('password_hash = ?');
     values.push(await bcrypt.hash(input.password, 12));
   }
@@ -182,6 +197,10 @@ export async function updateAdminUser(id: number, input: { email?: string; name?
     fields.push('updated_at = CURRENT_TIMESTAMP');
     values.push(id);
     db.prepare(`UPDATE admin_users SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  }
+
+  if (input.password) {
+    db.prepare('DELETE FROM sessions WHERE admin_user_id = ?').run(id);
   }
 
   const user = db.prepare('SELECT * FROM admin_users WHERE id = ?').get(id) as any;
@@ -246,8 +265,8 @@ export function getAdminSession(sessionId?: string): AdminSession | null {
   };
 }
 
-export function setAdminCookie(sessionId: string) {
-  const cookieStore = cookies();
+export async function setAdminCookie(sessionId: string) {
+  const cookieStore = await cookies();
   cookieStore.set('admin-session', sessionId, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -257,14 +276,14 @@ export function setAdminCookie(sessionId: string) {
   });
 }
 
-export function getAdminSessionFromCookies(): AdminSession | null {
-  const cookieStore = cookies();
+export async function getAdminSessionFromCookies(): Promise<AdminSession | null> {
+  const cookieStore = await cookies();
   const sessionId = cookieStore.get('admin-session')?.value;
   return getAdminSession(sessionId);
 }
 
-export function clearAdminCookie() {
-  const cookieStore = cookies();
+export async function clearAdminCookie() {
+  const cookieStore = await cookies();
   cookieStore.delete('admin-session');
 }
 
@@ -307,8 +326,8 @@ export function getVoterSession(sessionId?: string): Session | null {
   };
 }
 
-export function setVoterCookie(sessionId: string, plebisciteSlug: string) {
-  const cookieStore = cookies();
+export async function setVoterCookie(sessionId: string, plebisciteSlug: string) {
+  const cookieStore = await cookies();
   cookieStore.set(`voter-session-${plebisciteSlug}`, sessionId, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -318,14 +337,14 @@ export function setVoterCookie(sessionId: string, plebisciteSlug: string) {
   });
 }
 
-export function getVoterSessionFromCookies(plebisciteSlug: string): Session | null {
-  const cookieStore = cookies();
+export async function getVoterSessionFromCookies(plebisciteSlug: string): Promise<Session | null> {
+  const cookieStore = await cookies();
   const sessionId = cookieStore.get(`voter-session-${plebisciteSlug}`)?.value;
   return getVoterSession(sessionId);
 }
 
-export function clearVoterCookie(plebisciteSlug: string) {
-  const cookieStore = cookies();
+export async function clearVoterCookie(plebisciteSlug: string) {
+  const cookieStore = await cookies();
   cookieStore.delete(`voter-session-${plebisciteSlug}`);
 }
 
@@ -342,9 +361,15 @@ export function getTrustedRequestIp(request: NextRequest): string {
   // conservative direct bucket and per-email throttles carry the main load.
   if (process.env.TRUST_PROXY_HEADERS === 'true') {
     const forwarded = request.headers.get('x-forwarded-for');
-    if (forwarded) return forwarded.split(',')[0].trim();
+    if (forwarded) {
+      // The supported nginx config appends the socket peer to any incoming
+      // header. Earlier values can be supplied by the client, so use the
+      // right-most address observed by our trusted proxy.
+      const clientIp = forwarded.split(',').map(value => value.trim()).filter(Boolean).pop();
+      if (clientIp && clientIp.length <= 64) return clientIp;
+    }
     const realIp = request.headers.get('x-real-ip');
-    if (realIp) return realIp.trim();
+    if (realIp && realIp.trim().length <= 64) return realIp.trim();
   }
 
   return 'direct';
@@ -544,4 +569,3 @@ export function validateCSRFRequest(request: NextRequest): boolean {
 export function generateCSRFToken(): string {
   return uuidv4();
 }
-

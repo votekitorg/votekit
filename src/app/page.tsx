@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import db from '@/lib/db';
+import { parseElectionCloseDate, votingClosedError } from '@/lib/election-window';
 
 interface Plebiscite {
   id: number;
@@ -14,28 +15,20 @@ interface Plebiscite {
 export const dynamic = 'force-dynamic';
 
 async function getActiveElections(): Promise<Plebiscite[]> {
-  const now = new Date().toISOString();
-  
-  // Get elections that are either:
-  // 1. Status is 'open' and within date range
-  // 2. Status is 'closed' (for results viewing)
   const plebiscites = db.prepare(`
     SELECT id, slug, title, description, open_date, close_date, status
     FROM plebiscites 
-    WHERE (
-      (status = 'open' AND open_date <= ? AND close_date > ?) OR
-      status = 'closed'
-    )
+    WHERE status IN ('open', 'closed')
     ORDER BY 
       CASE WHEN status = 'open' THEN 1 ELSE 2 END,
       open_date DESC
-  `).all(now, now) as Plebiscite[];
+  `).all() as Plebiscite[];
 
-  return plebiscites;
+  return plebiscites.filter(plebiscite => plebiscite.status === 'closed' || !votingClosedError(plebiscite));
 }
 
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-AU', {
+  return parseElectionCloseDate(dateString).toLocaleDateString('en-AU', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -47,7 +40,7 @@ function formatDate(dateString: string): string {
 
 function getTimeRemaining(closeDate: string): string {
   const now = new Date();
-  const close = new Date(closeDate);
+  const close = parseElectionCloseDate(closeDate);
   const diffMs = close.getTime() - now.getTime();
   
   if (diffMs <= 0) return 'Closed';

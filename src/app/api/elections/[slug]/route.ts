@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { votingClosedError } from '@/lib/election-window';
 
 export async function GET(
-  request: NextRequest,
-  { params }: { params: { slug: string } }
+  _request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const { slug } = params;
+    const { slug } = await params;
 
     const plebiscite = db.prepare('SELECT * FROM plebiscites WHERE slug = ?').get(slug) as any;
     
@@ -48,7 +49,8 @@ export async function GET(
         info_url: plebiscite.info_url,
         open_date: plebiscite.open_date,
         close_date: plebiscite.close_date,
-        status: plebiscite.status
+        status: plebiscite.status,
+        voting_available: plebiscite.status === 'open' && !votingClosedError(plebiscite)
       },
       questions: formattedQuestions
     });

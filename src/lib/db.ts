@@ -447,6 +447,7 @@ export function closePlebisciteWithPrivacyHardening(plebisciteId: number): void 
     shuffleVotesForPlebiscite(database, id);
 
     database.prepare('DELETE FROM verification_codes WHERE plebiscite_id = ?').run(id);
+    database.prepare('DELETE FROM voter_verification_attempts WHERE plebiscite_id = ?').run(id);
     database.prepare('DELETE FROM sessions WHERE plebiscite_id = ?').run(id);
   });
 

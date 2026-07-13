@@ -15,6 +15,9 @@ export async function GET(request: NextRequest) {
   if (!adminSession) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  if (!requireAdminRole(adminSession)) {
+    return NextResponse.json({ error: 'Admin role required' }, { status: 403 });
+  }
 
   return NextResponse.json({ users: listAdminUsers() });
 }
@@ -51,8 +54,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, user });
   } catch (error: any) {
     const message = error?.message || 'Failed to create admin user';
-    const status = message.includes('UNIQUE') ? 409 : 400;
-    return NextResponse.json({ error: message }, { status });
+    if (message.includes('UNIQUE')) {
+      return NextResponse.json({ error: 'An admin user with that email already exists' }, { status: 409 });
+    }
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }
 

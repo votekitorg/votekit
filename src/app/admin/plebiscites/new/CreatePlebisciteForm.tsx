@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
 import { csrfFetch } from '@/lib/csrf-client';
+import { parseElectionCloseDate } from '@/lib/election-window';
 
 interface Question {
   title: string;
@@ -15,8 +16,9 @@ interface Question {
 
 export default function CreatePlebisciteForm({ currentUser }: { currentUser: { email: string; name: string | null; role: 'admin' | 'observer' } }) {
   const now = new Date();
-  const defaultOpenDate = now.toISOString().slice(0, 16);
-  const defaultCloseDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
+  const toBrisbaneInput = (date: Date) => new Date(date.getTime() + 10 * 60 * 60 * 1000).toISOString().slice(0, 16);
+  const defaultOpenDate = toBrisbaneInput(now);
+  const defaultCloseDate = toBrisbaneInput(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000));
 
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
@@ -118,11 +120,11 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
       setError('Closing date is required');
       return false;
     }
-    if (new Date(formData.open_date) >= new Date(formData.close_date)) {
+    if (parseElectionCloseDate(formData.open_date) >= parseElectionCloseDate(formData.close_date)) {
       setError('Closing date must be after opening date');
       return false;
     }
-    if (new Date(formData.open_date) < new Date()) {
+    if (parseElectionCloseDate(formData.open_date) < new Date()) {
       setError('Opening date cannot be in the past');
       return false;
     }
@@ -622,7 +624,9 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
                       <div>
                         <dt className="text-sm font-medium text-gray-500">Voting Period</dt>
                         <dd className="text-sm text-gray-900">
-                          {new Date(formData.open_date).toLocaleDateString()} - {new Date(formData.close_date).toLocaleDateString()}
+                          {parseElectionCloseDate(formData.open_date).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane' })}
+                          {' - '}
+                          {parseElectionCloseDate(formData.close_date).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane' })}
                         </dd>
                       </div>
                       <div className="sm:col-span-2">

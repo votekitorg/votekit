@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import VoteForm from '@/components/VoteForm';
 import { csrfFetch } from '@/lib/csrf-client';
+import { parseElectionCloseDate } from '@/lib/election-window';
 
 interface Plebiscite {
   id: number;
@@ -14,6 +15,7 @@ interface Plebiscite {
   open_date: string;
   close_date: string;
   status: string;
+  voting_available: boolean;
 }
 
 interface Question {
@@ -26,10 +28,11 @@ interface Question {
 }
 
 interface VotingPageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 export default function VotingPage({ params }: VotingPageProps) {
+  const { slug } = use(params);
   const [step, setStep] = useState<'info' | 'email' | 'verify' | 'vote' | 'complete'>('info');
   const [plebiscite, setPlebiscite] = useState<Plebiscite | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -52,13 +55,13 @@ export default function VotingPage({ params }: VotingPageProps) {
   useEffect(() => {
     const fetchPlebiscite = async () => {
       try {
-        const response = await fetch(`/api/elections/${params.slug}`);
+        const response = await fetch(`/api/elections/${slug}`);
         const result = await response.json();
         
         if (response.ok) {
           // Check election status
           if (result.plebiscite.status === 'closed') {
-            router.push(`/results/${params.slug}`);
+            router.push(`/results/${slug}`);
             return;
           }
           
@@ -69,6 +72,11 @@ export default function VotingPage({ params }: VotingPageProps) {
           
           if (result.plebiscite.status !== 'open') {
             setError('Voting is not currently active for this election');
+            return;
+          }
+
+          if (!result.plebiscite.voting_available) {
+            setError('Voting has closed for this election. Results will be published after the election is formally closed.');
             return;
           }
           
@@ -92,7 +100,7 @@ export default function VotingPage({ params }: VotingPageProps) {
     };
 
     fetchPlebiscite();
-  }, [params.slug, router]);
+  }, [slug, router]);
 
   // Cooldown timer for resend
   useEffect(() => {
@@ -125,7 +133,7 @@ export default function VotingPage({ params }: VotingPageProps) {
         },
         body: JSON.stringify({
           email: email.trim(),
-          plebisciteSlug: params.slug
+          plebisciteSlug: slug
         }),
       });
 
@@ -165,7 +173,7 @@ export default function VotingPage({ params }: VotingPageProps) {
         body: JSON.stringify({
           email: email.trim(),
           code: code.trim(),
-          plebisciteSlug: params.slug
+          plebisciteSlug: slug
         }),
       });
 
@@ -191,7 +199,7 @@ export default function VotingPage({ params }: VotingPageProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          plebisciteSlug: params.slug,
+          plebisciteSlug: slug,
           votes
         }),
       });
@@ -223,7 +231,7 @@ export default function VotingPage({ params }: VotingPageProps) {
         },
         body: JSON.stringify({
           email: email.trim(),
-          plebisciteSlug: params.slug
+          plebisciteSlug: slug
         }),
       });
 
@@ -244,7 +252,7 @@ export default function VotingPage({ params }: VotingPageProps) {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-AU', {
+    return parseElectionCloseDate(dateString).toLocaleDateString('en-AU', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',

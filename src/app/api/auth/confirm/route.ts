@@ -12,7 +12,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, code, plebisciteSlug } = body;
 
-    if (!email || !code || !plebisciteSlug) {
+    if (
+      typeof email !== 'string' || !email || email.length > 254 ||
+      typeof code !== 'string' || !/^\d{6}$/.test(code) ||
+      typeof plebisciteSlug !== 'string' || !plebisciteSlug || plebisciteSlug.length > 80
+    ) {
       return NextResponse.json(
         { error: 'Email, code, and election link are required' },
         { status: 400 }
@@ -90,13 +94,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Clear failed attempts on success
-    clearVoterVerificationFailedAttempts(normalizedEmail, plebiscite.id);
-
-    recordVoterVerificationAttempt(normalizedEmail, plebiscite.id, true);
-
     // Mark code as used
-    db.prepare('UPDATE verification_codes SET used = TRUE WHERE id = ?').run(verification.id);
+    const consumed = db.prepare('UPDATE verification_codes SET used = TRUE WHERE id = ? AND used = FALSE').run(verification.id);
+    if (consumed.changes !== 1) {
+      return NextResponse.json({ error: 'Invalid or expired verification code' }, { status: 400 });
+    }
+    db.prepare(`
+      UPDATE verification_codes SET used = TRUE
+      WHERE email = ? AND plebiscite_id = ? AND used = FALSE
+    `).run(normalizedEmail, plebiscite.id);
+
+    // Clear failed attempts only after the one-time code was consumed.
+    clearVoterVerificationFailedAttempts(normalizedEmail, plebiscite.id);
+    recordVoterVerificationAttempt(normalizedEmail, plebiscite.id, true);
 
     // Create voter session
     const sessionId = createVoterSession(normalizedEmail, plebiscite.id);

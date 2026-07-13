@@ -182,52 +182,60 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
 export function buildResultsCsv(slug: string, data: PlebisciteResultsData): string {
   let csvData = '';
 
+  const csvCell = (value: unknown): string => {
+    let text = String(value ?? '');
+    // Spreadsheet applications may execute formula-looking cells even when
+    // quoted. Prefix untrusted election text so downloads remain inert.
+    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    return `"${text.replaceAll('"', '""')}"`;
+  };
+
   for (const question of data.questions) {
     if (question.type === 'yes_no') {
-      csvData += `Question: ${question.title}\n`;
+      csvData += `${csvCell(`Question: ${question.title}`)}\n`;
       csvData += `Type: Yes/No\n`;
       Object.entries(question.results).forEach(([option, count]) => {
         const percentage = question.totalVotes > 0 ? ((Number(count) / question.totalVotes) * 100).toFixed(1) : '0.0';
-        csvData += `"${option}",${count},${percentage}%\n`;
+        csvData += `${csvCell(option)},${count},${percentage}%\n`;
       });
       csvData += 'Anonymous Ballots\n';
       csvData += 'Receipt Code,Choice\n';
       question.publicBallots.forEach(({ receiptCode, ballot }) => {
-        csvData += `"${receiptCode}","${ballot.choice || ''}"\n`;
+        csvData += `${csvCell(receiptCode)},${csvCell(ballot.choice || '')}\n`;
       });
       csvData += '\n';
     } else if (question.type === 'multiple_choice') {
-      csvData += `Question: ${question.title}\n`;
+      csvData += `${csvCell(`Question: ${question.title}`)}\n`;
       csvData += `Type: Multiple Choice\n`;
       const totalSelections = Object.values(question.results).reduce((sum: number, count: any) => sum + count, 0);
       Object.entries(question.results).forEach(([option, count]) => {
         const percentage = totalSelections > 0 ? ((Number(count) / totalSelections) * 100).toFixed(1) : '0.0';
-        csvData += `"${option}",${count},${percentage}%\n`;
+        csvData += `${csvCell(option)},${count},${percentage}%\n`;
       });
       csvData += 'Anonymous Ballots\n';
       csvData += 'Receipt Code,Choices\n';
       question.publicBallots.forEach(({ receiptCode, ballot }) => {
-        csvData += `"${receiptCode}","${(ballot.choices || []).join(' | ')}"\n`;
+        csvData += `${csvCell(receiptCode)},${csvCell((ballot.choices || []).join(' | '))}\n`;
       });
       csvData += '\n';
     } else if (question.type === 'ranked_choice') {
-      csvData += `Question: ${question.title}\n`;
+      csvData += `${csvCell(`Question: ${question.title}`)}\n`;
       csvData += `Type: Ranked Choice (IRV)\n`;
       csvData += exportIRVResultsCSV(question.results);
       csvData += 'Anonymous Ballots\n';
       csvData += 'Receipt Code,Preferences\n';
       question.publicBallots.forEach(({ receiptCode, ballot }) => {
-        csvData += `"${receiptCode}","${(ballot.preferences || []).join(' > ')}"\n`;
+        csvData += `${csvCell(receiptCode)},${csvCell((ballot.preferences || []).join(' > '))}\n`;
       });
       csvData += '\n';
     } else if (question.type === 'condorcet') {
-      csvData += `Question: ${question.title}\n`;
+      csvData += `${csvCell(`Question: ${question.title}`)}\n`;
       csvData += `Type: Condorcet (${question.results.method})\n`;
       csvData += exportCondorcetResultsCSV(question.results);
       csvData += 'Anonymous Ballots\n';
       csvData += 'Receipt Code,Preferences\n';
       question.publicBallots.forEach(({ receiptCode, ballot }) => {
-        csvData += `"${receiptCode}","${(ballot.preferences || []).join(' > ')}"\n`;
+        csvData += `${csvCell(receiptCode)},${csvCell((ballot.preferences || []).join(' > '))}\n`;
       });
       csvData += '\n';
     }

@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'votekit-voter-privacy-'));
 process.env.DATABASE_PATH = path.join(tmpDir, 'test.db');
+process.env.MAX_VERIFICATION_IP_ATTEMPTS = '20';
 
 const CSRF = 'voter-privacy-csrf';
 

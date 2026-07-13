@@ -4,6 +4,13 @@ import { getAdminSessionFromRequest, recordAdminAuditLog, requireAdminRole,
 } from '@/lib/auth';
 import db from '@/lib/db';
 
+const MAX_VOTER_UPLOAD = 10_000;
+
+function getDraftElection(id: unknown): { id: number; status: string } | null {
+  const election = db.prepare('SELECT id, status FROM plebiscites WHERE id = ?').get(id) as { id: number; status: string } | undefined;
+  return election?.status === 'draft' ? election : null;
+}
+
 export async function GET(request: NextRequest) {
   // Verify admin authentication
   const adminSession = getAdminSessionFromRequest(request);
@@ -68,18 +75,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify plebiscite exists
-    const plebiscite = db.prepare('SELECT id FROM plebiscites WHERE id = ?').get(plebiscite_id);
+    const plebiscite = db.prepare('SELECT id, status FROM plebiscites WHERE id = ?').get(plebiscite_id) as { id: number; status: string } | undefined;
     if (!plebiscite) {
       return NextResponse.json(
         { error: 'Election not found' },
         { status: 404 }
       );
     }
+    if (plebiscite.status !== 'draft') {
+      return NextResponse.json(
+        { error: 'The voter roll is locked once an election opens' },
+        { status: 409 }
+      );
+    }
 
     if (action === 'upload') {
-      if (!emails || !Array.isArray(emails)) {
+      if (!emails || !Array.isArray(emails) || emails.length > MAX_VOTER_UPLOAD) {
         return NextResponse.json(
-          { error: 'Emails array is required' },
+          { error: `An email list of at most ${MAX_VOTER_UPLOAD} entries is required` },
           { status: 400 }
         );
       }
@@ -87,7 +100,7 @@ export async function POST(request: NextRequest) {
       // Validate email addresses
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const validEmails = emails.filter(email => 
-        typeof email === 'string' && emailRegex.test(email.trim().toLowerCase())
+        typeof email === 'string' && email.length <= 254 && emailRegex.test(email.trim().toLowerCase())
       );
 
       if (validEmails.length === 0) {
@@ -138,7 +151,7 @@ export async function POST(request: NextRequest) {
     if (action === 'add') {
       const { email } = body;
       
-      if (!email || typeof email !== 'string') {
+      if (!email || typeof email !== 'string' || email.length > 254) {
         return NextResponse.json(
           { error: 'Email is required' },
           { status: 400 }
@@ -216,6 +229,12 @@ export async function DELETE(request: NextRequest) {
           { status: 400 }
         );
       }
+      if (!getDraftElection(plebisciteId)) {
+        return NextResponse.json(
+          { error: 'The voter roll is locked once an election opens' },
+          { status: 409 }
+        );
+      }
 
       // Clear all voters for this election (but check if any have voted)
       const participationCount = db.prepare('SELECT COUNT(*) as count FROM participation WHERE plebiscite_id = ?').get(plebisciteId) as { count: number };
@@ -246,6 +265,17 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Check if voter has participated in any plebiscites
+    const voter = db.prepare('SELECT email, plebiscite_id FROM voter_roll WHERE id = ?').get(id) as any | undefined;
+    if (!voter) {
+      return NextResponse.json({ error: 'Voter not found' }, { status: 404 });
+    }
+    if (!getDraftElection(voter.plebiscite_id)) {
+      return NextResponse.json(
+        { error: 'The voter roll is locked once an election opens' },
+        { status: 409 }
+      );
+    }
+
     const participation = db.prepare('SELECT COUNT(*) as count FROM participation WHERE voter_roll_id = ?').get(id) as { count: number };
     
     if (participation.count > 0) {
@@ -254,8 +284,6 @@ export async function DELETE(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    const voter = db.prepare('SELECT email, plebiscite_id FROM voter_roll WHERE id = ?').get(id) as any | undefined;
 
     // Delete voter
     const result = db.prepare('DELETE FROM voter_roll WHERE id = ?').run(id);

@@ -5,6 +5,7 @@ import db from '@/lib/db';
 import Link from 'next/link';
 import PlebisciteManager from './PlebisciteManager';
 import ElectionVoterManager from '@/components/ElectionVoterManager';
+import { parseElectionCloseDate } from '@/lib/election-window';
 
 interface Plebiscite {
   id: number;
@@ -58,8 +59,20 @@ async function getPlebiscite(id: string): Promise<{ plebiscite: Plebiscite; ques
   return { plebiscite, questions, stats };
 }
 
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-AU', {
+function formatElectionDate(dateString: string): string {
+  return parseElectionCloseDate(dateString).toLocaleDateString('en-AU', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Australia/Brisbane'
+  });
+}
+
+function formatCreatedAt(dateString: string): string {
+  const utc = /Z$|[+-]\d{2}:?\d{2}$/.test(dateString) ? dateString : `${dateString.replace(' ', 'T')}Z`;
+  return new Date(utc).toLocaleDateString('en-AU', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -71,8 +84,8 @@ function formatDate(dateString: string): string {
 
 function getStatusInfo(plebiscite: Plebiscite) {
   const now = new Date();
-  const openDate = new Date(plebiscite.open_date);
-  const closeDate = new Date(plebiscite.close_date);
+  const openDate = parseElectionCloseDate(plebiscite.open_date);
+  const closeDate = parseElectionCloseDate(plebiscite.close_date);
 
   if (plebiscite.status === 'draft') {
     return {
@@ -111,14 +124,15 @@ function getTypeDisplayName(type: string): string {
   }
 }
 
-export default async function ManagePlebiscite({ params }: { params: { id: string } }) {
+export default async function ManagePlebiscite({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   // Check admin authentication
-  const adminSession = getAdminSessionFromCookies();
+  const adminSession = await getAdminSessionFromCookies();
   if (!adminSession) {
     redirect('/admin/login');
   }
 
-  const data = await getPlebiscite(params.id);
+  const data = await getPlebiscite(id);
   
   if (!data) {
     redirect('/admin');
@@ -272,7 +286,7 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
               <div>
                 <dt className="text-sm font-medium text-gray-500">Voting Period</dt>
                 <dd className="mt-1 text-sm text-gray-900">
-                  {formatDate(plebiscite.open_date)} — {formatDate(plebiscite.close_date)}
+                  {formatElectionDate(plebiscite.open_date)} - {formatElectionDate(plebiscite.close_date)}
                 </dd>
               </div>
 
@@ -283,7 +297,7 @@ export default async function ManagePlebiscite({ params }: { params: { id: strin
 
               <div>
                 <dt className="text-sm font-medium text-gray-500">Created</dt>
-                <dd className="mt-1 text-sm text-gray-900">{formatDate(plebiscite.created_at)}</dd>
+                <dd className="mt-1 text-sm text-gray-900">{formatCreatedAt(plebiscite.created_at)}</dd>
               </div>
             </div>
           </div>

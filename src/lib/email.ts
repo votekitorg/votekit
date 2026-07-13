@@ -16,18 +16,29 @@ export interface EmailResult {
   messageId?: string;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
 export async function sendVerificationEmail(
   email: string,
   code: string,
   plebisciteTitle: string
 ): Promise<EmailResult> {
   const fromEmail = process.env.FROM_EMAIL || 'noreply@example.com';
+  const safeTitle = escapeHtml(plebisciteTitle);
+  const subjectTitle = plebisciteTitle.replace(/[\r\n]+/g, ' ').trim();
   
   try {
     const result = await getResend().emails.send({
       from: fromEmail,
       to: email,
-      subject: `Verification Code: ${plebisciteTitle}`,
+      subject: `Verification Code: ${subjectTitle}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="text-align: center; margin-bottom: 30px;">
@@ -37,7 +48,7 @@ export async function sendVerificationEmail(
           <div style="background-color: #f8f9fa; border-radius: 8px; padding: 30px; margin-bottom: 20px;">
             <h2 style="color: #1B5E20; margin-top: 0;">Verification Required</h2>
             <p style="color: #333; font-size: 16px; line-height: 1.5;">
-              You have requested to participate in the election: <strong>${plebisciteTitle}</strong>
+              You have requested to participate in the election: <strong>${safeTitle}</strong>
             </p>
             <p style="color: #333; font-size: 16px; line-height: 1.5;">
               Your verification code is:
@@ -88,11 +99,18 @@ export async function sendVerificationEmail(
 }
 
 // Database-backed rate limiting
-const MAX_EMAIL_ATTEMPTS = 3;
+function positiveIntegerEnv(name: string, fallback: number): number {
+  const parsed = Number.parseInt(process.env[name] || '', 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const MAX_EMAIL_ATTEMPTS = positiveIntegerEnv('MAX_VERIFICATION_EMAIL_ATTEMPTS', 3);
 const RATE_LIMIT_WINDOW_HOURS = 1;
 
-export const MAX_VERIFICATION_IP_ATTEMPTS = 20;
-export const MAX_VERIFICATION_GLOBAL_ATTEMPTS = 200;
+// Defaults tolerate shared office/event networks and large election openings.
+// Per-email throttling remains the primary delivery-abuse control.
+export const MAX_VERIFICATION_IP_ATTEMPTS = positiveIntegerEnv('MAX_VERIFICATION_IP_ATTEMPTS', 500);
+export const MAX_VERIFICATION_GLOBAL_ATTEMPTS = positiveIntegerEnv('MAX_VERIFICATION_GLOBAL_ATTEMPTS', 5000);
 
 export function isRateLimitKeyLimited(key: string, maxAttempts: number): boolean {
   cleanupEmailRateLimit();

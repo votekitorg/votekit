@@ -7,7 +7,6 @@ import {
   generateVerificationCode,
   isEmailRateLimited,
   incrementEmailAttempts,
-  getRemainingEmailAttempts,
   isRateLimitKeyLimited,
   incrementRateLimitKey,
   MAX_VERIFICATION_IP_ATTEMPTS,
@@ -32,7 +31,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, plebisciteSlug } = body;
 
-    if (!email || !plebisciteSlug) {
+    if (
+      typeof email !== 'string' || !email || email.length > 254 ||
+      typeof plebisciteSlug !== 'string' || !plebisciteSlug || plebisciteSlug.length > 80
+    ) {
       return NextResponse.json(
         { error: 'Email and election link are required' },
         { status: 400 }
@@ -61,12 +63,9 @@ export async function POST(request: NextRequest) {
       isRateLimitKeyLimited(ipRateLimitKey, MAX_VERIFICATION_IP_ATTEMPTS) ||
       isRateLimitKeyLimited(globalRateLimitKey, MAX_VERIFICATION_GLOBAL_ATTEMPTS)
     ) {
-      const remaining = getRemainingEmailAttempts(normalizedEmail);
       return NextResponse.json(
         {
-          error: remaining > 0
-            ? 'Too many verification attempts from this network. Please try again later.'
-            : `Too many verification attempts. You can request ${remaining} more code${remaining !== 1 ? 's' : ''} in the next hour.`,
+          error: 'Too many verification attempts. Please try again later.',
           rateLimited: true
         },
         { status: 429 }
@@ -113,6 +112,10 @@ export async function POST(request: NextRequest) {
 
     // Store verification code
     db.prepare(`
+      UPDATE verification_codes SET used = TRUE
+      WHERE email = ? AND plebiscite_id = ? AND used = FALSE
+    `).run(normalizedEmail, plebiscite.id);
+    db.prepare(`
       INSERT INTO verification_codes (email, plebiscite_id, code, expires_at)
       VALUES (?, ?, ?, ?)
     `).run(normalizedEmail, plebiscite.id, code, expiresAt);
@@ -125,17 +128,12 @@ export async function POST(request: NextRequest) {
       db.prepare('DELETE FROM verification_codes WHERE email = ? AND code = ?')
         .run(normalizedEmail, code);
 
-      return NextResponse.json(
-        { error: 'Failed to send verification email. Please try again.' },
-        { status: 500 }
-      );
+      // Keep the public response neutral so delivery failures cannot turn the
+      // endpoint into an eligibility oracle. Operators must monitor this log.
+      return neutralVerificationResponse();
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Verification code sent to your email',
-      remaining: getRemainingEmailAttempts(normalizedEmail)
-    });
+    return neutralVerificationResponse();
 
   } catch (error) {
     console.error('Verification email error:', error);

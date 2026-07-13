@@ -3,6 +3,7 @@ import { getAdminSessionFromCookies } from '@/lib/auth';
 import AdminLayout from '@/components/AdminLayout';
 import db from '@/lib/db';
 import Link from 'next/link';
+import { parseElectionCloseDate } from '@/lib/election-window';
 
 interface Plebiscite {
   id: number;
@@ -49,7 +50,7 @@ async function getDashboardData() {
 }
 
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-AU', {
+  return parseElectionCloseDate(dateString).toLocaleDateString('en-AU', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -74,7 +75,7 @@ function getStatusBadge(status: string) {
 
 export default async function AdminDashboard() {
   // Check admin authentication
-  const adminSession = getAdminSessionFromCookies();
+  const adminSession = await getAdminSessionFromCookies();
   if (!adminSession) {
     redirect('/admin/login');
   }
