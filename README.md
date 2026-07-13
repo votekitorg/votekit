@@ -1,6 +1,6 @@
-# Member Plebiscite Platform
+# VoteKit Election Platform
 
-A secure, transparent online voting platform for conducting membership plebiscites and surveys. Built with Next.js 14, TypeScript, and SQLite.
+A privacy-conscious, auditable online election platform for member organisations. Built with Next.js 15, TypeScript, and SQLite.
 
 ## Features
 
@@ -17,8 +17,8 @@ A secure, transparent online voting platform for conducting membership plebiscit
 - **Condorcet**: Pairwise comparison with Schulze method fallback for cyclical preferences
 
 ### 👥 **Admin Management**
-- **Password Protection**: Simple admin authentication via environment variable
-- **Plebiscite Lifecycle**: Create → Open → Close → Results
+- **Role-based Administration**: Named admin and read-only observer accounts
+- **Election Lifecycle**: Create → Open → Close → Results
 - **Voter Roll Management**: CSV upload and individual email management
 - **Real-time Stats**: Participation tracking and results analytics
 
@@ -63,7 +63,8 @@ cp .env.example .env
 
 Edit `.env` with your values:
 ```env
-# Admin Authentication
+# Bootstrap Admin Authentication
+ADMIN_EMAIL=admin@yourorganization.com
 ADMIN_PASSWORD=your-secure-admin-password-here
 
 # Email Configuration (Resend API)
@@ -72,6 +73,10 @@ FROM_EMAIL=noreply@yourorganization.com
 
 # Database (persistent SQLite file, automatically created)
 DATABASE_PATH=./plebiscite.db
+
+# Reverse proxy and release metadata
+TRUST_PROXY_HEADERS=true
+VOTEKIT_RELEASE=development
 
 # Environment
 NODE_ENV=production
@@ -92,10 +97,10 @@ The application will be available at `http://localhost:3000`.
 1. **Initial Setup**:
    - Visit `/admin` and login with your admin password
    - Upload voter roll via CSV or add individual emails
-   - Create your first plebiscite
+   - Create your first election
 
-2. **Create a Plebiscite**:
-   - Go to **Admin Panel** → **Create Plebiscite**
+2. **Create an Election**:
+   - Go to **Admin Panel** → **Create Election**
    - Add title, description, and voting period
    - Configure questions (Yes/No, Multiple Choice, or Ranked Choice)
    - Set open and close dates
@@ -190,13 +195,16 @@ For ranked choice questions, the platform implements proper IRV tabulation:
   must be treated as trusted while voting is open.
 
 ### Rate Limiting
-- Maximum 3 verification codes per email per hour
+- Verification request limits are stored in SQLite and configurable by email,
+  network, and election-wide buckets
 - Codes expire after 10 minutes
 - Cooldown timers prevent spam
 
 ### Admin Security
-- Simple password authentication (consider stronger auth for production)
-- All admin routes protected
+- Named admin accounts use bcrypt-hashed passwords and database-backed sessions
+- Admin login attempts are rate-limited and audited
+- Mutating routes require double-submit-cookie CSRF protection
+- Admin and observer permissions are enforced server-side
 - No public access to sensitive data
 
 ## Deployment
@@ -215,10 +223,14 @@ VoteKit currently supports real elections only on a persistent single server wit
 Do not run real elections on Vercel or other serverless hosts while VoteKit uses a local SQLite file. Serverless instances do not provide the durable shared local database semantics this app currently requires. Vercel may still be useful for demos or static review deployments only.
 
 ### Database Backup
-The SQLite database file should be backed up regularly and before any live election lifecycle action:
+The SQLite database must be backed up with SQLite's online backup API so WAL
+transactions are included safely:
 ```bash
-cp plebiscite.db plebiscite-backup-$(date +%Y%m%d-%H%M%S).db
+sqlite3 plebiscite.db ".backup 'plebiscite-backup-$(date +%Y%m%d-%H%M%S).db'"
 ```
+
+See `docs/deployment-runbook.md` for tagged releases, health verification,
+rollback, backup, and election-day procedures.
 
 ## API Endpoints
 
@@ -276,7 +288,9 @@ Check application logs for debugging:
 
 ## Contributing
 
-This platform has completed the Phase 1 hardening pass, but should not be described as production-ready until the remaining Phase 2 items are complete and the deployment has been operationally reviewed. Key areas for enhancement:
+This platform has completed the current code-hardening pass, but a deployment
+must not be approved for a real election until the operational gates in
+`docs/production-readiness-2026-07-13.md` are complete. Longer-term areas include:
 
 1. **Advanced Security**: Two-factor authentication, encryption at rest
 2. **Scalability**: PostgreSQL support, Redis sessions
