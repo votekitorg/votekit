@@ -7,7 +7,8 @@ Wants=network-online.target
 Type=oneshot
 User=root
 ExecStart=/usr/local/sbin/votekit-release-watcher
-NoNewPrivileges=true
+# The orchestrator must use setpriv to run untrusted build steps as votekit.
+# NoNewPrivileges would block that root-to-votekit transition.
 PrivateDevices=true
 PrivateTmp=true
 ProtectHome=true
