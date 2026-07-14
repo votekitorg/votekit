@@ -48,6 +48,27 @@ Vercel, and other serverless deployments are unsupported for real elections.
 7. Verify `/api/health`, main pages, admin login, and a test election flow.
 8. Verify the backup produced immediately before deployment.
 
+## Git-driven release pipeline
+
+The normal production path is automated but deliberately not continuous:
+
+1. Candidate changes are tested before merging to `main`.
+2. An approved commit is given an annotated stable semantic-version tag such as
+   `v0.2.0`. Pushing `main` alone never changes production.
+3. A hardened production timer checks the public Git tag feed every five minutes.
+   It considers only annotated `vMAJOR.MINOR.PATCH` tags and selects the highest
+   version. GitHub holds no production SSH key, and production exposes no CI login.
+5. Production independently clones the public repository, checks out that exact
+   SHA, rebuilds, re-runs the gates, backs up SQLite, atomically switches the
+   release symlink, and rolls back the code pointer if health verification fails.
+6. The server deployment script and public health endpoint both verify the exact
+   tagged commit SHA. Failures roll the code symlink back automatically.
+
+Creating and pushing the annotated version tag is the explicit release approval
+action. GitHub Actions CI is a useful future enhancement, but the available
+repository token cannot administer workflow files. The production deployment
+script independently repeats every release quality gate before switching code.
+
 The deployment script checks out the exact ref, repeats the quality gates,
 backs up SQLite with its online backup API, switches the release symlink,
 restarts the service, verifies the reported release SHA, and rolls back the

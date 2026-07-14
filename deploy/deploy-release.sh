@@ -15,6 +15,7 @@ fi
 
 install -d -m 0755 "$RELEASE_ROOT"
 install -d -m 0750 -o votekit -g votekit /var/lib/votekit /var/backups/votekit
+install -d -m 0750 -o votekit -g votekit /var/lib/votekit/.npm-cache
 install -d -m 0750 /etc/votekit
 
 INCOMING="$RELEASE_ROOT/.incoming-$(date -u +%s)-$$"
@@ -26,27 +27,35 @@ git -C "$INCOMING" checkout --quiet --detach FETCH_HEAD
 RELEASE_SHA="$(git -C "$INCOMING" rev-parse HEAD)"
 RELEASE_DIR="$RELEASE_ROOT/$RELEASE_SHA"
 
-if [[ -e "$RELEASE_DIR" ]]; then
-  echo "Release already exists: $RELEASE_SHA" >&2
-  exit 1
+if [[ ! -e "$RELEASE_DIR" ]]; then
+  chown -R votekit:votekit "$INCOMING"
+  export HOME=/var/lib/votekit
+  export NPM_CONFIG_CACHE=/var/lib/votekit/.npm-cache
+  sudo -u votekit --preserve-env=HOME,NPM_CONFIG_CACHE npm --prefix "$INCOMING" ci
+
+  export DATABASE_PATH=:memory:
+  export VOTEKIT_RELEASE="$RELEASE_SHA"
+  export VOTEKIT_ENCRYPTED_BALLOTS_ENABLED=false
+  sudo -u votekit --preserve-env=HOME,NPM_CONFIG_CACHE,DATABASE_PATH,VOTEKIT_RELEASE,VOTEKIT_ENCRYPTED_BALLOTS_ENABLED npm --prefix "$INCOMING" run lint
+  sudo -u votekit --preserve-env=HOME,NPM_CONFIG_CACHE,DATABASE_PATH,VOTEKIT_RELEASE,VOTEKIT_ENCRYPTED_BALLOTS_ENABLED npm --prefix "$INCOMING" test
+  sudo -u votekit --preserve-env=HOME,NPM_CONFIG_CACHE,DATABASE_PATH,VOTEKIT_RELEASE,VOTEKIT_ENCRYPTED_BALLOTS_ENABLED npm --prefix "$INCOMING" run regression-check
+  sudo -u votekit --preserve-env=HOME,NPM_CONFIG_CACHE,DATABASE_PATH,VOTEKIT_RELEASE,VOTEKIT_ENCRYPTED_BALLOTS_ENABLED npm --prefix "$INCOMING" run type-check
+  sudo -u votekit --preserve-env=HOME,NPM_CONFIG_CACHE,DATABASE_PATH,VOTEKIT_RELEASE,VOTEKIT_ENCRYPTED_BALLOTS_ENABLED npm --prefix "$INCOMING" run build
+  unset DATABASE_PATH
+
+  # The runtime user can read releases but cannot modify deployed code.
+  chown -R root:root "$INCOMING"
+  chmod -R u=rwX,go=rX "$INCOMING"
+else
+  rm -rf -- "$INCOMING"
 fi
-
-chown -R votekit:votekit "$INCOMING"
-sudo -u votekit npm --prefix "$INCOMING" ci
-
-export DATABASE_PATH=:memory:
-export VOTEKIT_RELEASE="$RELEASE_SHA"
-sudo -u votekit --preserve-env=DATABASE_PATH,VOTEKIT_RELEASE npm --prefix "$INCOMING" run lint
-sudo -u votekit --preserve-env=DATABASE_PATH,VOTEKIT_RELEASE npm --prefix "$INCOMING" test
-sudo -u votekit --preserve-env=DATABASE_PATH,VOTEKIT_RELEASE npm --prefix "$INCOMING" run regression-check
-sudo -u votekit --preserve-env=DATABASE_PATH,VOTEKIT_RELEASE npm --prefix "$INCOMING" run type-check
-sudo -u votekit --preserve-env=DATABASE_PATH,VOTEKIT_RELEASE npm --prefix "$INCOMING" run build
-unset DATABASE_PATH
 
 /usr/local/sbin/votekit-backup
 
 PREVIOUS_RELEASE="$(readlink -f "$CURRENT_LINK" 2>/dev/null || true)"
-mv "$INCOMING" "$RELEASE_DIR"
+if [[ ! -e "$RELEASE_DIR" ]]; then
+  mv "$INCOMING" "$RELEASE_DIR"
+fi
 ln -sfn "$RELEASE_DIR" "$CURRENT_LINK.next"
 mv -Tf "$CURRENT_LINK.next" "$CURRENT_LINK"
 printf 'VOTEKIT_RELEASE=%s\n' "$RELEASE_SHA" > "$RELEASE_ENV"

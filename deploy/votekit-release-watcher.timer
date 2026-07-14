@@ -1,0 +1,12 @@
+[Unit]
+Description=Poll for approved VoteKit releases
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+
