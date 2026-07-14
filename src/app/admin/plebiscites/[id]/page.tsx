@@ -6,6 +6,7 @@ import Link from 'next/link';
 import PlebisciteManager from './PlebisciteManager';
 import ElectionVoterManager from '@/components/ElectionVoterManager';
 import { parseElectionCloseDate } from '@/lib/election-window';
+import { buildEncryptedManifest, encryptedBallotsEnabled } from '@/lib/encrypted-election-server';
 
 interface Plebiscite {
   id: number;
@@ -16,6 +17,10 @@ interface Plebiscite {
   open_date: string;
   close_date: string;
   status: 'draft' | 'open' | 'closed';
+  privacy_mode: 'legacy' | 'encrypted';
+  manifest_hash?: string;
+  recovery_confirmed_at?: string;
+  close_state?: 'none' | 'closing' | 'failed';
   created_at: string;
 }
 
@@ -309,9 +314,19 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
             </div>
             <div className="card-body">
               <PlebisciteManager 
-                plebiscite={{id: plebiscite.id, slug: plebiscite.slug, title: plebiscite.title, status: plebiscite.status, open_date: plebiscite.open_date}}
+                plebiscite={{
+                  id: plebiscite.id, slug: plebiscite.slug, title: plebiscite.title,
+                  status: plebiscite.status, open_date: plebiscite.open_date,
+                  privacy_mode: plebiscite.privacy_mode,
+                  manifest_hash: plebiscite.manifest_hash,
+                  recovery_confirmed_at: plebiscite.recovery_confirmed_at,
+                  close_state: plebiscite.close_state
+                }}
                 statusInfo={{status: statusInfo.status, color: statusInfo.color, canOpen: statusInfo.canOpen, canClose: statusInfo.canClose, message: statusInfo.message}}
                 canManage={adminSession.role === 'admin'}
+                encryptedManifest={plebiscite.privacy_mode === 'encrypted' && encryptedBallotsEnabled
+                  ? buildEncryptedManifest(plebiscite)
+                  : null}
               />
             </div>
           </div>

@@ -1,9 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { csrfFetch } from '@/lib/csrf-client';
 import { parseElectionCloseDate } from '@/lib/election-window';
+import { createElectionKeys, decryptAndShuffleBallots } from '@/lib/browser-ballot-crypto';
+import {
+  canonicalStringify,
+  EncryptedBallotPackage,
+  EncryptedElectionManifest,
+  hashManifest,
+  sha256Base64Url
+} from '@/lib/encrypted-ballots';
 
 interface Plebiscite {
   id: number;
@@ -11,6 +19,10 @@ interface Plebiscite {
   title: string;
   status: 'draft' | 'open' | 'closed';
   open_date: string;
+  privacy_mode: 'legacy' | 'encrypted';
+  manifest_hash?: string;
+  recovery_confirmed_at?: string;
+  close_state?: 'none' | 'closing' | 'failed';
 }
 
 interface StatusInfo {
@@ -24,16 +36,136 @@ interface StatusInfo {
 export default function PlebisciteManager({ 
   plebiscite, 
   statusInfo,
-  canManage = true
+  canManage = true,
+  encryptedManifest
 }: { 
   plebiscite: Plebiscite; 
   statusInfo: StatusInfo;
   canManage?: boolean;
+  encryptedManifest: EncryptedElectionManifest | null;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [encryptionPrepared, setEncryptionPrepared] = useState(Boolean(plebiscite.manifest_hash));
+  const [recoveryConfirmed, setRecoveryConfirmed] = useState(Boolean(plebiscite.recovery_confirmed_at));
+  const recoveryFileRef = useRef<HTMLInputElement>(null);
+
+  function downloadJson(filename: string, value: unknown) {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handlePrepareEncryption() {
+    if (!encryptedManifest) return;
+    if (!confirm('Create a new encrypted ballot box and download its recovery kit? Any earlier kit for this draft will stop working.')) return;
+    setLoading(true);
+    setError('');
+    try {
+      const manifestHash = await hashManifest(encryptedManifest);
+      const keys = await createElectionKeys(manifestHash, plebiscite.id);
+      const response = await csrfFetch('/api/admin/encrypted-election', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: plebiscite.id, action: 'prepare', manifestHash,
+          publicKeyJwk: keys.publicKeyJwk,
+          encryptedPrivateKey: keys.encryptedPrivateKey,
+          keyIv: keys.keyIv
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not prepare encrypted ballot box');
+      downloadJson(`${plebiscite.slug}-votekit-recovery.json`, {
+        type: 'votekit-encrypted-election-recovery',
+        version: 1,
+        electionId: plebiscite.id,
+        electionSlug: plebiscite.slug,
+        manifestHash,
+        closeSecret: keys.closeSecret,
+        encryptedPrivateKey: keys.encryptedPrivateKey,
+        keyIv: keys.keyIv,
+        warning: 'Keep offline. VoteKit cannot close this election without the closeSecret.'
+      });
+      setEncryptionPrepared(true);
+      setRecoveryConfirmed(false);
+    } catch (err: any) {
+      setError(err.message || 'Could not prepare encryption');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleConfirmRecovery() {
+    if (!confirm('Confirm that the recovery-kit file was downloaded, opened successfully, and stored safely offline?')) return;
+    setLoading(true);
+    setError('');
+    try {
+      const response = await csrfFetch('/api/admin/encrypted-election', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: plebiscite.id, action: 'confirm-recovery' })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not confirm recovery kit');
+      setRecoveryConfirmed(true);
+    } catch (err: any) {
+      setError(err.message || 'Could not confirm recovery kit');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleEncryptedClose() {
+    const file = recoveryFileRef.current?.files?.[0];
+    if (!file) {
+      setError('Choose this election’s offline recovery-kit file first');
+      return;
+    }
+    if (!confirm('Permanently stop voting, decrypt the complete ballot box in this browser, shuffle it, and publish only the shuffled ballots?')) return;
+    setLoading(true);
+    setError('');
+    try {
+      const recovery = JSON.parse(await file.text());
+      if (recovery.type !== 'votekit-encrypted-election-recovery' || recovery.electionId !== plebiscite.id ||
+        typeof recovery.closeSecret !== 'string') throw new Error('This recovery kit does not belong to this election');
+      const startResponse = await csrfFetch('/api/admin/encrypted-election', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: plebiscite.id, action: 'start-close' })
+      });
+      const closing = await startResponse.json();
+      if (!startResponse.ok) throw new Error(closing.error || 'Could not freeze the encrypted ballot box');
+      if (recovery.manifestHash !== closing.manifestHash) throw new Error('Recovery kit manifest does not match this election');
+      const commitments = await Promise.all((closing.packages as EncryptedBallotPackage[])
+        .map(value => sha256Base64Url(canonicalStringify(value))));
+      commitments.sort();
+      const inputHash = await sha256Base64Url(canonicalStringify(commitments));
+      if (inputHash !== closing.inputHash) throw new Error('Frozen ballot manifest verification failed');
+      const ballots = await decryptAndShuffleBallots({
+        manifest: closing.manifest,
+        manifestHash: closing.manifestHash,
+        encryptedPrivateKey: closing.encryptedPrivateKey,
+        keyIv: closing.keyIv,
+        closeSecret: recovery.closeSecret,
+        packages: closing.packages
+      });
+      const completeResponse = await csrfFetch('/api/admin/encrypted-election', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: plebiscite.id, action: 'complete-close', inputHash, ballots })
+      });
+      const completed = await completeResponse.json();
+      if (!completeResponse.ok) throw new Error(completed.error || 'Could not publish shuffled ballot box');
+      if (recoveryFileRef.current) recoveryFileRef.current.value = '';
+      router.refresh();
+    } catch (err: any) {
+      setError(err.message || 'Encrypted close failed safely. No plaintext ballots were published.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleAction(action: string) {
     const openingEarly = action === 'open' && parseElectionCloseDate(plebiscite.open_date) > new Date();
@@ -99,7 +231,24 @@ export default function PlebisciteManager({
         </p>
       )}
 
-      {canManage && statusInfo.canOpen && (
+      {canManage && statusInfo.canOpen && plebiscite.privacy_mode === 'encrypted' && (
+        <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <p className="text-sm text-blue-900">
+            This election encrypts complete ballots in each voter’s browser. Prepare and safely store the offline recovery kit before opening.
+          </p>
+          <button onClick={handlePrepareEncryption} disabled={loading} className="btn-secondary w-full">
+            {encryptionPrepared ? 'Replace and Download Recovery Kit' : 'Prepare Encrypted Ballot Box'}
+          </button>
+          {encryptionPrepared && !recoveryConfirmed && (
+            <button onClick={handleConfirmRecovery} disabled={loading} className="btn-primary w-full">
+              I Have Safely Stored the Recovery Kit
+            </button>
+          )}
+          {recoveryConfirmed && <p className="text-sm font-medium text-green-700">Recovery kit confirmed. The election can now open.</p>}
+        </div>
+      )}
+
+      {canManage && statusInfo.canOpen && (plebiscite.privacy_mode === 'legacy' || recoveryConfirmed) && (
         <button
           onClick={() => handleAction('open')}
           disabled={loading}
@@ -117,13 +266,29 @@ export default function PlebisciteManager({
           >
             {copied ? 'Copied!' : 'Copy Voting URL'}
           </button>
-          <button
-            onClick={() => handleAction('close')}
-            disabled={loading}
-            className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-          >
-            {loading ? 'Closing...' : 'Close Voting'}
-          </button>
+          {plebiscite.privacy_mode === 'encrypted' ? (
+            <div className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-4">
+              <label className="block text-sm font-medium text-gray-800" htmlFor="recovery-kit">
+                Offline recovery kit
+              </label>
+              <input ref={recoveryFileRef} id="recovery-kit" type="file" accept="application/json,.json" className="block w-full text-sm" />
+              <button
+                onClick={handleEncryptedClose}
+                disabled={loading}
+                className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {loading ? 'Decrypting and Shuffling...' : 'Close, Shuffle and Publish'}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => handleAction('close')}
+              disabled={loading}
+              className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+            >
+              {loading ? 'Closing...' : 'Close Voting'}
+            </button>
+          )}
         </>
       )}
 

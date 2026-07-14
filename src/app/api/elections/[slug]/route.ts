@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { votingClosedError } from '@/lib/election-window';
+import { buildEncryptedManifest, encryptedBallotsEnabled } from '@/lib/encrypted-election-server';
 
 export async function GET(
   _request: NextRequest,
@@ -33,12 +34,17 @@ export async function GET(
 
     const formattedQuestions = questions.map(q => ({
       id: q.id,
+      publicId: q.public_id,
       title: q.title,
       description: q.description,
       type: q.type,
       options: q.options,
       preferentialType: q.preferential_type || 'compulsory'
     }));
+
+    const encryptionKey = plebiscite.privacy_mode === 'encrypted' && encryptedBallotsEnabled
+      ? db.prepare('SELECT public_key_jwk, protocol, manifest_hash FROM encrypted_election_keys WHERE plebiscite_id = ?').get(plebiscite.id) as any
+      : null;
 
     return NextResponse.json({
       plebiscite: {
@@ -50,7 +56,14 @@ export async function GET(
         open_date: plebiscite.open_date,
         close_date: plebiscite.close_date,
         status: plebiscite.status,
-        voting_available: plebiscite.status === 'open' && !votingClosedError(plebiscite)
+        voting_available: plebiscite.status === 'open' && !votingClosedError(plebiscite),
+        privacy_mode: plebiscite.privacy_mode,
+        encrypted_ballot: encryptionKey ? {
+          protocol: encryptionKey.protocol,
+          manifestHash: encryptionKey.manifest_hash,
+          publicKeyJwk: JSON.parse(encryptionKey.public_key_jwk),
+          manifest: buildEncryptedManifest(plebiscite)
+        } : null
       },
       questions: formattedQuestions
     });

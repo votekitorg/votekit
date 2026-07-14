@@ -17,6 +17,7 @@
 
 export interface ElectionCloseDeadline {
   close_date: string;
+  close_state?: string;
 }
 
 export function parseElectionCloseDate(value: string): Date {
@@ -33,6 +34,9 @@ export function parseElectionCloseDate(value: string): Date {
 }
 
 export function votingClosedError(plebiscite: ElectionCloseDeadline, now: Date = new Date()): string | null {
+  if (plebiscite.close_state === 'closing' || plebiscite.close_state === 'failed') {
+    return 'Voting has closed for this election';
+  }
   const closeDate = parseElectionCloseDate(plebiscite.close_date);
 
   // Fail closed: an election with an unparseable close date cannot accept votes.

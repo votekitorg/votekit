@@ -3,6 +3,7 @@ import { parseElectionCloseDate } from '@/lib/election-window';
 import ResultsChart from '@/components/ResultsChart';
 import CondorcetResults from '@/components/CondorcetResults';
 import { getPlebisciteResults, ResultsUnavailableError, type PlebisciteResultsData } from '@/lib/results';
+import ReceiptLookup from '@/components/ReceiptLookup';
 
 type QuestionResult = PlebisciteResultsData['questions'][number];
 
@@ -284,6 +285,8 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
         </div>
 
         {/* Results */}
+        {plebiscite.privacyMode === 'encrypted' && <ReceiptLookup slug={slug} />}
+
         <div className="space-y-12">
           {questions.length === 0 ? (
             <div className="text-center py-8">

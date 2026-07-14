@@ -1,6 +1,8 @@
 import db from '@/lib/db';
 import { tabulateIRV, exportIRVResultsCSV } from '@/lib/irv';
 import { tabulateCondorcet, exportCondorcetResultsCSV } from '@/lib/condorcet';
+import { buildEncryptedManifest } from '@/lib/encrypted-election-server';
+import type { EncryptedElectionManifest } from '@/lib/encrypted-ballots';
 
 export interface PlebisciteResultsData {
   plebiscite: {
@@ -12,12 +14,21 @@ export interface PlebisciteResultsData {
     open_date: string;
     close_date: string;
     status: string;
+    privacyMode: 'legacy' | 'encrypted';
+    privacyThreshold: number;
   };
   participation: {
     totalVotes: number;
   };
+  encryptedAudit?: {
+    manifest: EncryptedElectionManifest;
+    manifestHash: string;
+    inputHash: string;
+    outputHash: string;
+  };
   questions: Array<{
     id: number;
+    publicId: string;
     title: string;
     description?: string;
     type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
@@ -71,22 +82,42 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
     SELECT COUNT(*) as count FROM participation WHERE plebiscite_id = ?
   `).get(plebiscite.id) as { count: number };
 
+  const encryptedPublishedBallots = plebiscite.privacy_mode === 'encrypted'
+    ? db.prepare(`
+        SELECT receipt_code, ballot_data FROM published_ballots
+        WHERE plebiscite_id = ? ORDER BY display_order
+      `).all(plebiscite.id) as Array<{ receipt_code: string; ballot_data: string }>
+    : [];
+
   const results = questions.map((question) => {
     const options = JSON.parse(question.options);
 
     // Receipt codes are deliberately selected from the anonymous ballot table only,
     // not from participation/voter data.
-    const votes = db.prepare(`
-      SELECT receipt_code, vote_data FROM votes WHERE question_id = ? ORDER BY receipt_code
-    `).all(question.id) as any[];
+    const votes = plebiscite.privacy_mode === 'encrypted'
+      ? encryptedPublishedBallots.map(ballot => ({
+          receipt_code: ballot.receipt_code,
+          vote_data: JSON.stringify((() => {
+            const answer = JSON.parse(ballot.ballot_data)[question.public_id];
+            if (question.type === 'yes_no') return { choice: answer };
+            if (question.type === 'multiple_choice') return { choices: answer };
+            return { preferences: answer };
+          })())
+        }))
+      : db.prepare(`
+          SELECT receipt_code, vote_data FROM votes WHERE question_id = ? ORDER BY receipt_code
+        `).all(question.id) as any[];
 
-    const publicBallots = votes.map((vote: any) => ({
-      receiptCode: vote.receipt_code,
-      ballot: JSON.parse(vote.vote_data)
-    }));
+    const publicBallots = (plebiscite.privacy_mode !== 'encrypted' || votes.length >= Number(plebiscite.privacy_threshold || 5))
+      ? votes.map((vote: any) => ({
+          receiptCode: vote.receipt_code,
+          ballot: JSON.parse(vote.vote_data)
+        }))
+      : [];
 
     const questionResult = {
       id: question.id,
+      publicId: question.public_id,
       title: question.title,
       description: question.description,
       type: question.type,
@@ -161,6 +192,12 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
     return questionResult;
   });
 
+  const encryptedArtifact = plebiscite.privacy_mode === 'encrypted'
+    ? db.prepare(`
+        SELECT input_hash, output_hash FROM encrypted_close_artifacts WHERE plebiscite_id = ?
+      `).get(plebiscite.id) as { input_hash: string; output_hash: string } | undefined
+    : undefined;
+
   return {
     plebiscite: {
       id: plebiscite.id,
@@ -170,11 +207,21 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
       info_url: plebiscite.info_url,
       open_date: plebiscite.open_date,
       close_date: plebiscite.close_date,
-      status: plebiscite.status
+      status: plebiscite.status,
+      privacyMode: plebiscite.privacy_mode || 'legacy',
+      privacyThreshold: Number(plebiscite.privacy_threshold || 5)
     },
     participation: {
       totalVotes: participationCount.count
     },
+    ...(encryptedArtifact ? {
+      encryptedAudit: {
+        manifest: buildEncryptedManifest(plebiscite),
+        manifestHash: plebiscite.manifest_hash,
+        inputHash: encryptedArtifact.input_hash,
+        outputHash: encryptedArtifact.output_hash
+      }
+    } : {}),
     questions: results
   };
 }
@@ -189,6 +236,13 @@ export function buildResultsCsv(slug: string, data: PlebisciteResultsData): stri
     if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
     return `"${text.replaceAll('"', '""')}"`;
   };
+
+  if (data.encryptedAudit) {
+    csvData += `${csvCell('Encrypted ballot protocol')},${csvCell(data.encryptedAudit.manifest.protocol)}\n`;
+    csvData += `${csvCell('Manifest hash')},${csvCell(data.encryptedAudit.manifestHash)}\n`;
+    csvData += `${csvCell('Frozen input hash')},${csvCell(data.encryptedAudit.inputHash)}\n`;
+    csvData += `${csvCell('Published output hash')},${csvCell(data.encryptedAudit.outputHash)}\n\n`;
+  }
 
   for (const question of data.questions) {
     if (question.type === 'yes_no') {

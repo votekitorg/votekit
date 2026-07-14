@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import VoteForm from '@/components/VoteForm';
 import { csrfFetch } from '@/lib/csrf-client';
 import { parseElectionCloseDate } from '@/lib/election-window';
+import { encryptBallot } from '@/lib/browser-ballot-crypto';
+import type { EncryptedBallotPackage, EncryptedElectionManifest } from '@/lib/encrypted-ballots';
 
 interface Plebiscite {
   id: number;
@@ -16,10 +18,17 @@ interface Plebiscite {
   close_date: string;
   status: string;
   voting_available: boolean;
+  privacy_mode: 'legacy' | 'encrypted';
+  encrypted_ballot?: {
+    manifest: EncryptedElectionManifest;
+    manifestHash: string;
+    publicKeyJwk: JsonWebKey;
+  } | null;
 }
 
 interface Question {
   id: number;
+  publicId: string;
   title: string;
   description?: string;
   type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
@@ -48,6 +57,12 @@ export default function VotingPage({ params }: VotingPageProps) {
   
   // Vote submission
   const [receiptCodes, setReceiptCodes] = useState<string[]>([]);
+  const [pendingEncryptedSubmission, setPendingEncryptedSubmission] = useState<null | {
+    submissionId: string;
+    encryptedPackage: EncryptedBallotPackage;
+    commitment: string;
+    receipt: string;
+  }>(null);
   
   const router = useRouter();
 
@@ -83,6 +98,7 @@ export default function VotingPage({ params }: VotingPageProps) {
           setPlebiscite(result.plebiscite);
           setQuestions(result.questions.map((q: any) => ({
             id: q.id,
+            publicId: q.publicId,
             title: q.title,
             description: q.description,
             type: q.type,
@@ -193,21 +209,47 @@ export default function VotingPage({ params }: VotingPageProps) {
 
   const handleVoteSubmit = async (votes: { [questionId: number]: any }) => {
     try {
+      let requestBody: Record<string, unknown> = { plebisciteSlug: slug, votes };
+      let encryptedSubmission = pendingEncryptedSubmission;
+      if (plebiscite?.privacy_mode === 'encrypted') {
+        const encryption = plebiscite.encrypted_ballot;
+        if (!encryption) throw new Error('The encrypted ballot box is not configured');
+        if (!encryptedSubmission) {
+          const answers = Object.fromEntries(questions.map(question => [question.publicId, votes[question.id]]));
+          const encrypted = await encryptBallot(
+            encryption.manifest,
+            encryption.manifestHash,
+            encryption.publicKeyJwk,
+            answers
+          );
+          encryptedSubmission = {
+            submissionId: crypto.randomUUID(),
+            encryptedPackage: encrypted.encryptedPackage,
+            commitment: encrypted.commitment,
+            receipt: encrypted.receipt
+          };
+          setPendingEncryptedSubmission(encryptedSubmission);
+        }
+        requestBody = {
+          plebisciteSlug: slug,
+          submissionId: encryptedSubmission.submissionId,
+          encryptedPackage: encryptedSubmission.encryptedPackage,
+          commitment: encryptedSubmission.commitment,
+          manifestHash: encryption.manifestHash
+        };
+      }
       const response = await csrfFetch('/api/vote', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          plebisciteSlug: slug,
-          votes
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const result = await response.json();
 
       if (response.ok && result.success) {
-        setReceiptCodes(result.receiptCodes);
+        setReceiptCodes(encryptedSubmission ? [encryptedSubmission.receipt] : result.receiptCodes);
         setStep('complete');
       } else {
         throw new Error(result.error || 'Failed to submit vote');
@@ -215,6 +257,19 @@ export default function VotingPage({ params }: VotingPageProps) {
     } catch (error) {
       throw error; // Let VoteForm handle the error display
     }
+  };
+
+  const downloadReceipt = () => {
+    if (!receiptCodes.length) return;
+    const blob = new Blob([
+      `VoteKit private ballot receipt\nElection: ${plebiscite?.title || ''}\nReceipt: ${receiptCodes[0]}\n\nKeep this private unless you choose to disclose your vote. VoteKit cannot recover it.\n`
+    ], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${slug}-private-receipt.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   };
 
   const resendCode = async () => {
@@ -560,20 +615,31 @@ export default function VotingPage({ params }: VotingPageProps) {
 
             <div className="card text-left mb-8">
               <div className="card-header">
-                <h3 className="text-lg font-semibold text-gray-900">Receipt Codes</h3>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {plebiscite.privacy_mode === 'encrypted' ? 'Private Ballot Receipt' : 'Receipt Codes'}
+                </h3>
               </div>
               <div className="card-body">
                 <p className="text-sm text-gray-600 mb-4">
-                  Save these receipt codes. They can be used to verify that your ballot was included without revealing your choices.
+                  {plebiscite.privacy_mode === 'encrypted'
+                    ? 'Save this private receipt. After closure it verifies your complete shuffled ballot. VoteKit cannot recover it.'
+                    : 'Save these receipt codes. They can be used to verify that your ballot was included without revealing your choices.'}
                 </p>
                 <div className="bg-gray-50 rounded-lg p-4">
                   {receiptCodes.map((code, index) => (
                     <div key={index} className="flex justify-between items-center py-2">
-                      <span className="text-sm font-medium text-gray-700">Question {index + 1}:</span>
+                      <span className="text-sm font-medium text-gray-700">
+                        {plebiscite.privacy_mode === 'encrypted' ? 'Complete ballot:' : `Question ${index + 1}:`}
+                      </span>
                       <span className="font-mono text-sm bg-white px-2 py-1 rounded border">{code}</span>
                     </div>
                   ))}
                 </div>
+                {plebiscite.privacy_mode === 'encrypted' && (
+                  <button type="button" onClick={downloadReceipt} className="btn-secondary w-full mt-4">
+                    Download Private Receipt
+                  </button>
+                )}
               </div>
             </div>
 

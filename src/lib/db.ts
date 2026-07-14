@@ -233,6 +233,83 @@ const migrations = [
   `
     CREATE INDEX IF NOT EXISTS idx_voter_attempts_email_plebiscite ON voter_verification_attempts(email, plebiscite_id);
     CREATE INDEX IF NOT EXISTS idx_voter_attempts_time ON voter_verification_attempts(attempted_at);
+  `,
+  `
+    ALTER TABLE plebiscites ADD COLUMN privacy_mode TEXT CHECK(privacy_mode IN ('legacy', 'encrypted')) NOT NULL DEFAULT 'legacy';
+  `,
+  `
+    ALTER TABLE plebiscites ADD COLUMN privacy_threshold INTEGER NOT NULL DEFAULT 5;
+  `,
+  `
+    ALTER TABLE plebiscites ADD COLUMN manifest_hash TEXT;
+  `,
+  `
+    ALTER TABLE plebiscites ADD COLUMN envelope_plaintext_bytes INTEGER;
+  `,
+  `
+    ALTER TABLE plebiscites ADD COLUMN close_state TEXT CHECK(close_state IN ('none', 'closing', 'failed')) NOT NULL DEFAULT 'none';
+  `,
+  `
+    ALTER TABLE plebiscites ADD COLUMN recovery_confirmed_at DATETIME;
+  `,
+  `
+    ALTER TABLE questions ADD COLUMN public_id TEXT;
+  `,
+  `
+    UPDATE questions
+    SET public_id = lower(hex(randomblob(16)))
+    WHERE public_id IS NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_questions_public_id ON questions(public_id);
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS encrypted_election_keys (
+      plebiscite_id INTEGER PRIMARY KEY,
+      public_key_jwk TEXT NOT NULL,
+      encrypted_private_key TEXT NOT NULL,
+      key_iv TEXT NOT NULL,
+      protocol TEXT NOT NULL,
+      manifest_hash TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (plebiscite_id) REFERENCES plebiscites(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS encrypted_ballots (
+      submission_id TEXT PRIMARY KEY,
+      plebiscite_id INTEGER NOT NULL,
+      voter_roll_id INTEGER NOT NULL,
+      ciphertext_package TEXT NOT NULL,
+      commitment TEXT NOT NULL,
+      accepted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(plebiscite_id, voter_roll_id),
+      UNIQUE(plebiscite_id, commitment),
+      FOREIGN KEY (plebiscite_id) REFERENCES plebiscites(id) ON DELETE CASCADE,
+      FOREIGN KEY (voter_roll_id) REFERENCES voter_roll(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_encrypted_ballots_plebiscite ON encrypted_ballots(plebiscite_id);
+
+    CREATE TABLE IF NOT EXISTS encrypted_close_artifacts (
+      plebiscite_id INTEGER PRIMARY KEY,
+      input_count INTEGER NOT NULL,
+      input_hash TEXT NOT NULL,
+      output_hash TEXT,
+      frozen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      completed_at DATETIME,
+      FOREIGN KEY (plebiscite_id) REFERENCES plebiscites(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS published_ballots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plebiscite_id INTEGER NOT NULL,
+      receipt_code TEXT NOT NULL,
+      ballot_data TEXT NOT NULL,
+      display_order INTEGER NOT NULL,
+      UNIQUE(plebiscite_id, receipt_code),
+      UNIQUE(plebiscite_id, display_order),
+      FOREIGN KEY (plebiscite_id) REFERENCES plebiscites(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_published_ballots_plebiscite ON published_ballots(plebiscite_id);
   `
 ];
 
@@ -308,17 +385,19 @@ function migrateQuestionsConstraint(database: Database.Database): void {
       options TEXT NOT NULL,
       display_order INTEGER NOT NULL,
       preferential_type TEXT CHECK(preferential_type IN ('compulsory', 'optional')) DEFAULT 'compulsory',
+      public_id TEXT,
       FOREIGN KEY (plebiscite_id) REFERENCES plebiscites (id) ON DELETE CASCADE
     );
 
-    INSERT INTO questions_privacy_migration (id, plebiscite_id, title, description, type, options, display_order, preferential_type)
+    INSERT INTO questions_privacy_migration (id, plebiscite_id, title, description, type, options, display_order, preferential_type, public_id)
     SELECT id, plebiscite_id, title, description, type, options, display_order,
-           COALESCE(preferential_type, 'compulsory')
+           COALESCE(preferential_type, 'compulsory'), public_id
     FROM questions;
 
     DROP TABLE questions;
     ALTER TABLE questions_privacy_migration RENAME TO questions;
     CREATE INDEX IF NOT EXISTS idx_questions_plebiscite ON questions(plebiscite_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_questions_public_id ON questions(public_id);
   `);
 }
 

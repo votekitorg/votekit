@@ -6,6 +6,8 @@ import { getVoterSessionFromRequest,
 import { votingClosedError } from '@/lib/election-window';
 import { validateIRVVote } from '@/lib/irv';
 import { validateCondorcetVote } from '@/lib/condorcet';
+import { canonicalStringify, parseEncryptedPackage, sha256Base64Url } from '@/lib/encrypted-ballots';
+import { encryptedBallotsEnabled } from '@/lib/encrypted-election-server';
 
 class ElectionClosedDuringSubmissionError extends Error {}
 
@@ -40,12 +42,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { plebisciteSlug, votes } = body;
 
-    if (
-      typeof plebisciteSlug !== 'string' || !plebisciteSlug || plebisciteSlug.length > 80 ||
-      !votes || typeof votes !== 'object' || Array.isArray(votes)
-    ) {
+    if (typeof plebisciteSlug !== 'string' || !plebisciteSlug || plebisciteSlug.length > 80) {
       return NextResponse.json(
-        { error: 'Election link and votes are required' },
+        { error: 'Election link is required' },
         { status: 400 }
       );
     }
@@ -94,11 +93,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user has already voted
+    // Check if user has already voted. Encrypted submissions can safely retry
+    // the same submission ID if the acknowledgement was interrupted.
     const hasVoted = db.prepare('SELECT * FROM participation WHERE plebiscite_id = ? AND voter_roll_id = ?')
       .get(plebiscite.id, voter.id) as any;
-    
+
     if (hasVoted) {
+      if (plebiscite.privacy_mode === 'encrypted' && typeof body.submissionId === 'string') {
+        const accepted = db.prepare(`
+          SELECT 1 FROM encrypted_ballots
+          WHERE plebiscite_id = ? AND voter_roll_id = ? AND submission_id = ?
+        `).get(plebiscite.id, voter.id, body.submissionId);
+        if (accepted) return NextResponse.json({ success: true, message: 'Encrypted ballot already accepted' });
+      }
       return NextResponse.json(
         { error: 'You have already voted in this election' },
         { status: 409 }
@@ -114,6 +121,45 @@ export async function POST(request: NextRequest) {
         { error: 'No questions found for this election' },
         { status: 400 }
       );
+    }
+
+    if (plebiscite.privacy_mode === 'encrypted') {
+      if (!encryptedBallotsEnabled) {
+        return NextResponse.json({ error: 'Encrypted ballot support is unavailable' }, { status: 503 });
+      }
+      if (votes !== undefined) {
+        return NextResponse.json({ error: 'This election accepts encrypted ballots only' }, { status: 400 });
+      }
+      const submissionId = body.submissionId;
+      const encryptedPackage = parseEncryptedPackage(body.encryptedPackage, Number(plebiscite.envelope_plaintext_bytes));
+      if (
+        typeof submissionId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/iu.test(submissionId) ||
+        body.manifestHash !== plebiscite.manifest_hash || !encryptedPackage
+      ) return NextResponse.json({ error: 'Invalid encrypted ballot envelope' }, { status: 400 });
+      const commitment = await sha256Base64Url(canonicalStringify(encryptedPackage));
+      if (body.commitment !== commitment) return NextResponse.json({ error: 'Encrypted ballot commitment mismatch' }, { status: 400 });
+
+      const acceptEncryptedBallot = db.transaction(() => {
+        const currentElection = db.prepare(
+          'SELECT status, close_date, close_state FROM plebiscites WHERE id = ?'
+        ).get(plebiscite.id) as any;
+        if (!currentElection || currentElection.status !== 'open' || votingClosedError(currentElection)) {
+          throw new ElectionClosedDuringSubmissionError('Voting has closed for this election');
+        }
+        db.prepare('INSERT INTO participation (plebiscite_id, voter_roll_id) VALUES (?, ?)')
+          .run(plebiscite.id, voter.id);
+        db.prepare(`
+          INSERT INTO encrypted_ballots
+            (submission_id, plebiscite_id, voter_roll_id, ciphertext_package, commitment)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(submissionId, plebiscite.id, voter.id, canonicalStringify(encryptedPackage), commitment);
+      });
+      acceptEncryptedBallot.immediate();
+      return NextResponse.json({ success: true, message: 'Encrypted ballot accepted', commitment });
+    }
+
+    if (!votes || typeof votes !== 'object' || Array.isArray(votes)) {
+      return NextResponse.json({ error: 'Votes are required' }, { status: 400 });
     }
 
     // Validate votes
@@ -240,7 +286,7 @@ export async function POST(request: NextRequest) {
       // is included in close-time shuffling, or close wins and this submission
       // is rejected without writing a partial ballot.
       const currentElection = db.prepare(
-        'SELECT status, close_date FROM plebiscites WHERE id = ?'
+        'SELECT status, close_date, close_state FROM plebiscites WHERE id = ?'
       ).get(participationData.plebisciteId) as { status: string; close_date: string } | undefined;
       if (!currentElection || currentElection.status !== 'open' || votingClosedError(currentElection)) {
         throw new ElectionClosedDuringSubmissionError('Voting has closed for this election');

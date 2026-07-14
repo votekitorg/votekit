@@ -4,6 +4,8 @@ import { getAdminSessionFromRequest, recordAdminAuditLog, requireAdminRole,
 } from '@/lib/auth';
 import db, { closePlebisciteWithPrivacyHardening, generateUniqueSlug } from '@/lib/db';
 import { parseElectionCloseDate, votingClosedError } from '@/lib/election-window';
+import { randomUUID } from 'crypto';
+import { buildAndHashEncryptedManifest, encryptedBallotsEnabled } from '@/lib/encrypted-election-server';
 
 const MAX_TITLE_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 20_000;
@@ -147,14 +149,15 @@ export async function POST(request: NextRequest) {
     const normalizedInfoUrl = typeof info_url === 'string' ? info_url.trim() || null : null;
     const slug = generateUniqueSlug(normalizedTitle);
     const createElection = db.transaction(() => {
+      const privacyMode = encryptedBallotsEnabled ? 'encrypted' : 'legacy';
       const result = db.prepare(`
-        INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, status)
-        VALUES (?, ?, ?, ?, ?, ?, 'draft')
-      `).run(slug, normalizedTitle, normalizedDescription, normalizedInfoUrl, open_date, close_date);
+        INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, status, privacy_mode)
+        VALUES (?, ?, ?, ?, ?, ?, 'draft', ?)
+      `).run(slug, normalizedTitle, normalizedDescription, normalizedInfoUrl, open_date, close_date, privacyMode);
       const plebisciteId = Number(result.lastInsertRowid);
       const createQuestion = db.prepare(`
-        INSERT INTO questions (plebiscite_id, title, description, type, options, display_order, preferential_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO questions (plebiscite_id, title, description, type, options, display_order, preferential_type, public_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       questions.forEach((question: any, index: number) => {
@@ -165,7 +168,8 @@ export async function POST(request: NextRequest) {
           question.type,
           JSON.stringify(question.options.map((option: string) => option.trim())),
           index,
-          question.preferentialType || 'compulsory'
+          question.preferentialType || 'compulsory',
+          randomUUID()
         );
       });
 
@@ -174,7 +178,7 @@ export async function POST(request: NextRequest) {
         action: 'plebiscite.create',
         targetType: 'plebiscite',
         targetId: plebisciteId,
-        details: { slug, title: normalizedTitle, questionCount: questions.length }
+        details: { slug, title: normalizedTitle, questionCount: questions.length, privacyMode }
       });
       return plebisciteId;
     });
@@ -262,6 +266,20 @@ export async function PUT(request: NextRequest) {
         );
       }
 
+      if (plebiscite.privacy_mode === 'encrypted') {
+        if (!encryptedBallotsEnabled) {
+          return NextResponse.json({ error: 'Encrypted ballots are disabled on this installation' }, { status: 409 });
+        }
+        const key = db.prepare('SELECT manifest_hash FROM encrypted_election_keys WHERE plebiscite_id = ?').get(id) as any;
+        const currentManifest = await buildAndHashEncryptedManifest(plebiscite);
+        if (!key || !plebiscite.manifest_hash || !plebiscite.recovery_confirmed_at) {
+          return NextResponse.json({ error: 'Prepare and save the encrypted ballot recovery kit before opening' }, { status: 409 });
+        }
+        if (key.manifest_hash !== currentManifest.manifestHash || plebiscite.manifest_hash !== currentManifest.manifestHash) {
+          return NextResponse.json({ error: 'Election details changed after key preparation. Prepare a new recovery kit.' }, { status: 409 });
+        }
+      }
+
       // Open plebiscite
       db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?')
         .run('open', id);
@@ -281,6 +299,13 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json(
           { error: 'Only open elections can be closed' },
           { status: 400 }
+        );
+      }
+
+      if (plebiscite.privacy_mode === 'encrypted') {
+        return NextResponse.json(
+          { error: 'Encrypted elections must be decrypted and shuffled in this browser before closing' },
+          { status: 409 }
         );
       }
 

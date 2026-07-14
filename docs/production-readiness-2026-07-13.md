@@ -9,6 +9,23 @@ release candidate rather than an approved production release. Code-level
 quality gates pass after the current hardening work. Operational cutover, a
 restore rehearsal, email-delivery verification, and owner UAT remain required.
 
+## Post-review status
+
+On 2026-07-13, release `v0.1.0` at commit
+`374040021379fa7a2d157b98edc8458f8b68ca00` was pushed and deployed. The
+workspace, public GitHub `main`, and production service were verified at that
+same commit. The March deployment findings below are retained as the historical
+review record.
+
+On 2026-07-14, an encrypted-until-shuffled privacy architecture was approved as
+the future direction and documented in `docs/encrypted-ballot-privacy-prd.md`
+and its linked threat model, technical design, implementation plan, and testing
+checklist. It is not implemented in `v0.1.0`. Until that work passes independent
+review and release gates, the trusted-live-database limitation described by the
+design remains a production risk for sensitive elections. A local implementation
+candidate now exists behind the disabled `VOTEKIT_ENCRYPTED_BALLOTS_ENABLED`
+feature flag; it has not been released or enabled on production.
+
 ## Confirmed improvements
 
 - Framework moved from vulnerable Next.js 14 to the patched 15.5 backport line.

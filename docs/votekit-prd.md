@@ -1,6 +1,6 @@
 # VoteKit Product Requirements Document
 
-Last updated: 2026-06-01
+Last updated: 2026-07-14
 
 ## Product Goal
 
@@ -62,6 +62,31 @@ Acceptable approaches may include:
 - Coarse-grained timestamps only where operationally necessary.
 - Batch insertion or shuffling before publication.
 - Removing session records once no longer needed.
+
+### Approved Encrypted-Until-Shuffled Direction
+
+For future encrypted elections, the approved product direction is to encrypt the
+complete ballot and its private receipt in the voter's browser. While the
+election is open, VoteKit and its backups may store only ciphertext and
+participation evidence. At closure, the trusted administrator's browser loads
+the complete frozen ballot set, unlocks the election key using an offline close
+secret, decrypts and cryptographically shuffles it in memory, removes all input
+identifiers, and returns only shuffled plaintext ballots.
+
+This standalone direction requires no cloud service, specialised hardware, or
+trustee ceremony. It preserves exact receipt-based verification and all existing
+voting methods after the shuffle. Voters may voluntarily disclose their receipt
+and ballot. The installed software and closing device are explicitly trusted.
+
+This architecture is not implemented in release `v0.1.0`. A later implementation
+candidate is protected by a disabled feature flag until review, rehearsal, and
+owner UAT are complete. The controlling design documents are:
+
+- `docs/encrypted-ballot-privacy-prd.md`
+- `docs/encrypted-ballot-threat-model.md`
+- `docs/encrypted-ballot-technical-design.md`
+- `docs/encrypted-ballot-implementation-plan.md`
+- `docs/encrypted-ballot-testing-checklist.md`
 
 ### Verification Scope
 
