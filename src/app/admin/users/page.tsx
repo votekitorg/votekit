@@ -22,8 +22,8 @@ export default async function AdminUsersPage() {
     <AdminLayout currentUser={adminSession}>
       <div className="space-y-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">People & Roles</h1>
-          <p className="text-gray-600">Invite people and delegate election authority safely.</p>
+          <h1 className="text-2xl font-bold text-gray-900">Organisation Roles</h1>
+          <p className="text-gray-600">Owners appoint Returning Officers. Admins and Observers are assigned inside each election.</p>
         </div>
 
         <AdminUsersManager users={users} invitations={invitations} currentUser={adminSession} />

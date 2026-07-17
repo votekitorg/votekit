@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { canManageElections, getAdminSessionFromCookies } from '@/lib/auth';
+import { canManageElections, getAdminSessionFromCookies, listAccessibleElectionIds, type AdminSession } from '@/lib/auth';
 import AdminLayout from '@/components/AdminLayout';
 import db from '@/lib/db';
 import Link from 'next/link';
@@ -20,7 +20,11 @@ interface Plebiscite {
 
 export const dynamic = 'force-dynamic';
 
-async function getDashboardData() {
+async function getDashboardData(session: AdminSession) {
+  const accessibleIds = listAccessibleElectionIds(session);
+  if (accessibleIds?.length === 0) return { plebiscites: [], stats: { totalPlebiscites: 0, totalVoters: 0, totalVotes: 0, activePlebiscites: 0 } };
+  const scope = accessibleIds ? `WHERE p.id IN (${accessibleIds.map(() => '?').join(',')})` : '';
+  const params = accessibleIds || [];
   // Get plebiscites with stats
   const plebiscites = db.prepare(`
     SELECT 
@@ -28,15 +32,19 @@ async function getDashboardData() {
       (SELECT COUNT(*) FROM participation WHERE plebiscite_id = p.id) as vote_count,
       (SELECT COUNT(*) FROM questions WHERE plebiscite_id = p.id) as question_count
     FROM plebiscites p
+    ${scope}
     ORDER BY p.created_at DESC
     LIMIT 10
-  `).all() as Plebiscite[];
+  `).all(...params) as Plebiscite[];
 
   // Get overall stats
-  const totalPlebiscites = db.prepare('SELECT COUNT(*) as count FROM plebiscites').get() as { count: number };
-  const totalVoters = db.prepare('SELECT COUNT(DISTINCT email) as count FROM voter_roll').get() as { count: number };
-  const totalVotes = db.prepare('SELECT COUNT(*) as count FROM participation').get() as { count: number };
-  const activePlebiscites = db.prepare("SELECT COUNT(*) as count FROM plebiscites WHERE status = 'open'").get() as { count: number };
+  const idScope = accessibleIds ? `WHERE id IN (${accessibleIds.map(() => '?').join(',')})` : '';
+  const childScope = accessibleIds ? `WHERE plebiscite_id IN (${accessibleIds.map(() => '?').join(',')})` : '';
+  const totalPlebiscites = db.prepare(`SELECT COUNT(*) as count FROM plebiscites ${idScope}`).get(...params) as { count: number };
+  const totalVoters = db.prepare(`SELECT COUNT(DISTINCT email) as count FROM voter_roll ${childScope}`).get(...params) as { count: number };
+  const totalVotes = db.prepare(`SELECT COUNT(*) as count FROM participation ${childScope}`).get(...params) as { count: number };
+  const activeWhere = accessibleIds ? `status = 'open' AND id IN (${accessibleIds.map(() => '?').join(',')})` : `status = 'open'`;
+  const activePlebiscites = db.prepare(`SELECT COUNT(*) as count FROM plebiscites WHERE ${activeWhere}`).get(...params) as { count: number };
 
   return {
     plebiscites,
@@ -80,7 +88,7 @@ export default async function AdminDashboard() {
     redirect('/admin/login');
   }
 
-  const { plebiscites, stats } = await getDashboardData();
+  const { plebiscites, stats } = await getDashboardData(adminSession);
   const canManage = canManageElections(adminSession.role);
 
   return (

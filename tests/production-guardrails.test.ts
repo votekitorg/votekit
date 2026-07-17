@@ -53,8 +53,8 @@ beforeAll(async () => {
   csrfGet = (await import('@/app/api/csrf/route')).GET;
 
   const adminId = Number(db.prepare(`
-    INSERT INTO admin_users (email, name, password_hash, role, active)
-    VALUES ('admin@example.com', 'Admin', 'test-hash', 'admin', 1)
+    INSERT INTO admin_users (email, name, password_hash, role, authority_role, active)
+    VALUES ('admin@example.com', 'Returning Officer', 'test-hash', 'admin', 'returning_officer', 1)
   `).run().lastInsertRowid);
   adminSessionId = 'production-guardrails-admin';
   db.prepare(`

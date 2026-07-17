@@ -17,7 +17,7 @@ A privacy-conscious, auditable online election platform for member organisations
 - **Condorcet**: Pairwise comparison with Schulze method fallback for cyclical preferences
 
 ### 👥 **Admin Management**
-- **Delegated Authority**: Owner, Returning Officer, Admin, and Observer roles
+- **Scoped Authority**: global Owners and Returning Officers, with election-specific Admins and Observers
 - **Secure Invitations**: Expiring single-use email invitations; recipients choose their own password
 - **Election Lifecycle**: Create → Open → Close → Results
 - **Voter Roll Management**: CSV upload and individual email management
@@ -204,7 +204,7 @@ For ranked choice questions, the platform implements proper IRV tabulation:
 
 ### Admin Security
 - Named admin accounts use bcrypt-hashed passwords and database-backed sessions
-- Privileged access follows the Owner → Returning Officer → Admin → Observer authority chain
+- Owners govern the organisation; Returning Officers can create elections; Admin and Observer access is assigned per election
 - Invitation secrets contain 256 random bits, are stored only as hashes, expire after 48 hours, and are single-use
 - Admin login attempts are rate-limited and audited
 - Mutating routes require double-submit-cookie CSRF protection

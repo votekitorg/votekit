@@ -11,6 +11,7 @@ interface InvitationPreview {
   roleLabel: string;
   expiresAt: string;
   inviter: string;
+  existingAccount: boolean;
 }
 
 export default function AcceptAdminInvitationPage() {
@@ -90,7 +91,7 @@ export default function AcceptAdminInvitationPage() {
           {status === 'complete' && <div>
             <div className="w-12 h-12 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-2xl">✓</div>
             <h2 className="mt-4 text-xl font-semibold text-gray-900">Your account is ready</h2>
-            <p className="mt-2 text-gray-600">Sign in with {invitation?.email} and the password you just created.</p>
+            <p className="mt-2 text-gray-600">Sign in with {invitation?.email} and {invitation?.existingAccount ? 'your existing password' : 'the password you just created'}.</p>
             <Link href="/admin/login" className="btn-primary mt-6 inline-block">Continue to sign in</Link>
           </div>}
 
@@ -103,16 +104,16 @@ export default function AcceptAdminInvitationPage() {
             </div>
             <form onSubmit={acceptInvitation} className="space-y-4">
               <div>
-                <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-1">Create password</label>
-                <input id="new-password" type="password" minLength={12} maxLength={128} required autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} className="input-field" placeholder="At least 12 characters" />
+                <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-1">{invitation.existingAccount ? 'Existing VoteKit password' : 'Create password'}</label>
+                <input id="new-password" type="password" minLength={12} maxLength={128} required autoComplete={invitation.existingAccount ? 'current-password' : 'new-password'} value={password} onChange={e => setPassword(e.target.value)} className="input-field" placeholder="At least 12 characters" />
               </div>
               <div>
                 <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
-                <input id="confirm-password" type="password" minLength={12} maxLength={128} required autoComplete="new-password" value={confirmation} onChange={e => setConfirmation(e.target.value)} className="input-field" />
+                <input id="confirm-password" type="password" minLength={12} maxLength={128} required autoComplete={invitation.existingAccount ? 'current-password' : 'new-password'} value={confirmation} onChange={e => setConfirmation(e.target.value)} className="input-field" />
               </div>
               {error && <div className="alert-error" role="alert">{error}</div>}
               <button type="submit" disabled={status === 'submitting'} className="btn-primary w-full">
-                {status === 'submitting' ? 'Creating your account...' : 'Accept invitation'}
+                {status === 'submitting' ? 'Accepting invitation...' : 'Accept invitation'}
               </button>
               <p className="text-xs text-gray-500 text-center">This single-use invitation expires {new Date(invitation.expiresAt).toLocaleString('en-AU')}.</p>
             </form>

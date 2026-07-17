@@ -224,7 +224,7 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Create New Election</h1>
-          <p className="text-gray-600">Follow these steps to set up your election</p>
+          <p className="text-gray-600">Follow these steps to set up your election. You will lead its election team and can invite Admins and Observers after creation.</p>
         </div>
 
         {/* Progress Steps */}

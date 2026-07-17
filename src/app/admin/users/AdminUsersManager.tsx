@@ -36,9 +36,9 @@ const roleLabels: Record<AdminRole, string> = {
 };
 
 const roleDescriptions: Record<Exclude<AdminRole, 'owner'>, string> = {
-  returning_officer: 'Runs elections and appoints Admins and Observers',
-  admin: 'Creates elections, manages voters, and closes polls',
-  observer: 'Can inspect elections and results without making changes'
+  returning_officer: 'Can create elections and lead election teams',
+  admin: 'Operates only elections they are assigned to',
+  observer: 'Read-only access only to assigned elections'
 };
 
 export default function AdminUsersManager({
@@ -51,9 +51,7 @@ export default function AdminUsersManager({
   currentUser: { adminUserId: number; role: AdminRole };
 }) {
   const router = useRouter();
-  const allowedRoles: Array<Exclude<AdminRole, 'owner'>> = currentUser.role === 'owner'
-    ? ['returning_officer', 'admin', 'observer']
-    : ['admin', 'observer'];
+  const allowedRoles: Array<Exclude<AdminRole, 'owner'>> = ['returning_officer'];
   const [form, setForm] = useState({ email: '', name: '', role: allowedRoles[0] });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -142,7 +140,7 @@ export default function AdminUsersManager({
           <div className="card-body">
             <div className="mb-6">
               <p className="text-xs font-semibold uppercase tracking-wider text-primary">Secure invitation</p>
-              <h2 className="mt-1 text-xl font-semibold text-gray-900">Invite someone to VoteKit</h2>
+              <h2 className="mt-1 text-xl font-semibold text-gray-900">Invite a Returning Officer</h2>
               <p className="mt-2 text-sm text-gray-600">They will receive a private 48-hour link and choose their own password. You never need to share credentials.</p>
             </div>
             <form onSubmit={sendInvitation} className="space-y-4">
@@ -170,12 +168,11 @@ export default function AdminUsersManager({
             </form>
           </div>
           <div className="bg-green-50 border-t lg:border-t-0 lg:border-l border-green-100 p-6">
-            <h3 className="font-semibold text-gray-900">Authority chain</h3>
+            <h3 className="font-semibold text-gray-900">How access works</h3>
             <div className="mt-4 space-y-3 text-sm">
               <div><strong>Owner</strong><p className="text-gray-600">Controls Returning Officers and all lower roles.</p></div>
-              <div><strong>Returning Officer</strong><p className="text-gray-600">Runs elections and appoints Admins.</p></div>
-              <div><strong>Admin</strong><p className="text-gray-600">Operates elections without managing privileged accounts.</p></div>
-              <div><strong>Observer</strong><p className="text-gray-600">Read-only oversight.</p></div>
+              <div><strong>Returning Officer</strong><p className="text-gray-600">Can create elections. They automatically lead elections they create.</p></div>
+              <div><strong>Election teams</strong><p className="text-gray-600">Returning Officers, Admins and Observers are assigned from inside each election.</p></div>
             </div>
           </div>
         </div>
@@ -203,7 +200,7 @@ export default function AdminUsersManager({
       )}
 
       <div className="card">
-        <div className="card-header"><h2 className="text-lg font-semibold text-gray-900">People with access</h2></div>
+        <div className="card-header"><h2 className="text-lg font-semibold text-gray-900">Organisation authority</h2></div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50"><tr>

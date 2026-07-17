@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   ADMIN_ROLE_LABELS,
-  canManageUsers,
   createAdminInvitation,
   getAdminSessionFromRequest,
   listPendingAdminInvitations,
@@ -33,7 +32,7 @@ async function deliverInvitation(
     const delivery = await sendAdminInvitationEmail({
       email: invitation.email,
       name: invitation.name,
-      roleLabel: ADMIN_ROLE_LABELS[invitation.role],
+      roleLabel: invitation.plebiscite_title ? `${ADMIN_ROLE_LABELS[invitation.role]} for ${invitation.plebiscite_title}` : ADMIN_ROLE_LABELS[invitation.role],
       invitationUrl,
       inviterName: actor.name || actor.email
     });
@@ -53,20 +52,19 @@ async function deliverInvitation(
 }
 
 function authorisedSession(request: NextRequest) {
-  const session = getAdminSessionFromRequest(request);
-  return session && canManageUsers(session.role) ? session : null;
+  return getAdminSessionFromRequest(request);
 }
 
 export async function GET(request: NextRequest) {
   const session = authorisedSession(request);
-  if (!session) return NextResponse.json({ error: 'Returning Officer or Owner role required' }, { status: 403 });
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   return NextResponse.json({ invitations: listPendingAdminInvitations(session) });
 }
 
 export async function POST(request: NextRequest) {
   if (!validateCSRFRequest(request)) return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
   const session = authorisedSession(request);
-  if (!session) return NextResponse.json({ error: 'Returning Officer or Owner role required' }, { status: 403 });
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
     const body = await request.json();
@@ -75,7 +73,8 @@ export async function POST(request: NextRequest) {
       : await createAdminInvitation({
           email: body.email,
           name: body.name,
-          role: body.role as AdminRole
+          role: body.role as AdminRole,
+          plebisciteId: body.plebisciteId ? Number(body.plebisciteId) : undefined
         }, session);
     const invitation = await deliverInvitation(result, session);
     return NextResponse.json({ success: true, invitation });
@@ -89,7 +88,7 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   if (!validateCSRFRequest(request)) return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
   const session = authorisedSession(request);
-  if (!session) return NextResponse.json({ error: 'Returning Officer or Owner role required' }, { status: 403 });
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
     const body = await request.json();

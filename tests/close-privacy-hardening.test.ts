@@ -93,6 +93,9 @@ beforeAll(async () => {
     INSERT INTO sessions (id, email, plebiscite_id, is_admin, admin_user_id, admin_role, expires_at)
     VALUES ('admin-session-1', 'admin@example.com', -1, 1, ?, 'admin', ?)
   `).run(adminUserId, futureIso());
+  db.prepare(`INSERT INTO election_team_members (plebiscite_id, admin_user_id, role, assigned_by_admin_user_id)
+    VALUES (?, ?, 'admin', ?), (?, ?, 'admin', ?)`
+  ).run(plebisciteA, adminUserId, adminUserId, plebisciteB, adminUserId, adminUserId);
 
   // Verification codes: used + unused for A, used for B.
   const insertCode = db.prepare('INSERT INTO verification_codes (email, plebiscite_id, code, expires_at, used) VALUES (?, ?, ?, ?, ?)');

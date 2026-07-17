@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { NextRequest } from 'next/server';
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'votekit-admin-roles-'));
 const databasePath = path.join(tmpDir, 'test.db');
@@ -63,6 +64,9 @@ describe('administrative role hierarchy and invitations', () => {
       .toContain("'returning_officer'");
     expect(db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'sessions'").get().sql)
       .not.toContain("'returning_officer'");
+    expect(db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'election_team_members'").get().sql)
+      .toContain("UNIQUE(plebiscite_id, admin_user_id)");
+    expect(db.prepare('PRAGMA table_info(admin_invitations)').all().some((column: any) => column.name === 'plebiscite_id')).toBe(true);
     expect(db.pragma('foreign_key_check')).toEqual([]);
     expect(auth.listAdminUsers()[0]).toMatchObject({ email: 'jud@example.com', role: 'owner' });
   });
@@ -88,26 +92,57 @@ describe('administrative role hierarchy and invitations', () => {
       .rejects.toThrow('invalid or has expired');
   });
 
-  it('enforces the Owner -> Returning Officer -> Admin/Observer authority chain', async () => {
+  it('separates organisation authority from election-specific Admin and Observer access', async () => {
     const owner = sessionFor('jud@example.com');
     const returningOfficer = sessionFor('returning@example.com');
 
     await expect(auth.createAdminInvitation({
       email: 'second-ro@example.com',
       role: 'returning_officer'
-    }, returningOfficer)).rejects.toThrow('cannot assign');
+    }, returningOfficer)).rejects.toThrow('Only an Owner');
+
+    const electionId = Number(db.prepare(`INSERT INTO plebiscites
+      (slug, title, description, open_date, close_date, status, created_by_admin_user_id)
+      VALUES ('scoped-access', 'Scoped Access', 'desc', '2026-01-01', '2030-01-01', 'draft', ?)`
+    ).run(returningOfficer.adminUserId).lastInsertRowid);
+    db.prepare(`INSERT INTO election_team_members (plebiscite_id, admin_user_id, role, assigned_by_admin_user_id)
+      VALUES (?, ?, 'returning_officer', ?)`
+    ).run(electionId, returningOfficer.adminUserId, returningOfficer.adminUserId);
 
     const adminInvite = await auth.createAdminInvitation({
       email: 'admin@example.com',
-      role: 'admin'
+      role: 'admin',
+      plebisciteId: electionId
     }, returningOfficer);
     await auth.acceptAdminInvitation(adminInvite.token, 'another long unique password');
     const admin = sessionFor('admin@example.com');
 
     await expect(auth.createAdminInvitation({
       email: 'observer@example.com',
-      role: 'observer'
+      role: 'observer',
+      plebisciteId: electionId
     }, admin)).rejects.toThrow('permission');
+
+    expect(auth.getElectionRole(admin, electionId)).toBe('admin');
+    const unrelatedElectionId = Number(db.prepare(`INSERT INTO plebiscites
+      (slug, title, description, open_date, close_date, status)
+      VALUES ('unrelated', 'Unrelated', 'desc', '2026-01-01', '2030-01-01', 'draft')`).run().lastInsertRowid);
+    expect(auth.canAccessElection(admin, unrelatedElectionId)).toBe(false);
+    expect(auth.canAccessElection(owner, unrelatedElectionId)).toBe(true);
+    expect(auth.canManageElectionTeam(admin, electionId)).toBe(false);
+
+    const adminSessionId = auth.createAdminSession({ id: admin.adminUserId, email: admin.email, role: admin.role });
+    const plebiscitesGet = (await import('@/app/api/admin/plebiscites/route')).GET;
+    const votersGet = (await import('@/app/api/admin/voters/route')).GET;
+    const scopedList = await plebiscitesGet(new NextRequest('http://localhost/api/admin/plebiscites', {
+      headers: { cookie: `admin-session=${adminSessionId}` }
+    }));
+    expect(scopedList.status).toBe(200);
+    expect((await scopedList.json()).plebiscites.map((election: any) => election.id)).toEqual([electionId]);
+    const unrelatedVoters = await votersGet(new NextRequest(`http://localhost/api/admin/voters?plebiscite_id=${unrelatedElectionId}`, {
+      headers: { cookie: `admin-session=${adminSessionId}` }
+    }));
+    expect(unrelatedVoters.status).toBe(403);
 
     await expect(auth.updateAdminUser(returningOfficer.adminUserId, { active: false }, returningOfficer))
       .rejects.toThrow('permission');

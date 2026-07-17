@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminSessionFromRequest, recordAdminAuditLog, requireAdminRole,
+import { canAccessElection, canManageElection, canManageElections, getAdminSessionFromRequest, listAccessibleElectionIds, recordAdminAuditLog,
   validateCSRFRequest
 } from '@/lib/auth';
 import db, { closePlebisciteWithPrivacyHardening, generateUniqueSlug } from '@/lib/db';
@@ -44,14 +44,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const accessibleIds = listAccessibleElectionIds(adminSession);
+    if (accessibleIds?.length === 0) return NextResponse.json({ plebiscites: [] });
+    const scope = accessibleIds ? `WHERE p.id IN (${accessibleIds.map(() => '?').join(',')})` : '';
     const plebiscites = db.prepare(`
       SELECT 
         p.*,
         (SELECT COUNT(*) FROM participation WHERE plebiscite_id = p.id) as vote_count,
         (SELECT COUNT(*) FROM questions WHERE plebiscite_id = p.id) as question_count
       FROM plebiscites p
+      ${scope}
       ORDER BY p.created_at DESC
-    `).all();
+    `).all(...(accessibleIds || []));
 
     return NextResponse.json({ plebiscites });
   } catch (error) {
@@ -73,8 +77,8 @@ export async function POST(request: NextRequest) {
   if (!adminSession) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  if (!requireAdminRole(adminSession)) {
-    return NextResponse.json({ error: 'Admin role required' }, { status: 403 });
+  if (!canManageElections(adminSession.role)) {
+    return NextResponse.json({ error: 'Owner or Returning Officer role required' }, { status: 403 });
   }
 
   try {
@@ -151,10 +155,15 @@ export async function POST(request: NextRequest) {
     const createElection = db.transaction(() => {
       const privacyMode = encryptedBallotsEnabled ? 'encrypted' : 'legacy';
       const result = db.prepare(`
-        INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, status, privacy_mode)
-        VALUES (?, ?, ?, ?, ?, ?, 'draft', ?)
-      `).run(slug, normalizedTitle, normalizedDescription, normalizedInfoUrl, open_date, close_date, privacyMode);
+        INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, status, privacy_mode, created_by_admin_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?)
+      `).run(slug, normalizedTitle, normalizedDescription, normalizedInfoUrl, open_date, close_date, privacyMode, adminSession.adminUserId);
       const plebisciteId = Number(result.lastInsertRowid);
+      if (adminSession.role === 'returning_officer') {
+        db.prepare(`INSERT INTO election_team_members (plebiscite_id, admin_user_id, role, assigned_by_admin_user_id)
+          VALUES (?, ?, 'returning_officer', ?)`
+        ).run(plebisciteId, adminSession.adminUserId, adminSession.adminUserId);
+      }
       const createQuestion = db.prepare(`
         INSERT INTO questions (plebiscite_id, title, description, type, options, display_order, preferential_type, public_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -217,9 +226,6 @@ export async function PUT(request: NextRequest) {
   if (!adminSession) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  if (!requireAdminRole(adminSession)) {
-    return NextResponse.json({ error: 'Admin role required' }, { status: 403 });
-  }
 
   try {
     const body = await request.json();
@@ -230,6 +236,9 @@ export async function PUT(request: NextRequest) {
         { error: 'Election ID is required' },
         { status: 400 }
       );
+    }
+    if (!canManageElection(adminSession, Number(id))) {
+      return NextResponse.json({ error: 'You do not have permission to manage this election' }, { status: 403 });
     }
 
     // Get current plebiscite
@@ -404,9 +413,6 @@ export async function DELETE(request: NextRequest) {
   if (!adminSession) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  if (!requireAdminRole(adminSession)) {
-    return NextResponse.json({ error: 'Admin role required' }, { status: 403 });
-  }
 
   try {
     const url = new URL(request.url);
@@ -417,6 +423,9 @@ export async function DELETE(request: NextRequest) {
         { error: 'Election ID is required' },
         { status: 400 }
       );
+    }
+    if (!canManageElection(adminSession, Number(id))) {
+      return NextResponse.json({ error: 'You do not have permission to manage this election' }, { status: 403 });
     }
 
     // Check if plebiscite exists and has no votes

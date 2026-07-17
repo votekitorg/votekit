@@ -15,8 +15,8 @@ interface AdminLayoutProps {
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: 'home', roles: ['owner', 'returning_officer', 'admin', 'observer'] },
-  { name: 'Create Election', href: '/admin/plebiscites/new', icon: 'plus', roles: ['owner', 'returning_officer', 'admin'] },
-  { name: 'People & Roles', href: '/admin/users', icon: 'users', roles: ['owner', 'returning_officer'] },
+  { name: 'Create Election', href: '/admin/plebiscites/new', icon: 'plus', roles: ['owner', 'returning_officer'] },
+  { name: 'Organisation Roles', href: '/admin/users', icon: 'users', roles: ['owner'] },
 ];
 
 const roleLabels = {

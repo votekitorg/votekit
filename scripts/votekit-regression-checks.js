@@ -104,7 +104,7 @@ assert(!auth.includes('const csrfTokens') && !auth.includes('validateCSRFToken('
 assert(verifyRoute.includes('NEUTRAL_VERIFICATION_MESSAGE'), 'verification route uses neutral eligibility response');
 assert(verifyRoute.includes('ipRateLimitKey') && verifyRoute.includes('globalRateLimitKey'), 'verification requests are throttled by IP and global buckets as well as email');
 assert(verifyRoute.includes('incrementRateLimitKey(ipRateLimitKey)') && verifyRoute.includes('incrementRateLimitKey(globalRateLimitKey)'), 'verification route counts requests against IP and global throttles');
-assert(adminVotersRoute.includes('requireAdminRole(adminSession)'), 'observer sessions cannot read voter-roll PII');
+assert(adminVotersRoute.includes('canManageElection(adminSession'), 'unassigned and observer sessions cannot read voter-roll PII');
 assert(adminVotersRoute.includes('voter roll is locked once an election opens'), 'voter-roll mutations are frozen after opening');
 assert(db.includes('DELETE FROM verification_codes WHERE plebiscite_id = ?'), 'close cleanup purges all verification codes for the plebiscite');
 assert(db.includes('DELETE FROM voter_verification_attempts WHERE plebiscite_id = ?'), 'close cleanup purges voter verification attempts');

@@ -139,12 +139,14 @@ If any automatic tie-break rule is implemented, it must be documented, determini
 
 ## Administrative roles and invitations
 
-VoteKit uses four administrative roles: Owner, Returning Officer, Admin, and
-Observer. Owners govern privileged access; Returning Officers operate elections
-and appoint Admins; Admins operate elections; Observers are read-only. New users
-join through expiring, single-use email invitations and choose their own
-credentials. See `role-and-invitation-design.md` for the permission matrix,
-workflow, and authentication decision.
+VoteKit uses four administrative roles across two access layers. Owners govern
+the organisation and can see every election. Returning Officers are global
+roles who can create elections, but operate only elections they create or are
+assigned to. Admins operate assigned elections only; Observers have read-only
+access to assigned elections only. New users join through expiring, single-use
+email invitations and choose their own credentials. See
+`role-and-invitation-design.md` for the permission matrix, workflow, and
+authentication decision.
 
 ## Non-Functional Requirements
 

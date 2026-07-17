@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { canManageElections, getAdminSessionFromCookies } from '@/lib/auth';
+import { canAccessElection, canManageElection, canManageElectionTeam, getAdminSessionFromCookies, listAdminUsers, listElectionTeam, listPendingAdminInvitations } from '@/lib/auth';
 import AdminLayout from '@/components/AdminLayout';
 import db from '@/lib/db';
 import Link from 'next/link';
@@ -7,6 +7,7 @@ import PlebisciteManager from './PlebisciteManager';
 import ElectionVoterManager from '@/components/ElectionVoterManager';
 import { parseElectionCloseDate } from '@/lib/election-window';
 import { buildEncryptedManifest, encryptedBallotsEnabled } from '@/lib/encrypted-election-server';
+import ElectionTeamManager from '@/components/ElectionTeamManager';
 
 interface Plebiscite {
   id: number;
@@ -136,7 +137,10 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
   if (!adminSession) {
     redirect('/admin/login');
   }
-  const canManage = canManageElections(adminSession.role);
+  const electionId = Number(id);
+  if (!electionId || !canAccessElection(adminSession, electionId)) redirect('/admin');
+  const canManage = canManageElection(adminSession, electionId);
+  const canManageTeam = canManageElectionTeam(adminSession, electionId);
 
   const data = await getPlebiscite(id);
   
@@ -145,6 +149,12 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
   }
 
   const { plebiscite, questions, stats } = data;
+  const team = listElectionTeam(electionId);
+  const returningOfficers = listAdminUsers().filter(user => user.role === 'returning_officer' && user.active)
+    .map(user => ({ id: user.id, email: user.email, name: user.name }));
+  const pendingInvitations = canManageTeam
+    ? listPendingAdminInvitations(adminSession).filter(invitation => invitation.plebiscite_id === electionId)
+    : [];
   const statusInfo = getStatusInfo(plebiscite);
 
   return (
@@ -186,6 +196,8 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
             )}
           </div>
         </div>
+
+        <ElectionTeamManager plebisciteId={electionId} members={team} returningOfficers={returningOfficers} pendingInvitations={pendingInvitations} canManage={canManageTeam} />
 
         {/* Voter Roll Warning */}
         {stats.totalVoters === 0 && (

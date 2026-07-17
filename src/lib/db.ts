@@ -404,7 +404,31 @@ function runAdministrativeRoleMigrations(database: Database.Database): void {
       CREATE INDEX IF NOT EXISTS idx_admin_invitations_email ON admin_invitations(email);
       CREATE INDEX IF NOT EXISTS idx_admin_invitations_token ON admin_invitations(token_hash);
       CREATE INDEX IF NOT EXISTS idx_admin_invitations_expires ON admin_invitations(expires_at);
+
+      CREATE TABLE IF NOT EXISTS election_team_members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        plebiscite_id INTEGER NOT NULL,
+        admin_user_id INTEGER NOT NULL,
+        role TEXT CHECK(role IN ('returning_officer', 'admin', 'observer')) NOT NULL,
+        assigned_by_admin_user_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(plebiscite_id, admin_user_id),
+        FOREIGN KEY (plebiscite_id) REFERENCES plebiscites(id) ON DELETE CASCADE,
+        FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE CASCADE,
+        FOREIGN KEY (assigned_by_admin_user_id) REFERENCES admin_users(id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_election_team_user ON election_team_members(admin_user_id);
+      CREATE INDEX IF NOT EXISTS idx_election_team_election ON election_team_members(plebiscite_id);
     `);
+
+    if (!hasColumn(database, 'plebiscites', 'created_by_admin_user_id')) {
+      database.exec('ALTER TABLE plebiscites ADD COLUMN created_by_admin_user_id INTEGER REFERENCES admin_users(id) ON DELETE SET NULL');
+    }
+    if (!hasColumn(database, 'admin_invitations', 'plebiscite_id')) {
+      database.exec('ALTER TABLE admin_invitations ADD COLUMN plebiscite_id INTEGER REFERENCES plebiscites(id) ON DELETE CASCADE');
+      database.exec('CREATE INDEX IF NOT EXISTS idx_admin_invitations_election ON admin_invitations(plebiscite_id)');
+    }
 
     const ownerCount = database.prepare("SELECT COUNT(*) AS count FROM admin_users WHERE authority_role = 'owner' AND active = 1")
       .get() as { count: number };
@@ -419,6 +443,23 @@ function runAdministrativeRoleMigrations(database: Database.Database): void {
         )
       `).run();
     }
+
+    // v0.3 roles were organisation-wide. Seed every existing election with the
+    // same access before enforcing election scopes, making the migration lossless.
+    database.exec(`
+      INSERT OR IGNORE INTO election_team_members
+        (plebiscite_id, admin_user_id, role, assigned_by_admin_user_id)
+      SELECT p.id, u.id,
+        CASE u.authority_role
+          WHEN 'returning_officer' THEN 'returning_officer'
+          WHEN 'admin' THEN 'admin'
+          ELSE 'observer'
+        END,
+        (SELECT id FROM admin_users WHERE authority_role = 'owner' ORDER BY id LIMIT 1)
+      FROM plebiscites p
+      CROSS JOIN admin_users u
+      WHERE u.active = 1 AND u.authority_role IN ('returning_officer', 'admin', 'observer');
+    `);
   });
 
   migrateRoles();

@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   if (!canManageUsers(adminSession.role)) {
-    return NextResponse.json({ error: 'Returning Officer or Owner role required' }, { status: 403 });
+    return NextResponse.json({ error: 'Owner role required' }, { status: 403 });
   }
 
   return NextResponse.json({ users: listAdminUsers() });
@@ -31,7 +31,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   if (!canManageUsers(adminSession.role)) {
-    return NextResponse.json({ error: 'Returning Officer or Owner role required' }, { status: 403 });
+    return NextResponse.json({ error: 'Owner role required' }, { status: 403 });
   }
 
   try {

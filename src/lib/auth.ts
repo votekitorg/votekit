@@ -50,7 +50,13 @@ export interface AdminInvitation {
   created_at: string;
   invited_by_name: string | null;
   invited_by_email: string;
+  plebiscite_id: number | null;
+  plebiscite_title: string | null;
+  existing_account: boolean;
 }
+
+export type ElectionRole = 'returning_officer' | 'admin' | 'observer';
+export interface ElectionTeamMember extends AdminUser { electionRole: ElectionRole; }
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -61,21 +67,20 @@ function isAdminRole(role: string): role is AdminRole {
 }
 
 export function canManageElections(role: AdminRole): boolean {
-  return ELECTION_MANAGEMENT_ROLES.includes(role);
+  return role === 'owner' || role === 'returning_officer';
 }
 
 export function canManageUsers(role: AdminRole): boolean {
-  return role === 'owner' || role === 'returning_officer';
+  return role === 'owner';
 }
 
 export function canAssignRole(actorRole: AdminRole, targetRole: AdminRole): boolean {
   if (targetRole === 'owner') return false;
-  if (actorRole === 'owner') return true;
-  return actorRole === 'returning_officer' && (targetRole === 'admin' || targetRole === 'observer');
+  return actorRole === 'owner' && targetRole === 'returning_officer';
 }
 
 export function canManageUserRole(actorRole: AdminRole, targetRole: AdminRole): boolean {
-  return canAssignRole(actorRole, targetRole);
+  return actorRole === 'owner' && targetRole !== 'owner';
 }
 
 function legacyRoleForAuthority(role: AdminRole): 'admin' | 'observer' {
@@ -274,6 +279,7 @@ export function listAdminUsers(): AdminUser[] {
   const users = db.prepare(`
     SELECT id, email, name, role, authority_role, active, created_at, updated_at, last_login_at
     FROM admin_users
+    WHERE authority_role IN ('owner', 'returning_officer')
     ORDER BY CASE authority_role
       WHEN 'owner' THEN 0
       WHEN 'returning_officer' THEN 1
@@ -293,7 +299,10 @@ function publicAdminInvitation(invitation: any): AdminInvitation {
     expires_at: invitation.expires_at,
     created_at: invitation.created_at,
     invited_by_name: invitation.invited_by_name ?? null,
-    invited_by_email: invitation.invited_by_email
+    invited_by_email: invitation.invited_by_email,
+    plebiscite_id: invitation.plebiscite_id ?? null,
+    plebiscite_title: invitation.plebiscite_title ?? null,
+    existing_account: Boolean(invitation.existing_account)
   };
 }
 
@@ -309,13 +318,18 @@ export async function createAdminInvitation(input: {
   email: string;
   name?: string;
   role: AdminRole;
+  plebisciteId?: number;
 }, actor: AdminSession): Promise<{ invitation: AdminInvitation; token: string }> {
   await ensureBootstrapAdminUser();
-  if (!canManageUsers(actor.role)) throw new Error('You do not have permission to invite users');
   if (typeof input.email !== 'string') throw new Error('A valid email address is required');
   if (input.name !== undefined && typeof input.name !== 'string') throw new Error('Name must be text');
   validateInvitationRole(input.role);
-  if (!canAssignRole(actor.role, input.role)) throw new Error('You cannot assign that role');
+  const isOrganisationInvite = input.role === 'returning_officer';
+  if (isOrganisationInvite) {
+    if (actor.role !== 'owner' || input.plebisciteId) throw new Error('Only an Owner can invite Returning Officers');
+  } else {
+    if (!input.plebisciteId || !canManageElectionTeam(actor, input.plebisciteId)) throw new Error('You do not have permission to invite people to this election');
+  }
 
   const email = normalizeEmail(input.email);
   if (!email || email.length > 254 || !/^\S+@\S+\.\S+$/.test(email)) {
@@ -324,9 +338,9 @@ export async function createAdminInvitation(input: {
 
   const existing = db.prepare('SELECT id, role, authority_role, active FROM admin_users WHERE email = ?').get(email) as
     { id: number; role: 'admin' | 'observer'; authority_role: AdminRole | null; active: number } | undefined;
-  if (existing?.active) throw new Error('An active account with that email already exists');
+  if (existing?.active && isOrganisationInvite) throw new Error('An active account with that email already exists');
   const existingAuthority = existing?.authority_role || existing?.role;
-  if (existingAuthority && !canManageUserRole(actor.role, existingAuthority)) {
+  if (existing && !existing.active && existingAuthority && !canManageUserRole(actor.role, existingAuthority)) {
     throw new Error('You do not have permission to reactivate this account');
   }
 
@@ -337,20 +351,22 @@ export async function createAdminInvitation(input: {
   const create = db.transaction(() => {
     db.prepare(`
       UPDATE admin_invitations SET revoked_at = CURRENT_TIMESTAMP
-      WHERE email = ? AND accepted_at IS NULL AND revoked_at IS NULL
-    `).run(email);
+      WHERE email = ? AND role = ? AND plebiscite_id IS ? AND accepted_at IS NULL AND revoked_at IS NULL
+    `).run(email, input.role, input.plebisciteId ?? null);
     return db.prepare(`
       INSERT INTO admin_invitations
-        (email, name, role, token_hash, expires_at, invited_by_admin_user_id)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(email, input.name?.trim().slice(0, 200) || null, input.role, tokenHash, expiresAt, actor.adminUserId);
+        (email, name, role, token_hash, expires_at, invited_by_admin_user_id, plebiscite_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(email, input.name?.trim().slice(0, 200) || null, input.role, tokenHash, expiresAt, actor.adminUserId, input.plebisciteId ?? null);
   });
 
   const result = create();
   const invitation = db.prepare(`
-    SELECT i.*, u.name AS invited_by_name, u.email AS invited_by_email
+    SELECT i.*, u.name AS invited_by_name, u.email AS invited_by_email, p.title AS plebiscite_title,
+      EXISTS(SELECT 1 FROM admin_users existing WHERE existing.email = i.email AND existing.active = 1) AS existing_account
     FROM admin_invitations i
     JOIN admin_users u ON u.id = i.invited_by_admin_user_id
+    LEFT JOIN plebiscites p ON p.id = i.plebiscite_id
     WHERE i.id = ?
   `).get(result.lastInsertRowid) as any;
 
@@ -358,23 +374,28 @@ export async function createAdminInvitation(input: {
 }
 
 export function listPendingAdminInvitations(actor: AdminSession): AdminInvitation[] {
-  if (!canManageUsers(actor.role)) return [];
   const rows = db.prepare(`
-    SELECT i.*, u.name AS invited_by_name, u.email AS invited_by_email
+    SELECT i.*, u.name AS invited_by_name, u.email AS invited_by_email, p.title AS plebiscite_title,
+      EXISTS(SELECT 1 FROM admin_users existing WHERE existing.email = i.email AND existing.active = 1) AS existing_account
     FROM admin_invitations i
     JOIN admin_users u ON u.id = i.invited_by_admin_user_id
+    LEFT JOIN plebiscites p ON p.id = i.plebiscite_id
     WHERE i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > ?
     ORDER BY i.created_at DESC
   `).all(new Date().toISOString()) as any[];
-  return rows.filter(row => canManageUserRole(actor.role, row.role)).map(publicAdminInvitation);
+  return rows.filter(row => row.role === 'returning_officer'
+    ? actor.role === 'owner'
+    : row.plebiscite_id && canManageElectionTeam(actor, row.plebiscite_id)).map(publicAdminInvitation);
 }
 
 export function getAdminInvitationByToken(token: string): AdminInvitation | null {
   if (typeof token !== 'string' || token.length < 40 || token.length > 128) return null;
   const row = db.prepare(`
-    SELECT i.*, u.name AS invited_by_name, u.email AS invited_by_email
+    SELECT i.*, u.name AS invited_by_name, u.email AS invited_by_email, p.title AS plebiscite_title,
+      EXISTS(SELECT 1 FROM admin_users existing WHERE existing.email = i.email AND existing.active = 1) AS existing_account
     FROM admin_invitations i
     JOIN admin_users u ON u.id = i.invited_by_admin_user_id
+    LEFT JOIN plebiscites p ON p.id = i.plebiscite_id
     WHERE i.token_hash = ? AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > ?
   `).get(invitationTokenHash(token), new Date().toISOString()) as any | undefined;
   return row ? publicAdminInvitation(row) : null;
@@ -388,6 +409,10 @@ export async function acceptAdminInvitation(token: string, password: string): Pr
   }
   const passwordHash = await bcrypt.hash(password, 12);
   const tokenHash = invitationTokenHash(token);
+  const activeExisting = db.prepare('SELECT password_hash FROM admin_users WHERE email = ? AND active = 1').get(invitation.email) as { password_hash:string } | undefined;
+  if (activeExisting && !(await bcrypt.compare(password, activeExisting.password_hash))) {
+    throw new Error('Enter your existing VoteKit password to accept this invitation');
+  }
 
   const accept = db.transaction(() => {
     const current = db.prepare(`
@@ -399,20 +424,32 @@ export async function acceptAdminInvitation(token: string, password: string): Pr
     const existing = db.prepare('SELECT * FROM admin_users WHERE email = ?').get(current.email) as any | undefined;
     let userId: number;
     if (existing) {
-      if (existing.active) throw new Error('This account is already active');
-      db.prepare(`
-        UPDATE admin_users
-        SET name = ?, password_hash = ?, role = ?, authority_role = ?, active = 1,
-            updated_at = CURRENT_TIMESTAMP, last_login_at = NULL
-        WHERE id = ?
-      `).run(current.name, passwordHash, legacyRoleForAuthority(current.role), current.role, existing.id);
-      userId = existing.id;
+      if (existing.active && !current.plebiscite_id) throw new Error('This account is already active');
+      if (existing.active) {
+        userId = existing.id;
+      } else {
+        db.prepare(`
+          UPDATE admin_users
+          SET name = ?, password_hash = ?, role = ?, authority_role = ?, active = 1,
+              updated_at = CURRENT_TIMESTAMP, last_login_at = NULL
+          WHERE id = ?
+        `).run(current.name, passwordHash, legacyRoleForAuthority(current.role), current.role, existing.id);
+        userId = existing.id;
+      }
     } else {
       const created = db.prepare(`
         INSERT INTO admin_users (email, name, password_hash, role, authority_role, active)
         VALUES (?, ?, ?, ?, ?, 1)
       `).run(current.email, current.name, passwordHash, legacyRoleForAuthority(current.role), current.role);
       userId = Number(created.lastInsertRowid);
+    }
+
+    if (current.plebiscite_id) {
+      db.prepare(`INSERT INTO election_team_members
+        (plebiscite_id, admin_user_id, role, assigned_by_admin_user_id)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(plebiscite_id, admin_user_id) DO UPDATE SET role = excluded.role, updated_at = CURRENT_TIMESTAMP
+      `).run(current.plebiscite_id, userId, current.role, current.invited_by_admin_user_id);
     }
 
     const updated = db.prepare(`
@@ -432,7 +469,7 @@ export async function acceptAdminInvitation(token: string, password: string): Pr
     action: 'admin_invitation.accept',
     targetType: 'admin_user',
     targetId: user.id,
-    details: { role: user.role }
+    details: { role: invitation.role, plebisciteId: invitation.plebiscite_id }
   });
   return user;
 }
@@ -445,7 +482,7 @@ export function revokeAdminInvitation(id: number, actor: AdminSession): AdminInv
     WHERE i.id = ? AND i.accepted_at IS NULL AND i.revoked_at IS NULL
   `).get(id) as any | undefined;
   if (!row) throw new Error('Pending invitation not found');
-  if (!canManageUserRole(actor.role, row.role)) throw new Error('You cannot revoke this invitation');
+  if (row.role === 'returning_officer' ? actor.role !== 'owner' : !row.plebiscite_id || !canManageElectionTeam(actor, row.plebiscite_id)) throw new Error('You cannot revoke this invitation');
   db.prepare('UPDATE admin_invitations SET revoked_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
   return publicAdminInvitation(row);
 }
@@ -456,8 +493,41 @@ export async function replaceAdminInvitation(id: number, actor: AdminSession): P
     WHERE id = ? AND accepted_at IS NULL AND revoked_at IS NULL
   `).get(id) as any | undefined;
   if (!row) throw new Error('Pending invitation not found');
-  if (!canManageUserRole(actor.role, row.role)) throw new Error('You cannot resend this invitation');
-  return createAdminInvitation({ email: row.email, name: row.name || undefined, role: row.role }, actor);
+  if (row.role === 'returning_officer' ? actor.role !== 'owner' : !row.plebiscite_id || !canManageElectionTeam(actor, row.plebiscite_id)) throw new Error('You cannot resend this invitation');
+  return createAdminInvitation({ email: row.email, name: row.name || undefined, role: row.role, plebisciteId: row.plebiscite_id || undefined }, actor);
+}
+
+export function getElectionRole(session: AdminSession, plebisciteId: number): AdminRole | null {
+  if (session.role === 'owner') return 'owner';
+  const row = db.prepare('SELECT role FROM election_team_members WHERE plebiscite_id = ? AND admin_user_id = ?')
+    .get(plebisciteId, session.adminUserId) as { role: ElectionRole } | undefined;
+  return row?.role || null;
+}
+
+export function canAccessElection(session: AdminSession, plebisciteId: number): boolean {
+  return getElectionRole(session, plebisciteId) !== null;
+}
+
+export function canManageElection(session: AdminSession, plebisciteId: number): boolean {
+  const role = getElectionRole(session, plebisciteId);
+  return role === 'owner' || role === 'returning_officer' || role === 'admin';
+}
+
+export function canManageElectionTeam(session: AdminSession, plebisciteId: number): boolean {
+  const role = getElectionRole(session, plebisciteId);
+  return role === 'owner' || role === 'returning_officer';
+}
+
+export function listElectionTeam(plebisciteId: number): ElectionTeamMember[] {
+  return (db.prepare(`SELECT u.*, etm.role AS election_role FROM election_team_members etm
+    JOIN admin_users u ON u.id = etm.admin_user_id WHERE etm.plebiscite_id = ?
+    ORDER BY CASE etm.role WHEN 'returning_officer' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, u.email`).all(plebisciteId) as any[])
+    .map(row => ({ ...publicAdminUser(row), electionRole: row.election_role }));
+}
+
+export function listAccessibleElectionIds(session: AdminSession): number[] | null {
+  if (session.role === 'owner') return null;
+  return (db.prepare('SELECT plebiscite_id FROM election_team_members WHERE admin_user_id = ?').all(session.adminUserId) as Array<{plebiscite_id:number}>).map(r => r.plebiscite_id);
 }
 
 export function requireAdminRole(session: AdminSession | null, allowed: AdminRole[] = ELECTION_MANAGEMENT_ROLES): AdminSession | null {

@@ -22,7 +22,8 @@ export async function POST(request: NextRequest) {
           email: invitation.email,
           name: invitation.name,
           role: invitation.role,
-          roleLabel: ADMIN_ROLE_LABELS[invitation.role],
+          roleLabel: invitation.plebiscite_title ? `${ADMIN_ROLE_LABELS[invitation.role]} for ${invitation.plebiscite_title}` : ADMIN_ROLE_LABELS[invitation.role],
+          existingAccount: invitation.existing_account,
           expiresAt: invitation.expires_at,
           inviter: invitation.invited_by_name || invitation.invited_by_email
         }

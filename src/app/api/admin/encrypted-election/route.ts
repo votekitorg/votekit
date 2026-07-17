@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
-import { getAdminSessionFromRequest, recordAdminAuditLog, requireAdminRole, validateCSRFRequest } from '@/lib/auth';
+import { canManageElection, getAdminSessionFromRequest, recordAdminAuditLog, validateCSRFRequest } from '@/lib/auth';
 import {
   canonicalStringify,
   DEFAULT_ENVELOPE_PLAINTEXT_BYTES,
@@ -15,8 +15,7 @@ import { buildAndHashEncryptedManifest, buildEncryptedManifest, encryptedBallots
 const BASE64URL = /^[A-Za-z0-9_-]+$/u;
 
 function adminFor(request: NextRequest) {
-  const session = getAdminSessionFromRequest(request);
-  return session && requireAdminRole(session) ? session : null;
+  return getAdminSessionFromRequest(request);
 }
 
 export async function POST(request: NextRequest) {
@@ -30,6 +29,7 @@ export async function POST(request: NextRequest) {
     const id = Number(body?.id);
     const action = body?.action;
     if (!Number.isSafeInteger(id) || id <= 0) return NextResponse.json({ error: 'Election ID is required' }, { status: 400 });
+    if (!canManageElection(admin, id)) return NextResponse.json({ error: 'You do not have permission to manage this election' }, { status: 403 });
     const plebiscite = db.prepare('SELECT * FROM plebiscites WHERE id = ?').get(id) as any;
     if (!plebiscite) return NextResponse.json({ error: 'Election not found' }, { status: 404 });
 
