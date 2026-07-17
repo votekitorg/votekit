@@ -62,6 +62,9 @@ describe('admin login hardening and audit logging', () => {
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
+    expect(body.user.role).toBe('owner');
+    expect(db.prepare('SELECT role, authority_role FROM admin_users WHERE email = ?').get('admin@example.com'))
+      .toMatchObject({ role: 'admin', authority_role: 'owner' });
 
     const audit = db.prepare(`
       SELECT action, target_type, target_id, details

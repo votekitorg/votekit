@@ -337,6 +337,7 @@ function runMigrations() {
   
   migrate();
   runPrivacyMigrations(database);
+  runAdministrativeRoleMigrations(database);
 }
 
 function tableInfo(database: Database.Database, tableName: string): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {
@@ -369,6 +370,58 @@ function runPrivacyMigrations(database: Database.Database): void {
       database.pragma('foreign_keys = ON');
     }
   }
+}
+
+function runAdministrativeRoleMigrations(database: Database.Database): void {
+  const migrateRoles = database.transaction(() => {
+    if (!hasColumn(database, 'admin_users', 'authority_role')) {
+      database.exec(`
+        ALTER TABLE admin_users ADD COLUMN authority_role TEXT
+          CHECK(authority_role IN ('owner', 'returning_officer', 'admin', 'observer'));
+      `);
+    }
+
+    database.exec(`
+      UPDATE admin_users
+      SET authority_role = CASE role WHEN 'admin' THEN 'admin' ELSE 'observer' END
+      WHERE authority_role IS NULL;
+
+      CREATE TABLE IF NOT EXISTS admin_invitations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL,
+        name TEXT,
+        role TEXT CHECK(role IN ('returning_officer', 'admin', 'observer')) NOT NULL,
+        token_hash TEXT UNIQUE NOT NULL,
+        expires_at DATETIME NOT NULL,
+        invited_by_admin_user_id INTEGER NOT NULL,
+        accepted_by_admin_user_id INTEGER,
+        accepted_at DATETIME,
+        revoked_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (invited_by_admin_user_id) REFERENCES admin_users(id) ON DELETE RESTRICT,
+        FOREIGN KEY (accepted_by_admin_user_id) REFERENCES admin_users(id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_admin_invitations_email ON admin_invitations(email);
+      CREATE INDEX IF NOT EXISTS idx_admin_invitations_token ON admin_invitations(token_hash);
+      CREATE INDEX IF NOT EXISTS idx_admin_invitations_expires ON admin_invitations(expires_at);
+    `);
+
+    const ownerCount = database.prepare("SELECT COUNT(*) AS count FROM admin_users WHERE authority_role = 'owner' AND active = 1")
+      .get() as { count: number };
+    if (ownerCount.count === 0) {
+      database.prepare(`
+        UPDATE admin_users
+        SET role = 'admin', authority_role = 'owner', active = 1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = (
+          SELECT id FROM admin_users
+          ORDER BY active DESC, CASE role WHEN 'admin' THEN 0 ELSE 1 END, id ASC
+          LIMIT 1
+        )
+      `).run();
+    }
+  });
+
+  migrateRoles();
 }
 
 function migrateQuestionsConstraint(database: Database.Database): void {

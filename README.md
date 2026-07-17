@@ -17,7 +17,8 @@ A privacy-conscious, auditable online election platform for member organisations
 - **Condorcet**: Pairwise comparison with Schulze method fallback for cyclical preferences
 
 ### 👥 **Admin Management**
-- **Role-based Administration**: Named admin and read-only observer accounts
+- **Delegated Authority**: Owner, Returning Officer, Admin, and Observer roles
+- **Secure Invitations**: Expiring single-use email invitations; recipients choose their own password
 - **Election Lifecycle**: Create → Open → Close → Results
 - **Voter Roll Management**: CSV upload and individual email management
 - **Real-time Stats**: Participation tracking and results analytics
@@ -35,7 +36,7 @@ A privacy-conscious, auditable online election platform for member organisations
 
 ## Tech Stack
 
-- **Framework**: Next.js 14 with App Router
+- **Framework**: Next.js 15 with App Router
 - **Language**: TypeScript
 - **Database**: SQLite via better-sqlite3
 - **Email**: Resend API
@@ -45,7 +46,7 @@ A privacy-conscious, auditable online election platform for member organisations
 ## Installation
 
 ### Prerequisites
-- Node.js 18+ 
+- Node.js 20.9+
 - npm or yarn
 
 ### Setup
@@ -70,6 +71,7 @@ ADMIN_PASSWORD=your-secure-admin-password-here
 # Email Configuration (Resend API)
 RESEND_API_KEY=your-resend-api-key-here
 FROM_EMAIL=noreply@yourorganization.com
+VOTEKIT_PUBLIC_URL=https://vote.yourorganization.com
 
 # Database (persistent SQLite file, automatically created)
 DATABASE_PATH=./plebiscite.db
@@ -202,9 +204,11 @@ For ranked choice questions, the platform implements proper IRV tabulation:
 
 ### Admin Security
 - Named admin accounts use bcrypt-hashed passwords and database-backed sessions
+- Privileged access follows the Owner → Returning Officer → Admin → Observer authority chain
+- Invitation secrets contain 256 random bits, are stored only as hashes, expire after 48 hours, and are single-use
 - Admin login attempts are rate-limited and audited
 - Mutating routes require double-submit-cookie CSRF protection
-- Admin and observer permissions are enforced server-side
+- Administrative role permissions are enforced server-side
 - No public access to sensitive data
 
 ## Deployment

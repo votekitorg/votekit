@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getAdminSessionFromCookies } from '@/lib/auth';
+import { canManageElections, getAdminSessionFromCookies } from '@/lib/auth';
 import CreatePlebisciteForm from './CreatePlebisciteForm';
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +10,7 @@ export default async function CreatePlebiscitePage() {
     redirect('/admin/login');
   }
 
-  if (adminSession.role !== 'admin') {
+  if (!canManageElections(adminSession.role)) {
     redirect('/admin');
   }
 

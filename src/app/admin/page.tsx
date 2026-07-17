@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getAdminSessionFromCookies } from '@/lib/auth';
+import { canManageElections, getAdminSessionFromCookies } from '@/lib/auth';
 import AdminLayout from '@/components/AdminLayout';
 import db from '@/lib/db';
 import Link from 'next/link';
@@ -81,6 +81,7 @@ export default async function AdminDashboard() {
   }
 
   const { plebiscites, stats } = await getDashboardData();
+  const canManage = canManageElections(adminSession.role);
 
   return (
     <AdminLayout currentUser={adminSession}>
@@ -160,7 +161,7 @@ export default async function AdminDashboard() {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {adminSession.role === 'admin' && (
+          {canManage && (
           <Link href="/admin/plebiscites/new" className="card hover:shadow-lg transition-shadow duration-200">
             <div className="card-body text-center">
               <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center mx-auto mb-4">
@@ -192,7 +193,7 @@ export default async function AdminDashboard() {
           <div className="card-header">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold text-gray-900">Recent Elections</h2>
-              {adminSession.role === 'admin' && (
+              {canManage && (
                 <Link href="/admin/plebiscites/new" className="btn-primary">
                   Create New
                 </Link>
@@ -203,7 +204,7 @@ export default async function AdminDashboard() {
             {plebiscites.length === 0 ? (
               <div className="text-center py-8">
                 <div className="text-gray-500 mb-4">No elections created yet</div>
-                {adminSession.role === 'admin' ? (
+                {canManage ? (
                   <Link href="/admin/plebiscites/new" className="btn-primary">
                     Create Your First Election
                   </Link>

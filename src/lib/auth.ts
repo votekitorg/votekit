@@ -2,9 +2,19 @@ import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import * as bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 import db, { cleanupExpiredSessions } from './db';
 
-export type AdminRole = 'admin' | 'observer';
+export type AdminRole = 'owner' | 'returning_officer' | 'admin' | 'observer';
+
+export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
+  owner: 'Owner',
+  returning_officer: 'Returning Officer',
+  admin: 'Admin',
+  observer: 'Observer'
+};
+
+const ELECTION_MANAGEMENT_ROLES: AdminRole[] = ['owner', 'returning_officer', 'admin'];
 
 export interface Session {
   email: string;
@@ -31,12 +41,45 @@ export interface AdminUser {
   last_login_at: string | null;
 }
 
+export interface AdminInvitation {
+  id: number;
+  email: string;
+  name: string | null;
+  role: Exclude<AdminRole, 'owner'>;
+  expires_at: string;
+  created_at: string;
+  invited_by_name: string | null;
+  invited_by_email: string;
+}
+
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
 function isAdminRole(role: string): role is AdminRole {
-  return role === 'admin' || role === 'observer';
+  return role === 'owner' || role === 'returning_officer' || role === 'admin' || role === 'observer';
+}
+
+export function canManageElections(role: AdminRole): boolean {
+  return ELECTION_MANAGEMENT_ROLES.includes(role);
+}
+
+export function canManageUsers(role: AdminRole): boolean {
+  return role === 'owner' || role === 'returning_officer';
+}
+
+export function canAssignRole(actorRole: AdminRole, targetRole: AdminRole): boolean {
+  if (targetRole === 'owner') return false;
+  if (actorRole === 'owner') return true;
+  return actorRole === 'returning_officer' && (targetRole === 'admin' || targetRole === 'observer');
+}
+
+export function canManageUserRole(actorRole: AdminRole, targetRole: AdminRole): boolean {
+  return canAssignRole(actorRole, targetRole);
+}
+
+function legacyRoleForAuthority(role: AdminRole): 'admin' | 'observer' {
+  return role === 'observer' ? 'observer' : 'admin';
 }
 
 function publicAdminUser(user: any): AdminUser {
@@ -44,7 +87,7 @@ function publicAdminUser(user: any): AdminUser {
     id: user.id,
     email: user.email,
     name: user.name,
-    role: isAdminRole(user.role) ? user.role : 'observer',
+    role: isAdminRole(user.authority_role || user.role) ? (user.authority_role || user.role) : 'observer',
     active: Boolean(user.active),
     created_at: user.created_at,
     updated_at: user.updated_at,
@@ -74,9 +117,9 @@ async function ensureBootstrapAdminUser(): Promise<void> {
   const passwordHash = await getLegacyAdminPasswordHash();
 
   db.prepare(`
-    INSERT INTO admin_users (email, name, password_hash, role, active)
-    VALUES (?, ?, ?, 'admin', 1)
-  `).run(email, 'VoteKit Admin', passwordHash);
+    INSERT INTO admin_users (email, name, password_hash, role, authority_role, active)
+    VALUES (?, ?, ?, 'admin', 'owner', 1)
+  `).run(email, 'VoteKit Owner', passwordHash);
 }
 
 // Backwards-compatible password-only check used by older tests/scripts.
@@ -119,6 +162,8 @@ export async function verifyAdminLogin(email: string, password: string): Promise
 export async function createAdminUser(input: { email: string; password: string; name?: string; role: AdminRole }): Promise<AdminUser> {
   await ensureBootstrapAdminUser();
 
+  if (typeof input.email !== 'string') throw new Error('A valid email address is required');
+  if (typeof input.password !== 'string') throw new Error('Password must be between 12 and 128 characters');
   if (input.name !== undefined && typeof input.name !== 'string') throw new Error('Name must be text');
 
   const email = normalizeEmail(input.email);
@@ -134,15 +179,19 @@ export async function createAdminUser(input: { email: string; password: string; 
 
   const passwordHash = await bcrypt.hash(input.password, 12);
   const result = db.prepare(`
-    INSERT INTO admin_users (email, name, password_hash, role, active)
-    VALUES (?, ?, ?, ?, 1)
-  `).run(email, input.name?.trim().slice(0, 200) || null, passwordHash, input.role);
+    INSERT INTO admin_users (email, name, password_hash, role, authority_role, active)
+    VALUES (?, ?, ?, ?, ?, 1)
+  `).run(email, input.name?.trim().slice(0, 200) || null, passwordHash, legacyRoleForAuthority(input.role), input.role);
 
   const user = db.prepare('SELECT * FROM admin_users WHERE id = ?').get(result.lastInsertRowid) as any;
   return publicAdminUser(user);
 }
 
-export async function updateAdminUser(id: number, input: { email?: string; name?: string; role?: AdminRole; active?: boolean; password?: string }): Promise<AdminUser> {
+export async function updateAdminUser(
+  id: number,
+  input: { email?: string; name?: string; role?: AdminRole; active?: boolean; password?: string },
+  actor: AdminSession
+): Promise<AdminUser> {
   await ensureBootstrapAdminUser();
 
   if (input.email !== undefined && typeof input.email !== 'string') throw new Error('Email must be text');
@@ -153,12 +202,26 @@ export async function updateAdminUser(id: number, input: { email?: string; name?
   const existing = db.prepare('SELECT * FROM admin_users WHERE id = ?').get(id) as any | undefined;
   if (!existing) throw new Error('Admin user not found');
 
-  const removesActiveAdmin = existing.role === 'admin' && Boolean(existing.active) &&
-    (input.role === 'observer' || input.active === false);
-  if (removesActiveAdmin) {
-    const activeAdmins = db.prepare("SELECT COUNT(*) AS count FROM admin_users WHERE role = 'admin' AND active = 1")
+  const existingRole = isAdminRole(existing.authority_role || existing.role) ? (existing.authority_role || existing.role) : 'observer';
+  if (!canManageUserRole(actor.role, existingRole)) {
+    throw new Error('You do not have permission to manage this account');
+  }
+  if (id === actor.adminUserId && (input.role !== undefined || input.active === false)) {
+    throw new Error('You cannot change your own role or deactivate your own account');
+  }
+  if (existingRole === 'owner' && (input.role !== undefined || input.active === false)) {
+    throw new Error('Owner access can only be changed through a formal ownership transfer');
+  }
+  if (input.role !== undefined && !canAssignRole(actor.role, input.role)) {
+    throw new Error('You cannot assign that role');
+  }
+
+  const removesActiveOwner = existingRole === 'owner' && Boolean(existing.active) &&
+    (input.role !== 'owner' || input.active === false);
+  if (removesActiveOwner) {
+    const activeOwners = db.prepare("SELECT COUNT(*) AS count FROM admin_users WHERE authority_role = 'owner' AND active = 1")
       .get() as { count: number };
-    if (activeAdmins.count <= 1) throw new Error('At least one active admin account is required');
+    if (activeOwners.count <= 1) throw new Error('At least one active Owner account is required');
   }
 
   const fields: string[] = [];
@@ -178,8 +241,8 @@ export async function updateAdminUser(id: number, input: { email?: string; name?
 
   if (input.role !== undefined) {
     if (!isAdminRole(input.role)) throw new Error('Invalid admin role');
-    fields.push('role = ?');
-    values.push(input.role);
+    fields.push('role = ?', 'authority_role = ?');
+    values.push(legacyRoleForAuthority(input.role), input.role);
   }
 
   if (input.active !== undefined) {
@@ -199,7 +262,7 @@ export async function updateAdminUser(id: number, input: { email?: string; name?
     db.prepare(`UPDATE admin_users SET ${fields.join(', ')} WHERE id = ?`).run(...values);
   }
 
-  if (input.password) {
+  if (input.password || input.role !== undefined || input.active === false) {
     db.prepare('DELETE FROM sessions WHERE admin_user_id = ?').run(id);
   }
 
@@ -209,14 +272,195 @@ export async function updateAdminUser(id: number, input: { email?: string; name?
 
 export function listAdminUsers(): AdminUser[] {
   const users = db.prepare(`
-    SELECT id, email, name, role, active, created_at, updated_at, last_login_at
+    SELECT id, email, name, role, authority_role, active, created_at, updated_at, last_login_at
     FROM admin_users
-    ORDER BY role ASC, email ASC
+    ORDER BY CASE authority_role
+      WHEN 'owner' THEN 0
+      WHEN 'returning_officer' THEN 1
+      WHEN 'admin' THEN 2
+      ELSE 3 END,
+      email ASC
   `).all() as any[];
   return users.map(publicAdminUser);
 }
 
-export function requireAdminRole(session: AdminSession | null, allowed: AdminRole[] = ['admin']): AdminSession | null {
+function publicAdminInvitation(invitation: any): AdminInvitation {
+  return {
+    id: invitation.id,
+    email: invitation.email,
+    name: invitation.name,
+    role: invitation.role,
+    expires_at: invitation.expires_at,
+    created_at: invitation.created_at,
+    invited_by_name: invitation.invited_by_name ?? null,
+    invited_by_email: invitation.invited_by_email
+  };
+}
+
+function invitationTokenHash(token: string): string {
+  return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+function validateInvitationRole(role: AdminRole): asserts role is Exclude<AdminRole, 'owner'> {
+  if (role === 'owner' || !isAdminRole(role)) throw new Error('Invalid invitation role');
+}
+
+export async function createAdminInvitation(input: {
+  email: string;
+  name?: string;
+  role: AdminRole;
+}, actor: AdminSession): Promise<{ invitation: AdminInvitation; token: string }> {
+  await ensureBootstrapAdminUser();
+  if (!canManageUsers(actor.role)) throw new Error('You do not have permission to invite users');
+  if (typeof input.email !== 'string') throw new Error('A valid email address is required');
+  if (input.name !== undefined && typeof input.name !== 'string') throw new Error('Name must be text');
+  validateInvitationRole(input.role);
+  if (!canAssignRole(actor.role, input.role)) throw new Error('You cannot assign that role');
+
+  const email = normalizeEmail(input.email);
+  if (!email || email.length > 254 || !/^\S+@\S+\.\S+$/.test(email)) {
+    throw new Error('A valid email address is required');
+  }
+
+  const existing = db.prepare('SELECT id, role, authority_role, active FROM admin_users WHERE email = ?').get(email) as
+    { id: number; role: 'admin' | 'observer'; authority_role: AdminRole | null; active: number } | undefined;
+  if (existing?.active) throw new Error('An active account with that email already exists');
+  const existingAuthority = existing?.authority_role || existing?.role;
+  if (existingAuthority && !canManageUserRole(actor.role, existingAuthority)) {
+    throw new Error('You do not have permission to reactivate this account');
+  }
+
+  const token = crypto.randomBytes(32).toString('base64url');
+  const tokenHash = invitationTokenHash(token);
+  const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+
+  const create = db.transaction(() => {
+    db.prepare(`
+      UPDATE admin_invitations SET revoked_at = CURRENT_TIMESTAMP
+      WHERE email = ? AND accepted_at IS NULL AND revoked_at IS NULL
+    `).run(email);
+    return db.prepare(`
+      INSERT INTO admin_invitations
+        (email, name, role, token_hash, expires_at, invited_by_admin_user_id)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(email, input.name?.trim().slice(0, 200) || null, input.role, tokenHash, expiresAt, actor.adminUserId);
+  });
+
+  const result = create();
+  const invitation = db.prepare(`
+    SELECT i.*, u.name AS invited_by_name, u.email AS invited_by_email
+    FROM admin_invitations i
+    JOIN admin_users u ON u.id = i.invited_by_admin_user_id
+    WHERE i.id = ?
+  `).get(result.lastInsertRowid) as any;
+
+  return { invitation: publicAdminInvitation(invitation), token };
+}
+
+export function listPendingAdminInvitations(actor: AdminSession): AdminInvitation[] {
+  if (!canManageUsers(actor.role)) return [];
+  const rows = db.prepare(`
+    SELECT i.*, u.name AS invited_by_name, u.email AS invited_by_email
+    FROM admin_invitations i
+    JOIN admin_users u ON u.id = i.invited_by_admin_user_id
+    WHERE i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > ?
+    ORDER BY i.created_at DESC
+  `).all(new Date().toISOString()) as any[];
+  return rows.filter(row => canManageUserRole(actor.role, row.role)).map(publicAdminInvitation);
+}
+
+export function getAdminInvitationByToken(token: string): AdminInvitation | null {
+  if (typeof token !== 'string' || token.length < 40 || token.length > 128) return null;
+  const row = db.prepare(`
+    SELECT i.*, u.name AS invited_by_name, u.email AS invited_by_email
+    FROM admin_invitations i
+    JOIN admin_users u ON u.id = i.invited_by_admin_user_id
+    WHERE i.token_hash = ? AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > ?
+  `).get(invitationTokenHash(token), new Date().toISOString()) as any | undefined;
+  return row ? publicAdminInvitation(row) : null;
+}
+
+export async function acceptAdminInvitation(token: string, password: string): Promise<AdminUser> {
+  const invitation = getAdminInvitationByToken(token);
+  if (!invitation) throw new Error('This invitation is invalid or has expired');
+  if (typeof password !== 'string' || password.length < 12 || password.length > 128) {
+    throw new Error('Password must be between 12 and 128 characters');
+  }
+  const passwordHash = await bcrypt.hash(password, 12);
+  const tokenHash = invitationTokenHash(token);
+
+  const accept = db.transaction(() => {
+    const current = db.prepare(`
+      SELECT * FROM admin_invitations
+      WHERE token_hash = ? AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > ?
+    `).get(tokenHash, new Date().toISOString()) as any | undefined;
+    if (!current) throw new Error('This invitation is invalid or has expired');
+
+    const existing = db.prepare('SELECT * FROM admin_users WHERE email = ?').get(current.email) as any | undefined;
+    let userId: number;
+    if (existing) {
+      if (existing.active) throw new Error('This account is already active');
+      db.prepare(`
+        UPDATE admin_users
+        SET name = ?, password_hash = ?, role = ?, authority_role = ?, active = 1,
+            updated_at = CURRENT_TIMESTAMP, last_login_at = NULL
+        WHERE id = ?
+      `).run(current.name, passwordHash, legacyRoleForAuthority(current.role), current.role, existing.id);
+      userId = existing.id;
+    } else {
+      const created = db.prepare(`
+        INSERT INTO admin_users (email, name, password_hash, role, authority_role, active)
+        VALUES (?, ?, ?, ?, ?, 1)
+      `).run(current.email, current.name, passwordHash, legacyRoleForAuthority(current.role), current.role);
+      userId = Number(created.lastInsertRowid);
+    }
+
+    const updated = db.prepare(`
+      UPDATE admin_invitations
+      SET accepted_at = CURRENT_TIMESTAMP, accepted_by_admin_user_id = ?
+      WHERE id = ? AND accepted_at IS NULL AND revoked_at IS NULL
+    `).run(userId, current.id);
+    if (updated.changes !== 1) throw new Error('This invitation has already been used');
+
+    db.prepare('DELETE FROM sessions WHERE admin_user_id = ?').run(userId);
+    return db.prepare('SELECT * FROM admin_users WHERE id = ?').get(userId) as any;
+  });
+
+  const user = publicAdminUser(accept());
+  recordAdminAuditLog({
+    adminUserId: user.id,
+    action: 'admin_invitation.accept',
+    targetType: 'admin_user',
+    targetId: user.id,
+    details: { role: user.role }
+  });
+  return user;
+}
+
+export function revokeAdminInvitation(id: number, actor: AdminSession): AdminInvitation {
+  const row = db.prepare(`
+    SELECT i.*, u.name AS invited_by_name, u.email AS invited_by_email
+    FROM admin_invitations i
+    JOIN admin_users u ON u.id = i.invited_by_admin_user_id
+    WHERE i.id = ? AND i.accepted_at IS NULL AND i.revoked_at IS NULL
+  `).get(id) as any | undefined;
+  if (!row) throw new Error('Pending invitation not found');
+  if (!canManageUserRole(actor.role, row.role)) throw new Error('You cannot revoke this invitation');
+  db.prepare('UPDATE admin_invitations SET revoked_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  return publicAdminInvitation(row);
+}
+
+export async function replaceAdminInvitation(id: number, actor: AdminSession): Promise<{ invitation: AdminInvitation; token: string }> {
+  const row = db.prepare(`
+    SELECT * FROM admin_invitations
+    WHERE id = ? AND accepted_at IS NULL AND revoked_at IS NULL
+  `).get(id) as any | undefined;
+  if (!row) throw new Error('Pending invitation not found');
+  if (!canManageUserRole(actor.role, row.role)) throw new Error('You cannot resend this invitation');
+  return createAdminInvitation({ email: row.email, name: row.name || undefined, role: row.role }, actor);
+}
+
+export function requireAdminRole(session: AdminSession | null, allowed: AdminRole[] = ELECTION_MANAGEMENT_ROLES): AdminSession | null {
   if (!session) return null;
   return allowed.includes(session.role) ? session : null;
 }
@@ -228,7 +472,7 @@ export function createAdminSession(adminUser: Pick<AdminUser, 'id' | 'email' | '
   db.prepare(`
     INSERT INTO sessions (id, email, plebiscite_id, is_admin, admin_user_id, admin_role, expires_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(sessionId, adminUser.email, -1, 1, adminUser.id, adminUser.role, expiresAt.toISOString());
+  `).run(sessionId, adminUser.email, -1, 1, adminUser.id, legacyRoleForAuthority(adminUser.role), expiresAt.toISOString());
 
   return sessionId;
 }
@@ -237,7 +481,7 @@ export function getAdminSession(sessionId?: string): AdminSession | null {
   if (!sessionId) return null;
 
   const session = db.prepare(`
-    SELECT s.*, u.name, u.role, u.active
+    SELECT s.*, u.name, u.role, u.authority_role, u.active
     FROM sessions s
     LEFT JOIN admin_users u ON u.id = s.admin_user_id
     WHERE s.id = ? AND s.is_admin = 1
@@ -255,7 +499,9 @@ export function getAdminSession(sessionId?: string): AdminSession | null {
     return null;
   }
 
-  const role = isAdminRole(session.role || session.admin_role) ? (session.role || session.admin_role) : 'observer';
+  const role = isAdminRole(session.authority_role || session.role || session.admin_role)
+    ? (session.authority_role || session.role || session.admin_role)
+    : 'observer';
   return {
     isAdmin: true,
     adminUserId: session.admin_user_id,

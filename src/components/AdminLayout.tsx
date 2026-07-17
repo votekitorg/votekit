@@ -9,15 +9,22 @@ interface AdminLayoutProps {
   currentUser?: {
     email: string;
     name: string | null;
-    role: 'admin' | 'observer';
+    role: 'owner' | 'returning_officer' | 'admin' | 'observer';
   };
 }
 
 const navigation = [
-  { name: 'Dashboard', href: '/admin', icon: 'home', roles: ['admin', 'observer'] },
-  { name: 'Create Election', href: '/admin/plebiscites/new', icon: 'plus', roles: ['admin'] },
-  { name: 'Admin Users', href: '/admin/users', icon: 'users', roles: ['admin'] },
+  { name: 'Dashboard', href: '/admin', icon: 'home', roles: ['owner', 'returning_officer', 'admin', 'observer'] },
+  { name: 'Create Election', href: '/admin/plebiscites/new', icon: 'plus', roles: ['owner', 'returning_officer', 'admin'] },
+  { name: 'People & Roles', href: '/admin/users', icon: 'users', roles: ['owner', 'returning_officer'] },
 ];
+
+const roleLabels = {
+  owner: 'Owner',
+  returning_officer: 'Returning Officer',
+  admin: 'Admin',
+  observer: 'Observer'
+};
 
 function getIcon(iconName: string) {
   const icons = {
@@ -139,7 +146,7 @@ export default function AdminLayout({ children, currentUser }: AdminLayoutProps)
               <div className="flex items-center">
                 <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
                 <span className="text-sm text-gray-600">
-                  {user.name || user.email} ({user.role === 'admin' ? 'Admin' : 'Observer'})
+                  {user.name || user.email} ({roleLabels[user.role]})
                 </span>
               </div>
             </div>

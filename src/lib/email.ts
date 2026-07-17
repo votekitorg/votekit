@@ -98,6 +98,47 @@ export async function sendVerificationEmail(
   }
 }
 
+export async function sendAdminInvitationEmail(input: {
+  email: string;
+  name?: string | null;
+  roleLabel: string;
+  invitationUrl: string;
+  inviterName: string;
+}): Promise<EmailResult> {
+  const fromEmail = process.env.FROM_EMAIL || 'noreply@example.com';
+  const safeName = escapeHtml(input.name?.trim() || 'there');
+  const safeRole = escapeHtml(input.roleLabel);
+  const safeInviter = escapeHtml(input.inviterName);
+  const safeUrl = escapeHtml(input.invitationUrl);
+
+  try {
+    const result = await getResend().emails.send({
+      from: fromEmail,
+      to: input.email,
+      subject: `You're invited to VoteKit as ${input.roleLabel.replace(/[\r\n]+/g, ' ').trim()}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+          <h1 style="color: #00843D; margin: 0 0 24px;">VoteKit Election Platform</h1>
+          <div style="background: #f8f9fa; border-radius: 10px; padding: 28px;">
+            <h2 style="color: #1B5E20; margin-top: 0;">You're invited</h2>
+            <p>Hello ${safeName},</p>
+            <p>${safeInviter} has invited you to join VoteKit as <strong>${safeRole}</strong>.</p>
+            <p style="margin: 28px 0;">
+              <a href="${safeUrl}" style="background: #00843D; color: #fff; text-decoration: none; padding: 13px 22px; border-radius: 6px; display: inline-block; font-weight: bold;">Accept invitation</a>
+            </p>
+            <p style="color: #666; font-size: 14px;">This private, single-use invitation expires in 48 hours. If you were not expecting it, you can ignore this email.</p>
+          </div>
+        </div>
+      `,
+      text: `VoteKit Election Platform\n\nHello ${input.name?.trim() || 'there'},\n\n${input.inviterName} has invited you to join VoteKit as ${input.roleLabel}.\n\nAccept your invitation: ${input.invitationUrl}\n\nThis private, single-use invitation expires in 48 hours.`
+    });
+    return { success: true, messageId: result.data?.id };
+  } catch (error) {
+    console.error('Failed to send admin invitation email:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
+  }
+}
+
 // Database-backed rate limiting
 function positiveIntegerEnv(name: string, fallback: number): number {
   const parsed = Number.parseInt(process.env[name] || '', 10);

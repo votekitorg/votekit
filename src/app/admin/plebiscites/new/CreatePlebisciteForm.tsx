@@ -14,7 +14,7 @@ interface Question {
   preferentialType?: 'compulsory' | 'optional'; // Only applies to ranked_choice and condorcet
 }
 
-export default function CreatePlebisciteForm({ currentUser }: { currentUser: { email: string; name: string | null; role: 'admin' | 'observer' } }) {
+export default function CreatePlebisciteForm({ currentUser }: { currentUser: { email: string; name: string | null; role: 'owner' | 'returning_officer' | 'admin' | 'observer' } }) {
   const now = new Date();
   const toBrisbaneInput = (date: Date) => new Date(date.getTime() + 10 * 60 * 60 * 1000).toISOString().slice(0, 16);
   const defaultOpenDate = toBrisbaneInput(now);

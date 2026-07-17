@@ -137,6 +137,15 @@ The preferred default is to report true ties as ties and require election admini
 
 If any automatic tie-break rule is implemented, it must be documented, deterministic, and visible in the results output.
 
+## Administrative roles and invitations
+
+VoteKit uses four administrative roles: Owner, Returning Officer, Admin, and
+Observer. Owners govern privileged access; Returning Officers operate elections
+and appoint Admins; Admins operate elections; Observers are read-only. New users
+join through expiring, single-use email invitations and choose their own
+credentials. See `role-and-invitation-design.md` for the permission matrix,
+workflow, and authentication decision.
+
 ## Non-Functional Requirements
 
 - Privacy and anonymity should be designed for small elections where timing correlation is realistic.

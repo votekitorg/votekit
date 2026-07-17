@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { csrfFetch } from '@/lib/csrf-client';
 
-type AdminRole = 'admin' | 'observer';
+type AdminRole = 'owner' | 'returning_officer' | 'admin' | 'observer';
 
 interface AdminUser {
   id: number;
@@ -17,42 +17,104 @@ interface AdminUser {
   last_login_at: string | null;
 }
 
-export default function AdminUsersManager({ users }: { users: AdminUser[] }) {
+interface AdminInvitation {
+  id: number;
+  email: string;
+  name: string | null;
+  role: Exclude<AdminRole, 'owner'>;
+  expires_at: string;
+  created_at: string;
+  invited_by_name: string | null;
+  invited_by_email: string;
+}
+
+const roleLabels: Record<AdminRole, string> = {
+  owner: 'Owner',
+  returning_officer: 'Returning Officer',
+  admin: 'Admin',
+  observer: 'Observer'
+};
+
+const roleDescriptions: Record<Exclude<AdminRole, 'owner'>, string> = {
+  returning_officer: 'Runs elections and appoints Admins and Observers',
+  admin: 'Creates elections, manages voters, and closes polls',
+  observer: 'Can inspect elections and results without making changes'
+};
+
+export default function AdminUsersManager({
+  users,
+  invitations,
+  currentUser
+}: {
+  users: AdminUser[];
+  invitations: AdminInvitation[];
+  currentUser: { adminUserId: number; role: AdminRole };
+}) {
   const router = useRouter();
+  const allowedRoles: Array<Exclude<AdminRole, 'owner'>> = currentUser.role === 'owner'
+    ? ['returning_officer', 'admin', 'observer']
+    : ['admin', 'observer'];
+  const [form, setForm] = useState({ email: '', name: '', role: allowedRoles[0] });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ email: '', name: '', password: '', role: 'observer' as AdminRole });
+  const [loadingAction, setLoadingAction] = useState('');
 
-  async function createUser(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
+  function resetMessages() {
     setError('');
     setSuccess('');
+  }
 
+  async function sendInvitation(e: React.FormEvent) {
+    e.preventDefault();
+    resetMessages();
+    setLoadingAction('invite');
     try {
-      const response = await csrfFetch('/api/admin/users', {
+      const response = await csrfFetch('/api/admin/invitations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form)
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to create admin user');
-      setForm({ email: '', name: '', password: '', role: 'observer' });
-      setSuccess('Admin user created');
+      if (!response.ok) throw new Error(result.error || 'Could not send invitation');
+      setForm({ email: '', name: '', role: allowedRoles[0] });
+      setSuccess(`Invitation sent to ${result.invitation.email}`);
       router.refresh();
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Could not send invitation');
     } finally {
-      setLoading(false);
+      setLoadingAction('');
     }
   }
 
-  async function updateUser(id: number, changes: Partial<AdminUser>) {
-    setLoading(true);
-    setError('');
-    setSuccess('');
+  async function invitationAction(id: number, action: 'resend' | 'revoke') {
+    resetMessages();
+    setLoadingAction(`${action}-${id}`);
+    try {
+      const response = await csrfFetch('/api/admin/invitations', {
+        method: action === 'revoke' ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(action === 'revoke' ? { id } : { action, id })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || `Could not ${action} invitation`);
+      setSuccess(action === 'resend' ? 'Invitation resent' : 'Invitation revoked');
+      router.refresh();
+    } catch (err: any) {
+      setError(err.message || `Could not ${action} invitation`);
+    } finally {
+      setLoadingAction('');
+    }
+  }
 
+  function canManage(user: AdminUser): boolean {
+    if (user.id === currentUser.adminUserId || user.role === 'owner') return false;
+    if (currentUser.role === 'owner') return true;
+    return user.role === 'admin' || user.role === 'observer';
+  }
+
+  async function updateUser(id: number, changes: Partial<AdminUser>) {
+    resetMessages();
+    setLoadingAction(`user-${id}`);
     try {
       const response = await csrfFetch('/api/admin/users', {
         method: 'PUT',
@@ -60,138 +122,117 @@ export default function AdminUsersManager({ users }: { users: AdminUser[] }) {
         body: JSON.stringify({ id, ...changes })
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to update admin user');
-      setSuccess('Admin user updated');
+      if (!response.ok) throw new Error(result.error || 'Could not update account');
+      setSuccess('Account updated');
       router.refresh();
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Could not update account');
     } finally {
-      setLoading(false);
+      setLoadingAction('');
     }
   }
 
   return (
     <div className="space-y-8">
-      {error && <div className="alert-error">{error}</div>}
-      {success && <div className="alert-success">{success}</div>}
+      {error && <div className="alert-error" role="alert">{error}</div>}
+      {success && <div className="alert-success" role="status">{success}</div>}
 
-      <div className="card">
-        <div className="card-header">
-          <h2 className="text-lg font-semibold text-gray-900">Create Admin User</h2>
-          <p className="text-sm text-gray-600 mt-1">Admins can manage elections and users. Observers are read-only.</p>
-        </div>
-        <div className="card-body">
-          <form onSubmit={createUser} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input
-                type="email"
-                required
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="input-field"
-                placeholder="person@example.org"
-              />
+      <div className="card overflow-hidden">
+        <div className="grid lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="card-body">
+            <div className="mb-6">
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">Secure invitation</p>
+              <h2 className="mt-1 text-xl font-semibold text-gray-900">Invite someone to VoteKit</h2>
+              <p className="mt-2 text-sm text-gray-600">They will receive a private 48-hour link and choose their own password. You never need to share credentials.</p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="input-field"
-                placeholder="Optional"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input
-                type="password"
-                required
-                minLength={12}
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="input-field"
-                placeholder="At least 12 characters"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-              <select
-                value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value as AdminRole })}
-                className="input-field"
-              >
-                <option value="observer">Observer</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <button type="submit" disabled={loading} className="btn-primary">
-                {loading ? 'Creating...' : 'Create User'}
+            <form onSubmit={sendInvitation} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="invite-email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input id="invite-email" type="email" required autoComplete="email" value={form.email}
+                    onChange={e => setForm({ ...form, email: e.target.value })} className="input-field" placeholder="person@example.org" />
+                </div>
+                <div>
+                  <label htmlFor="invite-name" className="block text-sm font-medium text-gray-700 mb-1">Name <span className="text-gray-400">(optional)</span></label>
+                  <input id="invite-name" type="text" value={form.name}
+                    onChange={e => setForm({ ...form, name: e.target.value })} className="input-field" placeholder="Full name" />
+                </div>
+              </div>
+              <div>
+                <label htmlFor="invite-role" className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                <select id="invite-role" value={form.role} onChange={e => setForm({ ...form, role: e.target.value as typeof form.role })} className="input-field">
+                  {allowedRoles.map(role => <option key={role} value={role}>{roleLabels[role]} - {roleDescriptions[role]}</option>)}
+                </select>
+              </div>
+              <button type="submit" disabled={Boolean(loadingAction)} className="btn-primary">
+                {loadingAction === 'invite' ? 'Sending invitation...' : 'Send invitation'}
               </button>
+            </form>
+          </div>
+          <div className="bg-green-50 border-t lg:border-t-0 lg:border-l border-green-100 p-6">
+            <h3 className="font-semibold text-gray-900">Authority chain</h3>
+            <div className="mt-4 space-y-3 text-sm">
+              <div><strong>Owner</strong><p className="text-gray-600">Controls Returning Officers and all lower roles.</p></div>
+              <div><strong>Returning Officer</strong><p className="text-gray-600">Runs elections and appoints Admins.</p></div>
+              <div><strong>Admin</strong><p className="text-gray-600">Operates elections without managing privileged accounts.</p></div>
+              <div><strong>Observer</strong><p className="text-gray-600">Read-only oversight.</p></div>
             </div>
-          </form>
+          </div>
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <h2 className="text-lg font-semibold text-gray-900">Existing Admin Users</h2>
-        </div>
-        <div className="card-body p-0">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Login</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {users.map((user) => (
-                  <tr key={user.id}>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900">{user.name || user.email}</div>
-                      <div className="text-sm text-gray-500">{user.email}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <select
-                        value={user.role}
-                        disabled={loading}
-                        onChange={(e) => updateUser(user.id, { role: e.target.value as AdminRole })}
-                        className="input-field max-w-36"
-                      >
-                        <option value="observer">Observer</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`badge ${user.active ? 'badge-green' : 'badge-gray'}`}>
-                        {user.active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {user.last_login_at ? new Date(user.last_login_at).toLocaleString('en-AU') : 'Never'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <button
-                        type="button"
-                        disabled={loading}
-                        onClick={() => updateUser(user.id, { active: !user.active })}
-                        className="text-sm text-primary hover:text-primary-dark disabled:opacity-50"
-                      >
-                        {user.active ? 'Deactivate' : 'Reactivate'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {invitations.length > 0 && (
+        <div className="card">
+          <div className="card-header"><h2 className="text-lg font-semibold text-gray-900">Pending invitations</h2></div>
+          <div className="divide-y divide-gray-100">
+            {invitations.map(invitation => (
+              <div key={invitation.id} className="card-body flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="font-medium text-gray-900">{invitation.name || invitation.email}</div>
+                  <div className="text-sm text-gray-600">{invitation.email} · {roleLabels[invitation.role]}</div>
+                  <div className="text-xs text-gray-500 mt-1">Expires {new Date(invitation.expires_at).toLocaleString('en-AU')}</div>
+                </div>
+                <div className="flex gap-3 text-sm">
+                  <button type="button" disabled={Boolean(loadingAction)} onClick={() => invitationAction(invitation.id, 'resend')} className="text-primary hover:text-primary-dark">Resend</button>
+                  <button type="button" disabled={Boolean(loadingAction)} onClick={() => invitationAction(invitation.id, 'revoke')} className="text-red-700 hover:text-red-900">Revoke</button>
+                </div>
+              </div>
+            ))}
           </div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-header"><h2 className="text-lg font-semibold text-gray-900">People with access</h2></div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50"><tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Person</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last login</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-100 bg-white">
+              {users.map(user => {
+                const manageable = canManage(user);
+                return <tr key={user.id}>
+                  <td className="px-6 py-4"><div className="font-medium text-gray-900">{user.name || user.email}</div><div className="text-sm text-gray-500">{user.email}</div></td>
+                  <td className="px-6 py-4">
+                    {manageable ? <select value={user.role} disabled={Boolean(loadingAction)} onChange={e => updateUser(user.id, { role: e.target.value as AdminRole })} className="input-field max-w-52">
+                      {allowedRoles.map(role => <option key={role} value={role}>{roleLabels[role]}</option>)}
+                    </select> : <span className="font-medium text-gray-700">{roleLabels[user.role]}</span>}
+                  </td>
+                  <td className="px-6 py-4"><span className={`badge ${user.active ? 'badge-green' : 'badge-gray'}`}>{user.active ? 'Active' : 'Inactive'}</span></td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{user.last_login_at ? new Date(user.last_login_at).toLocaleString('en-AU') : 'Never'}</td>
+                  <td className="px-6 py-4 text-sm">
+                    {manageable ? <button type="button" disabled={Boolean(loadingAction)} onClick={() => updateUser(user.id, { active: !user.active })} className={user.active ? 'text-red-700 hover:text-red-900' : 'text-primary hover:text-primary-dark'}>{user.active ? 'Deactivate' : 'Reactivate'}</button>
+                      : <span className="text-gray-400">{user.id === currentUser.adminUserId ? 'Your account' : 'Protected'}</span>}
+                  </td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

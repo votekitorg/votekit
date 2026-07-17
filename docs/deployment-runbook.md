@@ -34,7 +34,9 @@ Vercel, and other serverless deployments are unsupported for real elections.
 5. Install `deploy/nginx-votekit.conf` as the nginx site after certificates exist.
 6. Install `deploy/backup.sh` as `/usr/local/sbin/votekit-backup`.
 7. Schedule local hot backups and arrange encrypted off-server replication.
-8. Enable the service only after the first tagged release has been deployed.
+8. Set `VOTEKIT_PUBLIC_URL` to the canonical HTTPS origin used in administrator
+   invitation links. Do not derive invitation origins from request Host headers.
+9. Enable the service only after the first tagged release has been deployed.
 
 ## Release procedure
 

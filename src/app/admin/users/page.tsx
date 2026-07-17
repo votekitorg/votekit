@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
-import { getAdminSessionFromCookies, listAdminUsers } from '@/lib/auth';
+import { canManageUsers, getAdminSessionFromCookies, listAdminUsers, listPendingAdminInvitations } from '@/lib/auth';
 import AdminUsersManager from './AdminUsersManager';
 
 export const dynamic = 'force-dynamic';
@@ -11,21 +11,22 @@ export default async function AdminUsersPage() {
     redirect('/admin/login');
   }
 
-  if (adminSession.role !== 'admin') {
+  if (!canManageUsers(adminSession.role)) {
     redirect('/admin');
   }
 
   const users = listAdminUsers();
+  const invitations = listPendingAdminInvitations(adminSession);
 
   return (
     <AdminLayout currentUser={adminSession}>
       <div className="space-y-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Admin Users</h1>
-          <p className="text-gray-600">Manage who can administer or observe elections.</p>
+          <h1 className="text-2xl font-bold text-gray-900">People & Roles</h1>
+          <p className="text-gray-600">Invite people and delegate election authority safely.</p>
         </div>
 
-        <AdminUsersManager users={users} />
+        <AdminUsersManager users={users} invitations={invitations} currentUser={adminSession} />
       </div>
     </AdminLayout>
   );

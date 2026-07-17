@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getAdminSessionFromCookies } from '@/lib/auth';
+import { canManageElections, getAdminSessionFromCookies } from '@/lib/auth';
 import AdminLayout from '@/components/AdminLayout';
 import db from '@/lib/db';
 import Link from 'next/link';
@@ -136,6 +136,7 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
   if (!adminSession) {
     redirect('/admin/login');
   }
+  const canManage = canManageElections(adminSession.role);
 
   const data = await getPlebiscite(id);
   
@@ -323,7 +324,7 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
                   close_state: plebiscite.close_state
                 }}
                 statusInfo={{status: statusInfo.status, color: statusInfo.color, canOpen: statusInfo.canOpen, canClose: statusInfo.canClose, message: statusInfo.message}}
-                canManage={adminSession.role === 'admin'}
+                canManage={canManage}
                 encryptedManifest={plebiscite.privacy_mode === 'encrypted' && encryptedBallotsEnabled
                   ? buildEncryptedManifest(plebiscite)
                   : null}
@@ -333,7 +334,7 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
         </div>
 
         {/* Voter Management */}
-        {adminSession.role === 'admin' ? (
+        {canManage ? (
           <div className="card">
             <div className="card-body">
               <ElectionVoterManager 
