@@ -1,6 +1,6 @@
 {
-  "name": "member-plebiscite",
-  "version": "0.5.2",
+  "name": "votekit",
+  "version": "0.6.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -14,6 +14,8 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.6.2",
+    "firebase": "^12.16.0",
+    "jose": "^6.2.3",
     "next": "15.5.20",
     "react": "19.2.7",
     "react-dom": "19.2.7",

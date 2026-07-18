@@ -5,17 +5,19 @@ import { csrfFetch } from '@/lib/csrf-client';
 
 interface Voter {
   id: number;
-  email: string;
+  email: string | null;
+  phone: string | null;
   added_at: string;
 }
 
 interface Props {
   plebisciteId: number;
   plebisciteTitle: string;
+  status: string;
   onVoterCountChange?: (count: number) => void;
 }
 
-export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, onVoterCountChange }: Props) {
+export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, status, onVoterCountChange }: Props) {
   const [voters, setVoters] = useState<Voter[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -23,6 +25,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
   
   // Add single voter
   const [newEmail, setNewEmail] = useState('');
+  const [newPhone, setNewPhone] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   
   // CSV upload
@@ -32,6 +35,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
     duplicates: number;
     invalid: number;
   } | null>(null);
+  const [sendingLinks, setSendingLinks] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,8 +64,8 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
   const addSingleVoter = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!newEmail.trim()) {
-      setError('Email address is required');
+    if (!newEmail.trim() && !newPhone.trim()) {
+      setError('Email address or phone number is required');
       return;
     }
 
@@ -78,6 +82,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
         body: JSON.stringify({
           action: 'add',
           email: newEmail.trim(),
+          phone: newPhone.trim(),
           plebiscite_id: plebisciteId
         }),
       });
@@ -87,6 +92,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
       if (response.ok && result.success) {
         setSuccess('Voter added successfully');
         setNewEmail('');
+        setNewPhone('');
         fetchVoters(); // Refresh list
       } else {
         setError(result.error || 'Failed to add voter');
@@ -117,19 +123,18 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
       // Read file content
       const text = await file.text();
       
-      // Parse CSV - simple parsing, assumes one email per line or comma-separated
-      const emails = text
-        .split(/[\n\r,;]/)
-        .map(line => line.trim())
-        .filter(line => line && line.includes('@'))
-        .map(line => {
-          // Handle cases where email might be in quotes or have extra text
-          const match = line.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-          return match ? match[1] : line;
-        });
+      const rows = text.split(/\r?\n/).map(line => line.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''))).filter(row => row.some(Boolean));
+      const header = rows[0]?.map(cell => cell.toLowerCase()) || [];
+      const hasHeader = header.includes('email') || header.includes('phone');
+      const emailIndex = hasHeader ? header.indexOf('email') : 0;
+      const phoneIndex = hasHeader ? header.indexOf('phone') : 1;
+      const voters = rows.slice(hasHeader ? 1 : 0).map(row => {
+        if (!hasHeader && row.length === 1) return row[0].includes('@') ? { email: row[0], phone: '' } : { email: '', phone: row[0] };
+        return { email: emailIndex >= 0 ? row[emailIndex] || '' : '', phone: phoneIndex >= 0 ? row[phoneIndex] || '' : '' };
+      }).filter(voter => voter.email || voter.phone);
 
-      if (emails.length === 0) {
-        setError('No valid email addresses found in the file');
+      if (voters.length === 0) {
+        setError('No email addresses or phone numbers found in the file');
         return;
       }
 
@@ -141,7 +146,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
         },
         body: JSON.stringify({
           action: 'upload',
-          emails: emails,
+          voters,
           plebiscite_id: plebisciteId
         }),
       });
@@ -227,6 +232,18 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
     });
   };
 
+  const sendLinks = async (action: 'send' | 'remind') => {
+    if (!confirm(action === 'send' ? 'Send a private ballot link to every registered voter with an email address?' : 'Send reminders only to registered voters who have not voted?')) return;
+    setSendingLinks(true); setError(''); setSuccess('');
+    try {
+      const response = await csrfFetch('/api/admin/voter-links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plebiscite_id: plebisciteId, action }) });
+      const result = await response.json();
+      if (!response.ok && !result.sent) throw new Error(result.error || 'Could not send ballot links');
+      setSuccess(`${result.sent} link${result.sent === 1 ? '' : 's'} sent${result.failed ? `, ${result.failed} failed` : ''}.`);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not send ballot links'); }
+    finally { setSendingLinks(false); }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-32">
@@ -249,6 +266,13 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
           {voters.length} voter{voters.length !== 1 ? 's' : ''} registered
         </div>
       </div>
+      {voters.some(voter => voter.email) && (
+        <div className="flex flex-wrap gap-3 rounded-lg border border-green-200 bg-green-50 p-4">
+          <div className="mr-auto"><strong className="block text-sm text-green-900">Private one-click ballot links</strong><span className="text-sm text-green-800">Available after the election opens.</span></div>
+          <button type="button" className="btn-secondary" disabled={sendingLinks || status !== 'open'} onClick={() => sendLinks('send')}>Send ballot links</button>
+          <button type="button" className="btn-secondary" disabled={sendingLinks || status !== 'open'} onClick={() => sendLinks('remind')}>Remind non-voters</button>
+        </div>
+      )}
 
       {/* Add Methods */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -271,8 +295,12 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
                   className="input-field"
                   placeholder="member@example.com"
                   disabled={isAdding}
-                  required
                 />
+              </div>
+              <div>
+                <label htmlFor="newPhone" className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                <input type="tel" id="newPhone" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} className="input-field" placeholder="04xx xxx xxx" disabled={isAdding} />
+                <p className="mt-1 text-xs text-gray-500">At least one of email or phone is required.</p>
               </div>
               
               <button
@@ -314,7 +342,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
                   disabled={isUploading}
                 />
                 <p className="text-sm text-gray-500 mt-1">
-                  CSV with email addresses (one per line or comma-separated)
+                  CSV columns: email, phone. Either value may be blank.
                 </p>
               </div>
 
@@ -395,7 +423,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Email Address
+                      Voter identifier
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Added
@@ -409,7 +437,8 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, on
                   {voters.map((voter) => (
                     <tr key={voter.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{voter.email}</div>
+                        <div className="text-sm font-medium text-gray-900">{voter.email || voter.phone}</div>
+                        {voter.email && voter.phone && <div className="text-xs text-gray-500">{voter.phone}</div>}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="text-sm text-gray-500">{formatDate(voter.added_at)}</div>

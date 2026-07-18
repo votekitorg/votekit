@@ -5,7 +5,7 @@ A privacy-conscious, auditable online election platform for member organisations
 ## Features
 
 ### 🗳️ **Secure Voting System**
-- **Email Verification**: 6-digit codes sent via Resend API for member authentication
+- **Flexible Voter Access**: email OTP, Firebase SMS, private one-click voter links, or anonymous single-use code pools
 - **Anonymous Voting**: Votes are stored separately from voter identity
 - **Receipt Codes**: Verifiable vote receipts without revealing choices
 - **One Vote Per Member**: Enforced at database level with participation tracking
@@ -53,7 +53,7 @@ A privacy-conscious, auditable online election platform for member organisations
 
 1. **Clone and install dependencies**:
 ```bash
-cd member-plebiscite
+cd votekit
 npm install
 ```
 

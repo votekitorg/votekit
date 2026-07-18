@@ -19,6 +19,9 @@ const ELECTION_MANAGEMENT_ROLES: AdminRole[] = ['owner', 'returning_officer', 'a
 export interface Session {
   email: string;
   plebisciteId: number;
+  voterRollId: number | null;
+  anonymousCodeId: number | null;
+  credentialType: 'email' | 'phone' | 'voter_link' | 'anonymous_code';
   isAdmin?: boolean;
 }
 
@@ -609,14 +612,30 @@ export async function clearAdminCookie() {
 }
 
 // Voter authentication (email verification based)
-export function createVoterSession(email: string, plebisciteId: number): string {
+export function createVoterSession(email: string, plebisciteId: number, voterRollId?: number, credentialType: Session['credentialType'] = 'email'): string {
   const sessionId = uuidv4();
   const expiresAt = new Date(Date.now() + (2 * 60 * 60 * 1000));
 
+  const resolvedVoterId = voterRollId ?? (db.prepare(`
+    SELECT id FROM voter_roll WHERE email = ? AND plebiscite_id = ? LIMIT 1
+  `).get(normalizeEmail(email), plebisciteId) as { id: number } | undefined)?.id;
+  if (!resolvedVoterId) throw new Error('Voter not found');
+
   db.prepare(`
-    INSERT INTO sessions (id, email, plebiscite_id, is_admin, expires_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(sessionId, email, plebisciteId, 0, expiresAt.toISOString());
+    INSERT INTO sessions (id, email, plebiscite_id, is_admin, expires_at, voter_roll_id, credential_type)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(sessionId, email, plebisciteId, 0, expiresAt.toISOString(), resolvedVoterId, credentialType);
+
+  return sessionId;
+}
+
+export function createAnonymousVoterSession(plebisciteId: number, anonymousCodeId: number): string {
+  const sessionId = uuidv4();
+  const expiresAt = new Date(Date.now() + (2 * 60 * 60 * 1000));
+  db.prepare(`
+    INSERT INTO sessions (id, email, plebiscite_id, is_admin, expires_at, anonymous_code_id, credential_type)
+    VALUES (?, ?, ?, 0, ?, ?, 'anonymous_code')
+  `).run(sessionId, `anonymous-code:${anonymousCodeId}`, plebisciteId, expiresAt.toISOString(), anonymousCodeId);
 
   return sessionId;
 }
@@ -630,6 +649,9 @@ export function getVoterSession(sessionId?: string): Session | null {
     id: string;
     email: string;
     plebiscite_id: number;
+    voter_roll_id: number | null;
+    anonymous_code_id: number | null;
+    credential_type: Session['credentialType'] | null;
     is_admin: boolean;
     expires_at: string;
   } | undefined;
@@ -641,9 +663,16 @@ export function getVoterSession(sessionId?: string): Session | null {
     return null;
   }
 
+  const resolvedVoterId = session.voter_roll_id ?? (db.prepare(`
+    SELECT id FROM voter_roll WHERE plebiscite_id = ? AND email = ? LIMIT 1
+  `).get(session.plebiscite_id, normalizeEmail(session.email)) as { id: number } | undefined)?.id ?? null;
+
   return {
     email: session.email,
-    plebisciteId: session.plebiscite_id
+    plebisciteId: session.plebiscite_id,
+    voterRollId: resolvedVoterId,
+    anonymousCodeId: session.anonymous_code_id,
+    credentialType: session.credential_type || 'email'
   };
 }
 

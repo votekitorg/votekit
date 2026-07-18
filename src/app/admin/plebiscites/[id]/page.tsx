@@ -8,6 +8,7 @@ import ElectionVoterManager from '@/components/ElectionVoterManager';
 import { parseElectionCloseDate } from '@/lib/election-window';
 import { buildEncryptedManifest, encryptedBallotsEnabled } from '@/lib/encrypted-election-server';
 import ElectionTeamManager from '@/components/ElectionTeamManager';
+import AnonymousCodeManager from '@/components/AnonymousCodeManager';
 
 interface Plebiscite {
   id: number;
@@ -19,6 +20,7 @@ interface Plebiscite {
   close_date: string;
   status: 'draft' | 'open' | 'closed';
   privacy_mode: 'legacy' | 'encrypted';
+  access_mode: 'voter_roll' | 'anonymous_codes';
   manifest_hash?: string;
   recovery_confirmed_at?: string;
   close_state?: 'none' | 'closing' | 'failed';
@@ -55,11 +57,13 @@ async function getPlebiscite(id: string): Promise<{ plebiscite: Plebiscite; ques
   // Get participation stats for this specific election
   const participationCount = db.prepare('SELECT COUNT(*) as count FROM participation WHERE plebiscite_id = ?').get(id) as { count: number };
   const voterRollCount = db.prepare('SELECT COUNT(*) as count FROM voter_roll WHERE plebiscite_id = ?').get(id) as { count: number };
+  const accessCodeCount = db.prepare('SELECT COUNT(*) as count FROM anonymous_access_codes WHERE plebiscite_id = ?').get(id) as { count: number };
+  const eligibleCount = plebiscite.access_mode === 'anonymous_codes' ? accessCodeCount.count : voterRollCount.count;
   
   const stats = {
     totalVotes: participationCount.count,
-    totalVoters: voterRollCount.count,
-    participationRate: voterRollCount.count > 0 ? (participationCount.count / voterRollCount.count * 100).toFixed(1) : '0.0'
+    totalVoters: eligibleCount,
+    participationRate: eligibleCount > 0 ? (participationCount.count / eligibleCount * 100).toFixed(1) : '0.0'
   };
 
   return { plebiscite, questions, stats };
@@ -207,9 +211,9 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
               </svg>
               <div>
-                <h4 className="text-sm font-semibold text-yellow-800">No voters registered</h4>
+                <h4 className="text-sm font-semibold text-yellow-800">No voting credentials configured</h4>
                 <p className="text-sm text-yellow-700 mt-1">
-                  You need to add voters before members can vote in this election. Use the voter management section below.
+                  {plebiscite.access_mode === 'anonymous_codes' ? 'Generate voting codes before opening this election.' : 'Add voters before opening this election.'}
                 </p>
               </div>
             </div>
@@ -349,16 +353,15 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
         {canManage ? (
           <div className="card">
             <div className="card-body">
-              <ElectionVoterManager 
-                plebisciteId={plebiscite.id}
-                plebisciteTitle={plebiscite.title}
-              />
+              {plebiscite.access_mode === 'anonymous_codes'
+                ? <AnonymousCodeManager plebisciteId={plebiscite.id} status={plebiscite.status} />
+                : <ElectionVoterManager plebisciteId={plebiscite.id} plebisciteTitle={plebiscite.title} status={plebiscite.status} />}
             </div>
           </div>
         ) : (
           <div className="card">
             <div className="card-body text-sm text-gray-600">
-              Observer access is read-only. Ask an admin to manage this election's voter roll.
+              Observer access is read-only. Ask an admin to manage this election's voter access.
             </div>
           </div>
         )}
@@ -407,7 +410,7 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
         </div>
 
         {/* Share Information */}
-        {plebiscite.status === 'open' && (
+        {plebiscite.status === 'open' && plebiscite.access_mode === 'voter_roll' && (
           <div className="card">
             <div className="card-header">
               <h2 className="text-lg font-semibold text-gray-900">Share This Election</h2>

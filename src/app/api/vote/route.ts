@@ -80,23 +80,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: closedError }, { status: 403 });
     }
 
-    // Get voter from roll
-    const voter = db.prepare(`
-      SELECT * FROM voter_roll
-      WHERE email = ? AND plebiscite_id = ?
-      LIMIT 1
-    `).get(session.email, plebiscite.id) as any;
-    if (!voter) {
+    const voter = session.voterRollId ? db.prepare(`
+      SELECT * FROM voter_roll WHERE id = ? AND plebiscite_id = ? LIMIT 1
+    `).get(session.voterRollId, plebiscite.id) as any : null;
+    const anonymousCode = session.anonymousCodeId ? db.prepare(`
+      SELECT id, used FROM anonymous_access_codes WHERE id = ? AND plebiscite_id = ? LIMIT 1
+    `).get(session.anonymousCodeId, plebiscite.id) as { id: number; used: number } | undefined : null;
+    if (plebiscite.access_mode === 'anonymous_codes' ? (!anonymousCode || anonymousCode.used) : !voter) {
       return NextResponse.json(
-        { error: 'Voter not found' },
+        { error: 'Voting credential is invalid or has already been used' },
         { status: 403 }
       );
     }
 
     // Check if user has already voted. Encrypted submissions can safely retry
     // the same submission ID if the acknowledgement was interrupted.
-    const hasVoted = db.prepare('SELECT * FROM participation WHERE plebiscite_id = ? AND voter_roll_id = ?')
-      .get(plebiscite.id, voter.id) as any;
+    const hasVoted = plebiscite.access_mode === 'anonymous_codes'
+      ? db.prepare('SELECT * FROM participation WHERE plebiscite_id = ? AND anonymous_code_id = ?').get(plebiscite.id, anonymousCode!.id) as any
+      : db.prepare('SELECT * FROM participation WHERE plebiscite_id = ? AND voter_roll_id = ?').get(plebiscite.id, voter.id) as any;
 
     if (hasVoted) {
       if (plebiscite.privacy_mode === 'encrypted' && typeof body.submissionId === 'string') {
@@ -124,6 +125,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (plebiscite.privacy_mode === 'encrypted') {
+      if (plebiscite.access_mode === 'anonymous_codes') {
+        return NextResponse.json({ error: 'Encrypted ballot mode does not yet support anonymous access codes' }, { status: 409 });
+      }
       if (!encryptedBallotsEnabled) {
         return NextResponse.json({ error: 'Encrypted ballot support is unavailable' }, { status: 503 });
       }
@@ -295,15 +299,16 @@ export async function POST(request: NextRequest) {
       // Record participation first. This enforces one vote per voter inside the
       // same transaction, without storing any receipt code or ballot linkage on
       // the voter identity record.
-      const insertParticipation = db.prepare(`
-        INSERT INTO participation (plebiscite_id, voter_roll_id)
-        VALUES (?, ?)
-      `);
-
-      insertParticipation.run(
-        participationData.plebisciteId,
-        participationData.voterRollId
-      );
+      if (participationData.anonymousCodeId) {
+        const consumed = db.prepare(`UPDATE anonymous_access_codes SET used = TRUE WHERE id = ? AND plebiscite_id = ? AND used = FALSE`)
+          .run(participationData.anonymousCodeId, participationData.plebisciteId);
+        if (consumed.changes !== 1) throw new Error('Anonymous voting code has already been used');
+        db.prepare(`INSERT INTO participation (plebiscite_id, anonymous_code_id) VALUES (?, ?)`)
+          .run(participationData.plebisciteId, participationData.anonymousCodeId);
+      } else {
+        db.prepare(`INSERT INTO participation (plebiscite_id, voter_roll_id) VALUES (?, ?)`)
+          .run(participationData.plebisciteId, participationData.voterRollId);
+      }
 
       // Insert anonymous vote records. Receipt codes belong only to ballots and
       // are returned to the voter once; they are not retained against identity.
@@ -327,7 +332,8 @@ export async function POST(request: NextRequest) {
 
     const receiptCodes = submitVotes.immediate(validatedVotes, {
       plebisciteId: plebiscite.id,
-      voterRollId: voter.id
+      voterRollId: voter?.id || null,
+      anonymousCodeId: anonymousCode?.id || null
     });
 
     const sessionId = request.cookies.get(`voter-session-${plebisciteSlug}`)?.value;

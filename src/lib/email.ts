@@ -139,6 +139,25 @@ export async function sendAdminInvitationEmail(input: {
   }
 }
 
+export async function sendVoterLinkEmail(input: { email: string; electionTitle: string; electionDescription: string; ballotUrl: string; reminder?: boolean; closeDate?: string }): Promise<EmailResult> {
+  const fromEmail = process.env.FROM_EMAIL || 'noreply@example.com';
+  const safeTitle = escapeHtml(input.electionTitle);
+  const safeDescription = escapeHtml(input.electionDescription.slice(0, 500));
+  const safeUrl = escapeHtml(input.ballotUrl);
+  const subject = `${input.reminder ? 'Reminder: ' : ''}Your VoteKit ballot - ${input.electionTitle.replace(/[\r\n]+/g, ' ')}`;
+  try {
+    const result = await getResend().emails.send({
+      from: fromEmail, to: input.email, subject,
+      html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px"><h1 style="color:#00843D">VoteKit</h1><h2>${input.reminder ? 'Voting reminder' : 'Your ballot is ready'}</h2><p>You are invited to vote in <strong>${safeTitle}</strong>.</p><p>${safeDescription}</p><p style="margin:28px 0"><a href="${safeUrl}" style="background:#00843D;color:white;text-decoration:none;padding:13px 22px;border-radius:6px;font-weight:bold">Open your ballot</a></p><p style="color:#666;font-size:14px">This private link is tied to your voter registration. VoteKit separates your identity from your ballot when it is submitted.</p></div>`,
+      text: `VoteKit\n\n${input.reminder ? 'Voting reminder' : 'Your ballot is ready'}\n\n${input.electionTitle}\n\n${input.electionDescription.slice(0, 500)}\n\nOpen your ballot: ${input.ballotUrl}`
+    });
+    return { success: true, messageId: result.data?.id };
+  } catch (error) {
+    console.error('Failed to send voter link email:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
+  }
+}
+
 // Database-backed rate limiting
 function positiveIntegerEnv(name: string, fallback: number): number {
   const parsed = Number.parseInt(process.env[name] || '', 10);

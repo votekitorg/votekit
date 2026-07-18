@@ -38,6 +38,14 @@ export default function AboutPage() {
 
         {/* Voting Workflow */}
         <section className="mb-16">
+          <h3 className="text-2xl font-bold text-gray-900 mb-6 pb-3 border-b-2 border-primary">Choose how voters get access</h3>
+          <div className="grid gap-5 md:grid-cols-2">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h4 className="font-semibold text-gray-900">Registered voters</h4><p className="mt-2 text-sm text-gray-600">Import email addresses, phone numbers, or both. Voters can verify by email or SMS, and VoteKit can send each person a private one-click ballot link.</p></div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h4 className="font-semibold text-gray-900">Anonymous code pool</h4><p className="mt-2 text-sm text-gray-600">Generate a fixed quantity of single-use codes and links without uploading a voter roll. VoteKit stores only secure hashes and each credential can submit one ballot.</p></div>
+          </div>
+        </section>
+
+        <section className="mb-16">
           <h3 className="text-2xl font-bold text-gray-900 mb-8 pb-3 border-b-2 border-primary">
             The Voting Process
           </h3>
@@ -79,10 +87,9 @@ export default function AboutPage() {
               <div className="ml-5">
                 <h4 className="text-lg font-semibold text-gray-900">Verify your eligibility</h4>
                 <p className="text-gray-600 mt-1">
-                  Enter the email address registered for the election. You&apos;ll receive
-                  a 6-digit verification code at that address. This confirms you&apos;re an eligible
-                  voter and prevents anyone from voting on your behalf. The code expires after
-                  10 minutes for security.
+                  Depending on the election, use your registered email or phone, open your private
+                  one-click link, or enter an anonymous single-use voting code. The credential
+                  confirms eligibility without being attached to the completed ballot.
                 </p>
               </div>
             </div>
@@ -518,7 +525,7 @@ export default function AboutPage() {
         <div className="text-center bg-white rounded-xl shadow-sm border border-gray-200 p-8">
           <h3 className="text-2xl font-bold text-gray-900 mb-3">Ready to vote?</h3>
           <p className="text-gray-600">
-            Elections are not listed publicly. Open the election-specific link you were given and enter your verification code when prompted.
+            Elections are not listed publicly. Open the election-specific link you were given and follow its email, SMS, personal-link, or anonymous-code instructions.
           </p>
         </div>
       </main>

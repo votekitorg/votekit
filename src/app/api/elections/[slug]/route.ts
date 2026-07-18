@@ -58,6 +58,8 @@ export async function GET(
         status: plebiscite.status,
         voting_available: plebiscite.status === 'open' && !votingClosedError(plebiscite),
         privacy_mode: plebiscite.privacy_mode,
+        access_mode: plebiscite.access_mode || 'voter_roll',
+        sms_enabled: Boolean(plebiscite.sms_enabled),
         encrypted_ballot: encryptionKey ? {
           protocol: encryptionKey.protocol,
           manifestHash: encryptionKey.manifest_hash,

@@ -3,6 +3,7 @@ import { canManageElection, getAdminSessionFromRequest, recordAdminAuditLog,
   validateCSRFRequest
 } from '@/lib/auth';
 import db from '@/lib/db';
+import { normalizePhoneNumber } from '@/lib/voter-access';
 
 const MAX_VOTER_UPLOAD = 10_000;
 
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
     if (!canManageElection(adminSession, Number(plebisciteId))) return NextResponse.json({ error: 'You do not have permission to manage this election' }, { status: 403 });
 
     const voters = db.prepare(`
-      SELECT id, email, added_at
+      SELECT id, email, phone, added_at
       FROM voter_roll
       WHERE plebiscite_id = ?
       ORDER BY added_at DESC
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { action, emails, plebiscite_id } = body;
+    const { action, emails, voters, plebiscite_id } = body;
 
     if (!plebiscite_id) {
       return NextResponse.json(
@@ -86,39 +87,41 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'upload') {
-      if (!emails || !Array.isArray(emails) || emails.length > MAX_VOTER_UPLOAD) {
+      const supplied = Array.isArray(voters) ? voters : Array.isArray(emails) ? emails.map((email: string) => ({ email })) : null;
+      if (!supplied || supplied.length > MAX_VOTER_UPLOAD) {
         return NextResponse.json(
-          { error: `An email list of at most ${MAX_VOTER_UPLOAD} entries is required` },
+          { error: `A voter list of at most ${MAX_VOTER_UPLOAD} entries is required` },
           { status: 400 }
         );
       }
 
       // Validate email addresses
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      const validEmails = emails.filter(email => 
-        typeof email === 'string' && email.length <= 254 && emailRegex.test(email.trim().toLowerCase())
-      );
+      const validVoters = supplied.map((entry: any) => {
+        const email = typeof entry?.email === 'string' && emailRegex.test(entry.email.trim()) ? entry.email.trim().toLowerCase() : null;
+        const phone = typeof entry?.phone === 'string' ? normalizePhoneNumber(entry.phone) : null;
+        return email || phone ? { email, phone } : null;
+      }).filter(Boolean) as Array<{ email: string | null; phone: string | null }>;
 
-      if (validEmails.length === 0) {
+      if (validVoters.length === 0) {
         return NextResponse.json(
-          { error: 'No valid email addresses provided' },
+          { error: 'No valid email addresses or phone numbers provided' },
           { status: 400 }
         );
       }
 
       // Insert emails for this specific election (handle duplicates within this election)
-      const insertEmail = db.prepare(`
-        INSERT OR IGNORE INTO voter_roll (email, plebiscite_id)
-        VALUES (?, ?)
+      const insertVoter = db.prepare(`
+        INSERT OR IGNORE INTO voter_roll (email, phone, plebiscite_id)
+        VALUES (?, ?, ?)
       `);
 
       let insertedCount = 0;
       let duplicateCount = 0;
 
-      const insertMany = db.transaction((emails, plebisciteId) => {
-        for (const email of emails) {
-          const normalizedEmail = email.trim().toLowerCase();
-          const result = insertEmail.run(normalizedEmail, plebisciteId);
+      const insertMany = db.transaction((entries, plebisciteId) => {
+        for (const entry of entries) {
+          const result = insertVoter.run(entry.email, entry.phone, plebisciteId);
           if (result.changes > 0) {
             insertedCount++;
           } else {
@@ -127,35 +130,37 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      insertMany(validEmails, plebiscite_id);
+      insertMany(validVoters, plebiscite_id);
       recordAdminAuditLog({
         adminUserId: adminSession.adminUserId,
         action: 'voter_roll.upload',
         targetType: 'plebiscite',
         targetId: plebiscite_id,
-        details: { inserted: insertedCount, duplicates: duplicateCount, invalid: emails.length - validEmails.length }
+        details: { inserted: insertedCount, duplicates: duplicateCount, invalid: supplied.length - validVoters.length }
       });
 
       return NextResponse.json({
         success: true,
         inserted: insertedCount,
         duplicates: duplicateCount,
-        invalid: emails.length - validEmails.length
+        invalid: supplied.length - validVoters.length
       });
     }
 
     if (action === 'add') {
-      const { email } = body;
+      const { email, phone } = body;
+      const normalizedPhone = typeof phone === 'string' ? normalizePhoneNumber(phone) : null;
+      const normalizedEmail = typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : null;
       
-      if (!email || typeof email !== 'string' || email.length > 254) {
+      if (!normalizedEmail && !normalizedPhone) {
         return NextResponse.json(
-          { error: 'Email is required' },
+          { error: 'A valid email address or phone number is required' },
           { status: 400 }
         );
       }
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email.trim())) {
+      if (normalizedEmail && (normalizedEmail.length > 254 || !emailRegex.test(normalizedEmail))) {
         return NextResponse.json(
           { error: 'Invalid email address' },
           { status: 400 }
@@ -163,20 +168,19 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const normalizedEmail = email.trim().toLowerCase();
-        const result = db.prepare('INSERT INTO voter_roll (email, plebiscite_id) VALUES (?, ?)').run(normalizedEmail, plebiscite_id);
+        const result = db.prepare('INSERT INTO voter_roll (email, phone, plebiscite_id) VALUES (?, ?, ?)').run(normalizedEmail, normalizedPhone, plebiscite_id);
         recordAdminAuditLog({
           adminUserId: adminSession.adminUserId,
           action: 'voter_roll.add',
           targetType: 'voter_roll',
           targetId: Number(result.lastInsertRowid),
-          details: { plebisciteId: plebiscite_id, email: normalizedEmail }
+          details: { plebisciteId: plebiscite_id, hasEmail: Boolean(normalizedEmail), hasPhone: Boolean(normalizedPhone) }
         });
         return NextResponse.json({ success: true });
       } catch (error: any) {
         if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
           return NextResponse.json(
-            { error: 'Email already exists in this election\'s voter roll' },
+            { error: 'That email address or phone number already exists in this election' },
             { status: 409 }
           );
         }
@@ -259,7 +263,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Check if voter has participated in any plebiscites
-    const voter = db.prepare('SELECT email, plebiscite_id FROM voter_roll WHERE id = ?').get(id) as any | undefined;
+    const voter = db.prepare('SELECT email, phone, plebiscite_id FROM voter_roll WHERE id = ?').get(id) as any | undefined;
     if (voter && !canManageElection(adminSession, Number(voter.plebiscite_id))) return NextResponse.json({ error: 'You do not have permission to manage this election' }, { status: 403 });
     if (!voter) {
       return NextResponse.json({ error: 'Voter not found' }, { status: 404 });
@@ -295,7 +299,7 @@ export async function DELETE(request: NextRequest) {
       action: 'voter_roll.delete',
       targetType: 'voter_roll',
       targetId: id,
-      details: voter ? { email: voter.email, plebisciteId: voter.plebiscite_id } : null
+      details: voter ? { plebisciteId: voter.plebiscite_id, hadEmail: Boolean(voter.email), hadPhone: Boolean(voter.phone) } : null
     });
 
     return NextResponse.json({ success: true });

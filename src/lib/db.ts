@@ -338,6 +338,7 @@ function runMigrations() {
   migrate();
   runPrivacyMigrations(database);
   runAdministrativeRoleMigrations(database);
+  runVoterAccessMigrations(database);
 }
 
 function tableInfo(database: Database.Database, tableName: string): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {
@@ -463,6 +464,116 @@ function runAdministrativeRoleMigrations(database: Database.Database): void {
   });
 
   migrateRoles();
+}
+
+function runVoterAccessMigrations(database: Database.Database): void {
+  const previousForeignKeys = (database.pragma('foreign_keys', { simple: true }) as number) === 1;
+  database.pragma('foreign_keys = OFF');
+  try {
+    database.transaction(() => {
+      if (!hasColumn(database, 'plebiscites', 'access_mode')) {
+        database.exec(`ALTER TABLE plebiscites ADD COLUMN access_mode TEXT
+          CHECK(access_mode IN ('voter_roll', 'anonymous_codes')) NOT NULL DEFAULT 'voter_roll'`);
+      }
+      if (!hasColumn(database, 'plebiscites', 'sms_enabled')) {
+        database.exec('ALTER TABLE plebiscites ADD COLUMN sms_enabled BOOLEAN NOT NULL DEFAULT FALSE');
+      }
+
+      const voterSql = tableSql(database, 'voter_roll');
+      if (!hasColumn(database, 'voter_roll', 'phone') || /email\s+TEXT\s+(?:UNIQUE\s+)?NOT NULL/i.test(voterSql)) {
+        database.exec(`
+          CREATE TABLE voter_roll_access_migration (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT,
+            phone TEXT,
+            added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            plebiscite_id INTEGER REFERENCES plebiscites(id) ON DELETE CASCADE,
+            CHECK(email IS NOT NULL OR phone IS NOT NULL),
+            UNIQUE(email, plebiscite_id),
+            UNIQUE(phone, plebiscite_id)
+          );
+          INSERT INTO voter_roll_access_migration (id, email, added_at, plebiscite_id)
+          SELECT id, email, added_at, plebiscite_id FROM voter_roll;
+          DROP TABLE voter_roll;
+          ALTER TABLE voter_roll_access_migration RENAME TO voter_roll;
+          CREATE INDEX idx_voter_roll_email ON voter_roll(email);
+          CREATE INDEX idx_voter_roll_phone ON voter_roll(phone);
+          CREATE INDEX idx_voter_roll_plebiscite ON voter_roll(plebiscite_id);
+        `);
+      }
+
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS anonymous_access_codes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          plebiscite_id INTEGER NOT NULL,
+          token_hash TEXT UNIQUE NOT NULL,
+          batch_id TEXT NOT NULL,
+          used BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (plebiscite_id) REFERENCES plebiscites(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_anonymous_codes_election ON anonymous_access_codes(plebiscite_id);
+        CREATE INDEX IF NOT EXISTS idx_anonymous_codes_batch ON anonymous_access_codes(batch_id);
+
+        CREATE TABLE IF NOT EXISTS voter_link_tokens (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          plebiscite_id INTEGER NOT NULL,
+          voter_roll_id INTEGER NOT NULL,
+          token_hash TEXT UNIQUE NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          revoked BOOLEAN NOT NULL DEFAULT FALSE,
+          UNIQUE(plebiscite_id, voter_roll_id),
+          FOREIGN KEY (plebiscite_id) REFERENCES plebiscites(id) ON DELETE CASCADE,
+          FOREIGN KEY (voter_roll_id) REFERENCES voter_roll(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_voter_links_election ON voter_link_tokens(plebiscite_id);
+      `);
+
+      if (!hasColumn(database, 'sessions', 'voter_roll_id')) {
+        database.exec('ALTER TABLE sessions ADD COLUMN voter_roll_id INTEGER REFERENCES voter_roll(id) ON DELETE CASCADE');
+      }
+      if (!hasColumn(database, 'sessions', 'anonymous_code_id')) {
+        database.exec('ALTER TABLE sessions ADD COLUMN anonymous_code_id INTEGER REFERENCES anonymous_access_codes(id) ON DELETE CASCADE');
+      }
+      if (!hasColumn(database, 'sessions', 'credential_type')) {
+        database.exec(`ALTER TABLE sessions ADD COLUMN credential_type TEXT
+          CHECK(credential_type IN ('email', 'phone', 'voter_link', 'anonymous_code'))`);
+      }
+      database.exec(`
+        UPDATE sessions
+        SET voter_roll_id = (
+          SELECT vr.id FROM voter_roll vr
+          WHERE vr.plebiscite_id = sessions.plebiscite_id AND vr.email = sessions.email
+          LIMIT 1
+        ), credential_type = COALESCE(credential_type, 'email')
+        WHERE is_admin = FALSE AND voter_roll_id IS NULL AND anonymous_code_id IS NULL;
+      `);
+
+      if (!hasColumn(database, 'participation', 'anonymous_code_id')) {
+        database.exec(`
+          CREATE TABLE participation_access_migration (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plebiscite_id INTEGER NOT NULL,
+            voter_roll_id INTEGER,
+            anonymous_code_id INTEGER,
+            CHECK((voter_roll_id IS NOT NULL) != (anonymous_code_id IS NOT NULL)),
+            FOREIGN KEY (plebiscite_id) REFERENCES plebiscites(id) ON DELETE CASCADE,
+            FOREIGN KEY (voter_roll_id) REFERENCES voter_roll(id) ON DELETE CASCADE,
+            FOREIGN KEY (anonymous_code_id) REFERENCES anonymous_access_codes(id) ON DELETE CASCADE,
+            UNIQUE(plebiscite_id, voter_roll_id),
+            UNIQUE(plebiscite_id, anonymous_code_id)
+          );
+          INSERT INTO participation_access_migration (id, plebiscite_id, voter_roll_id)
+          SELECT id, plebiscite_id, voter_roll_id FROM participation;
+          DROP TABLE participation;
+          ALTER TABLE participation_access_migration RENAME TO participation;
+          CREATE INDEX idx_participation_plebiscite ON participation(plebiscite_id);
+        `);
+      }
+    })();
+  } finally {
+    if (previousForeignKeys) database.pragma('foreign_keys = ON');
+  }
 }
 
 function migrateQuestionsConstraint(database: Database.Database): void {

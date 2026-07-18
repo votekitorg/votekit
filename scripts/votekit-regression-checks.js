@@ -34,6 +34,10 @@ const resultsPage = read('src/app/results/[slug]/page.tsx');
 const readme = read('README.md');
 const envExample = read('.env.example');
 const csrfRoute = read('src/app/api/csrf/route.ts');
+const voterAccess = read('src/lib/voter-access.ts');
+const accessCodeRoute = read('src/app/api/admin/access-codes/route.ts');
+const accessCodeAuthRoute = read('src/app/api/auth/access-code/route.ts');
+const firebaseToken = read('src/lib/firebase-token.ts');
 
 const participationCreate = db.match(/CREATE TABLE IF NOT EXISTS participation \([\s\S]*?\);/);
 assert(Boolean(participationCreate), 'participation table definition exists');
@@ -109,6 +113,12 @@ assert(adminVotersRoute.includes('voter roll is locked once an election opens'),
 assert(db.includes('DELETE FROM verification_codes WHERE plebiscite_id = ?'), 'close cleanup purges all verification codes for the plebiscite');
 assert(db.includes('DELETE FROM voter_verification_attempts WHERE plebiscite_id = ?'), 'close cleanup purges voter verification attempts');
 assert(csrfRoute.includes("dynamic = 'force-dynamic'") && csrfRoute.includes("'Cache-Control': 'no-store, max-age=0'"), 'CSRF tokens are never statically generated or cached');
+assert(db.includes('token_hash TEXT UNIQUE NOT NULL') && !db.includes('anonymous_access_codes (\n          id INTEGER PRIMARY KEY AUTOINCREMENT,\n          plebiscite_id INTEGER NOT NULL,\n          token TEXT'), 'anonymous voting codes are stored only as hashes');
+assert(voterAccess.includes('crypto.randomInt') && voterAccess.includes('createHash(\'sha256\')'), 'anonymous and voter-link tokens use cryptographic randomness and hashing');
+assert(accessCodeRoute.includes('#code=') && !accessCodeRoute.includes('?code='), 'anonymous voting links keep credentials in URL fragments');
+assert(voteRoute.includes('UPDATE anonymous_access_codes SET used = TRUE') && voteRoute.includes('submitVotes.immediate'), 'anonymous codes are consumed atomically with ballot submission');
+assert(accessCodeAuthRoute.includes("access_mode = 'anonymous_codes'") && accessCodeAuthRoute.includes('used'), 'anonymous code authentication is scoped and rejects used codes');
+assert(firebaseToken.includes('audience: projectId') && firebaseToken.includes('issuer: `https://securetoken.google.com/${projectId}`'), 'Firebase phone tokens verify signature, audience, and issuer');
 
 if (process.exitCode) {
   process.exit(process.exitCode);

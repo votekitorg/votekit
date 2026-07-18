@@ -36,7 +36,7 @@ const capabilities = [
   },
   {
     title: 'Controlled voter access',
-    description: 'Election-specific links and expiring verification codes keep participation limited to eligible voters and prevent duplicate ballots.',
+    description: 'Use a registered voter roll with email, SMS or personal links, or generate an anonymous pool of single-use voting codes.',
     icon: (
       <path d="M8.5 11a3.25 3.25 0 1 0 0-6.5 3.25 3.25 0 0 0 0 6.5Zm7.25-.75a2.5 2.5 0 1 0 0-5m-13 14.25v-1.25A4.25 4.25 0 0 1 7 14h3a4.25 4.25 0 0 1 4.25 4.25v1.25m2-5.25a4.25 4.25 0 0 1 5 4.18v1.07" />
     ),
@@ -184,7 +184,7 @@ export default function HomePage() {
             <div>
               <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#63d397]">Simple for voters</p>
               <h2 className="mt-4 text-3xl font-bold tracking-[-0.035em] sm:text-4xl">No public election directory. No searching around.</h2>
-              <p className="mt-5 max-w-xl text-lg leading-8 text-[#b9c8bf]">Eligible voters receive an election-specific link. An expiring code verifies access, then VoteKit separates their identity from their completed ballot.</p>
+              <p className="mt-5 max-w-xl text-lg leading-8 text-[#b9c8bf]">Invite registered voters by email, SMS or personal link, or distribute anonymous single-use codes without collecting anyone's personal details.</p>
             </div>
 
             <ol className="grid gap-4 sm:grid-cols-3">

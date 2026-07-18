@@ -25,6 +25,8 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
     title: '',
     description: '',
     info_url: '',
+    access_mode: 'voter_roll' as 'voter_roll' | 'anonymous_codes',
+    sms_enabled: false,
     open_date: defaultOpenDate,
     close_date: defaultCloseDate
   });
@@ -41,9 +43,9 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
     { id: 3, name: 'Review', description: 'Preview before publishing' }
   ];
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => ({ ...prev, [name]: e.target instanceof HTMLInputElement && e.target.type === 'checkbox' ? e.target.checked : value }));
   };
 
   const addQuestion = () => {
@@ -275,6 +277,24 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
                 <p className="text-sm text-gray-600 mt-1">Enter the core details of your election</p>
               </div>
               <div className="card-body space-y-6">
+                <div>
+                  <label htmlFor="access_mode" className="block text-sm font-medium text-gray-700 mb-2">Voter access *</label>
+                  <select id="access_mode" name="access_mode" value={formData.access_mode} onChange={handleInputChange} className="input-field">
+                    <option value="voter_roll">Registered voters (email, phone or personal link)</option>
+                    <option value="anonymous_codes">Anonymous single-use codes and links</option>
+                  </select>
+                  <p className="mt-2 text-sm text-gray-500">
+                    {formData.access_mode === 'anonymous_codes'
+                      ? 'Generate a fixed pool such as 500 codes. No names, email addresses or phone numbers are required.'
+                      : 'Add eligible voters, then let them verify by email, phone or a personal VoteKit link.'}
+                  </p>
+                </div>
+                {formData.access_mode === 'voter_roll' && (
+                  <label className="flex items-start gap-3 rounded-lg border border-gray-200 p-4">
+                    <input type="checkbox" name="sms_enabled" checked={formData.sms_enabled} onChange={handleInputChange} className="mt-1" />
+                    <span><strong className="block text-sm text-gray-900">Allow text-message verification</strong><span className="text-sm text-gray-600">Phone-only voters can verify through Firebase SMS instead of email.</span></span>
+                  </label>
+                )}
                 <div>
                   <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
                     Election Title *

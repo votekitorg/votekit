@@ -7,6 +7,7 @@ import { csrfFetch } from '@/lib/csrf-client';
 import { parseElectionCloseDate } from '@/lib/election-window';
 import { encryptBallot } from '@/lib/browser-ballot-crypto';
 import type { EncryptedBallotPackage, EncryptedElectionManifest } from '@/lib/encrypted-ballots';
+import { confirmSmsCode, sendSmsCode } from '@/lib/firebase';
 
 interface Plebiscite {
   id: number;
@@ -19,6 +20,8 @@ interface Plebiscite {
   status: string;
   voting_available: boolean;
   privacy_mode: 'legacy' | 'encrypted';
+  access_mode: 'voter_roll' | 'anonymous_codes';
+  sms_enabled: boolean;
   encrypted_ballot?: {
     manifest: EncryptedElectionManifest;
     manifestHash: string;
@@ -42,7 +45,7 @@ interface VotingPageProps {
 
 export default function VotingPage({ params }: VotingPageProps) {
   const { slug } = use(params);
-  const [step, setStep] = useState<'info' | 'email' | 'verify' | 'vote' | 'complete'>('info');
+  const [step, setStep] = useState<'info' | 'email' | 'phone' | 'accessCode' | 'verify' | 'vote' | 'complete'>('info');
   const [plebiscite, setPlebiscite] = useState<Plebiscite | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [error, setError] = useState('');
@@ -51,6 +54,10 @@ export default function VotingPage({ params }: VotingPageProps) {
   // Email verification
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
+  const [accessCode, setAccessCode] = useState('');
+  const [phone, setPhone] = useState('');
+  const [smsCode, setSmsCode] = useState('');
+  const [smsSent, setSmsSent] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [canResend, setCanResend] = useState(true);
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -117,6 +124,30 @@ export default function VotingPage({ params }: VotingPageProps) {
 
     fetchPlebiscite();
   }, [slug, router]);
+
+  useEffect(() => {
+    if (!plebiscite) return;
+    const codeMatch = window.location.hash.match(/^#code=(.+)$/u);
+    if (plebiscite.access_mode === 'anonymous_codes' && codeMatch) {
+      setAccessCode(decodeURIComponent(codeMatch[1]));
+      setStep('accessCode');
+      return;
+    }
+    const voterMatch = window.location.hash.match(/^#voter=(.+)$/u);
+    if (plebiscite.access_mode === 'voter_roll' && voterMatch) {
+      setIsVerifying(true);
+      void csrfFetch('/api/auth/voter-link', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: decodeURIComponent(voterMatch[1]), plebisciteSlug: slug })
+      }).then(async response => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Invalid ballot link');
+        history.replaceState(null, '', window.location.pathname);
+        setStep('vote');
+      }).catch(cause => setError(cause instanceof Error ? cause.message : 'Invalid ballot link'))
+        .finally(() => setIsVerifying(false));
+    }
+  }, [plebiscite, slug]);
 
   // Cooldown timer for resend
   useEffect(() => {
@@ -205,6 +236,48 @@ export default function VotingPage({ params }: VotingPageProps) {
     } finally {
       setIsVerifying(false);
     }
+  };
+
+  const handleAccessCodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsVerifying(true); setError('');
+    try {
+      const response = await csrfFetch('/api/auth/access-code', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: accessCode, plebisciteSlug: slug })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Invalid or already used voting code');
+      history.replaceState(null, '', window.location.pathname);
+      setAccessCode('');
+      setStep('vote');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Invalid or already used voting code');
+    } finally { setIsVerifying(false); }
+  };
+
+  const handlePhoneSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); setIsVerifying(true); setError('');
+    try {
+      if (!smsSent) {
+        let normalized = phone.replace(/[^\d+]/g, '');
+        if (normalized.startsWith('0') && normalized.length === 10) normalized = `+61${normalized.slice(1)}`;
+        else if (normalized.startsWith('61')) normalized = `+${normalized}`;
+        await sendSmsCode(normalized, 'send-sms-code');
+        setPhone(normalized); setSmsSent(true);
+      } else {
+        const idToken = await confirmSmsCode(smsCode);
+        const response = await csrfFetch('/api/auth/verify-phone', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken, plebisciteSlug: slug })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Phone verification failed');
+        setStep('vote');
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Phone verification failed');
+    } finally { setIsVerifying(false); }
   };
 
   const handleVoteSubmit = async (votes: { [questionId: number]: any }) => {
@@ -408,9 +481,14 @@ export default function VotingPage({ params }: VotingPageProps) {
                 <div className="mt-8 bg-green-50 border border-green-200 rounded-lg p-4">
                   <h4 className="text-sm font-medium text-green-900 mb-2">How voting works:</h4>
                   <ol className="text-sm text-green-800 space-y-1 list-decimal list-inside">
-                    <li>Enter your registered email address</li>
-                    <li>Check your email for a 6-digit verification code</li>
-                    <li>Enter the code to access your ballot</li>
+                    {plebiscite.access_mode === 'anonymous_codes' ? <>
+                      <li>Open your unique voting link or enter your voting code</li>
+                      <li>Your code unlocks one anonymous ballot</li>
+                    </> : <>
+                      <li>Enter your registered email address</li>
+                      <li>Check your email for a 6-digit verification code</li>
+                      <li>Enter the code to access your ballot</li>
+                    </>}
                     <li>Vote on all questions</li>
                     <li>Review and submit your votes</li>
                     <li>Save your receipt codes for verification</li>
@@ -421,12 +499,30 @@ export default function VotingPage({ params }: VotingPageProps) {
 
             <div className="text-center">
               <button
-                onClick={() => setStep('email')}
+                onClick={() => setStep(plebiscite.access_mode === 'anonymous_codes' ? 'accessCode' : 'email')}
                 className="btn-primary px-8"
               >
                 Begin
               </button>
             </div>
+          </div>
+        )}
+
+        {step === 'accessCode' && (
+          <div className="max-w-md mx-auto">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Enter your voting code</h2>
+              <p className="text-gray-600">Each code unlocks one anonymous ballot.</p>
+            </div>
+            <div className="card"><div className="card-body">
+              <form onSubmit={handleAccessCodeSubmit} className="space-y-4">
+                <input aria-label="Voting code" value={accessCode} onChange={event => setAccessCode(event.target.value.toUpperCase())}
+                  className="input-field text-center font-mono tracking-wider" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" autoComplete="one-time-code" required />
+                {error && <div className="alert-error">{error}</div>}
+                <button className="btn-primary w-full" disabled={isVerifying}>{isVerifying ? 'Checking code…' : 'Continue to ballot'}</button>
+              </form>
+            </div></div>
+            <div className="text-center mt-4"><button onClick={() => setStep('info')} className="text-sm text-gray-600 hover:text-primary">← Back to Information</button></div>
           </div>
         )}
 
@@ -487,6 +583,7 @@ export default function VotingPage({ params }: VotingPageProps) {
             </div>
 
             <div className="text-center mt-4">
+              {plebiscite.sms_enabled && <button onClick={() => { setError(''); setStep('phone'); }} className="block mx-auto mb-3 text-sm font-medium text-primary hover:text-primary-dark">Use a registered phone number instead</button>}
               <button
                 onClick={() => setStep('info')}
                 className="text-sm text-gray-600 hover:text-primary"
@@ -494,6 +591,24 @@ export default function VotingPage({ params }: VotingPageProps) {
                 ← Back to Information
               </button>
             </div>
+          </div>
+        )}
+
+        {step === 'phone' && (
+          <div className="max-w-md mx-auto">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Verify by text message</h2>
+              <p className="text-gray-600">{smsSent ? `Enter the code sent to ${phone}` : 'Use the phone number registered for this election.'}</p>
+            </div>
+            <div className="card"><div className="card-body">
+              <form onSubmit={handlePhoneSubmit} className="space-y-4">
+                {!smsSent ? <input type="tel" value={phone} onChange={event => setPhone(event.target.value)} className="input-field" placeholder="04xx xxx xxx" required />
+                  : <input value={smsCode} onChange={event => setSmsCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="input-field text-center text-2xl tracking-widest font-mono" placeholder="000000" required />}
+                {error && <div className="alert-error">{error}</div>}
+                <button id="send-sms-code" className="btn-primary w-full" disabled={isVerifying}>{isVerifying ? 'Please wait…' : smsSent ? 'Verify and continue' : 'Send text message'}</button>
+              </form>
+            </div></div>
+            <div className="text-center mt-4"><button onClick={() => { setError(''); setStep('email'); }} className="text-sm text-gray-600 hover:text-primary">Use email instead</button></div>
           </div>
         )}
 

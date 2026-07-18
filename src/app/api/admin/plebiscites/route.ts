@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title, description, info_url, open_date, close_date, questions = [] } = body;
+    const { title, description, info_url, open_date, close_date, questions = [], access_mode = 'voter_roll', sms_enabled = false } = body;
 
     // Validation
     if (typeof title !== 'string' || !title.trim() || typeof description !== 'string' || !description.trim()) {
@@ -103,6 +103,9 @@ export async function POST(request: NextRequest) {
     }
     const dateError = validateElectionDates(open_date, close_date);
     if (dateError) return NextResponse.json({ error: dateError }, { status: 400 });
+    if (!['voter_roll', 'anonymous_codes'].includes(access_mode)) {
+      return NextResponse.json({ error: 'Invalid voter access mode' }, { status: 400 });
+    }
 
     if (!Array.isArray(questions) || questions.length === 0 || questions.length > MAX_QUESTIONS) {
       return NextResponse.json(
@@ -153,11 +156,11 @@ export async function POST(request: NextRequest) {
     const normalizedInfoUrl = typeof info_url === 'string' ? info_url.trim() || null : null;
     const slug = generateUniqueSlug(normalizedTitle);
     const createElection = db.transaction(() => {
-      const privacyMode = encryptedBallotsEnabled ? 'encrypted' : 'legacy';
+      const privacyMode = encryptedBallotsEnabled && access_mode === 'voter_roll' ? 'encrypted' : 'legacy';
       const result = db.prepare(`
-        INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, status, privacy_mode, created_by_admin_user_id)
-        VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?)
-      `).run(slug, normalizedTitle, normalizedDescription, normalizedInfoUrl, open_date, close_date, privacyMode, adminSession.adminUserId);
+        INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, status, privacy_mode, created_by_admin_user_id, access_mode, sms_enabled)
+        VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)
+      `).run(slug, normalizedTitle, normalizedDescription, normalizedInfoUrl, open_date, close_date, privacyMode, adminSession.adminUserId, access_mode, sms_enabled ? 1 : 0);
       const plebisciteId = Number(result.lastInsertRowid);
       if (adminSession.role === 'returning_officer') {
         db.prepare(`INSERT INTO election_team_members (plebiscite_id, admin_user_id, role, assigned_by_admin_user_id)
@@ -187,7 +190,7 @@ export async function POST(request: NextRequest) {
         action: 'plebiscite.create',
         targetType: 'plebiscite',
         targetId: plebisciteId,
-        details: { slug, title: normalizedTitle, questionCount: questions.length, privacyMode }
+        details: { slug, title: normalizedTitle, questionCount: questions.length, privacyMode, accessMode: access_mode }
       });
       return plebisciteId;
     });
@@ -260,11 +263,16 @@ export async function PUT(request: NextRequest) {
 
       const voterCount = db.prepare('SELECT COUNT(*) AS count FROM voter_roll WHERE plebiscite_id = ?')
         .get(id) as { count: number };
+      const accessCodeCount = db.prepare('SELECT COUNT(*) AS count FROM anonymous_access_codes WHERE plebiscite_id = ?')
+        .get(id) as { count: number };
       const questionCount = db.prepare('SELECT COUNT(*) AS count FROM questions WHERE plebiscite_id = ?')
         .get(id) as { count: number };
-      if (voterCount.count === 0 || questionCount.count === 0) {
+      const credentialCount = plebiscite.access_mode === 'anonymous_codes' ? accessCodeCount.count : voterCount.count;
+      if (credentialCount === 0 || questionCount.count === 0) {
         return NextResponse.json(
-          { error: 'An election must have at least one voter and one question before it can open' },
+          { error: plebiscite.access_mode === 'anonymous_codes'
+              ? 'Generate at least one anonymous voting code before opening this election'
+              : 'Add at least one voter before opening this election' },
           { status: 400 }
         );
       }
@@ -333,7 +341,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Regular update
-    const { title, description, info_url, open_date, close_date } = updateData;
+    const { title, description, info_url, open_date, close_date, access_mode, sms_enabled } = updateData;
 
     // Validation for regular updates
     if ((plebiscite as any).status !== 'draft') {
@@ -351,6 +359,9 @@ export async function PUT(request: NextRequest) {
     }
     if (info_url !== undefined && info_url !== '' && (typeof info_url !== 'string' || info_url.length > 2048 || !validHttpUrl(info_url))) {
       return NextResponse.json({ error: 'Information URL must be a valid HTTP or HTTPS URL' }, { status: 400 });
+    }
+    if (access_mode !== undefined && !['voter_roll', 'anonymous_codes'].includes(access_mode)) {
+      return NextResponse.json({ error: 'Invalid voter access mode' }, { status: 400 });
     }
     const dateError = validateElectionDates(open_date ?? plebiscite.open_date, close_date ?? plebiscite.close_date);
     if (dateError) return NextResponse.json({ error: dateError }, { status: 400 });
@@ -377,6 +388,14 @@ export async function PUT(request: NextRequest) {
     if (close_date !== undefined) {
       updateFields.push('close_date = ?');
       updateValues.push(close_date);
+    }
+    if (access_mode !== undefined) {
+      updateFields.push('access_mode = ?');
+      updateValues.push(access_mode);
+    }
+    if (sms_enabled !== undefined) {
+      updateFields.push('sms_enabled = ?');
+      updateValues.push(sms_enabled ? 1 : 0);
     }
 
     if (updateFields.length > 0) {
