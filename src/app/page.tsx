@@ -58,7 +58,7 @@ export default function HomePage() {
               How it works
             </Link>
             <Link href="/admin" className="rounded-lg border border-[#cfd8d1] bg-white px-4 py-2.5 text-sm font-semibold text-[#223229] shadow-sm transition hover:border-[#078348] hover:text-[#078348]">
-              Administrator sign in
+              Secure sign in
             </Link>
           </nav>
         </div>

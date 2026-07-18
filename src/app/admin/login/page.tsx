@@ -60,10 +60,10 @@ export default function AdminLogin() {
           </div>
         </div>
         <h2 className="mt-6 text-center text-3xl font-bold text-gray-900">
-          Admin Login
+          Sign in to VoteKit
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
-          Sign in with your admin account to access the management panel
+          Use your VoteKit account to continue. Your access is based on the role assigned to you.
         </p>
       </div>
 
@@ -84,7 +84,7 @@ export default function AdminLogin() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="input-field"
-                  placeholder="admin@example.org"
+                  placeholder="name@organisation.org"
                 />
               </div>
             </div>
@@ -103,7 +103,7 @@ export default function AdminLogin() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="input-field"
-                  placeholder="Enter admin password"
+                  placeholder="Enter your password"
                 />
               </div>
             </div>
@@ -147,7 +147,7 @@ export default function AdminLogin() {
 
             <div className="mt-4 text-center">
               <p className="text-sm text-gray-600">
-                Contact an admin if you need access or have forgotten your password.
+                Contact your election organiser or account administrator if you need access or have forgotten your password.
               </p>
             </div>
           </div>
@@ -159,7 +159,7 @@ export default function AdminLogin() {
           href="/"
           className="text-primary hover:text-primary-dark text-sm font-medium"
         >
-          ← Back to Public Site
+          ← Back to VoteKit
         </Link>
       </div>
     </div>
