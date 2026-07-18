@@ -31,7 +31,7 @@ export default function AboutPage() {
         <div className="text-center mb-16">
           <h2 className="text-4xl font-bold text-gray-900 mb-4">How It Works</h2>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            A practical, open-source voting system for member organisations.
+            A practical, open-source platform for running private, verifiable online elections.
             This page explains the process, the safeguards, and the limits of what the system can do.
           </p>
         </div>
@@ -41,7 +41,7 @@ export default function AboutPage() {
           <h3 className="text-2xl font-bold text-gray-900 mb-8 pb-3 border-b-2 border-primary">
             The Voting Process
           </h3>
-          
+
           <div className="space-y-8">
             <div className="flex items-start">
               <div className="flex-shrink-0 w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white font-bold text-lg">
@@ -50,9 +50,9 @@ export default function AboutPage() {
               <div className="ml-5">
                 <h4 className="text-lg font-semibold text-gray-900">An election is announced</h4>
                 <p className="text-gray-600 mt-1">
-                  When an issue is put to members, an election is created with a clear question, 
-                  background information, and a voting period. A single shareable link is generated 
-                  that can be posted on social media, sent via email, shared in messaging groups, 
+                  When a decision is put to voters, an election is created with a clear question,
+                  background information, and a voting period. A single shareable link is generated
+                  that can be posted on social media, sent via email, shared in messaging groups,
                   or even printed as a QR code on a flyer.
                 </p>
               </div>
@@ -65,8 +65,8 @@ export default function AboutPage() {
               <div className="ml-5">
                 <h4 className="text-lg font-semibold text-gray-900">You click the link</h4>
                 <p className="text-gray-600 mt-1">
-                  The link takes you to the election page where you can read the question, 
-                  review any background material, and understand what you&apos;re voting on. 
+                  The link takes you to the election page where you can read the question,
+                  review any background material, and understand what you&apos;re voting on.
                   No app to download, no account to create.
                 </p>
               </div>
@@ -77,11 +77,11 @@ export default function AboutPage() {
                 3
               </div>
               <div className="ml-5">
-                <h4 className="text-lg font-semibold text-gray-900">Verify your membership</h4>
+                <h4 className="text-lg font-semibold text-gray-900">Verify your eligibility</h4>
                 <p className="text-gray-600 mt-1">
-                  Enter the email address you&apos;re registered with as a member. You&apos;ll receive 
-                  a 6-digit verification code to that address. This confirms you&apos;re an eligible 
-                  member and prevents anyone from voting on your behalf. The code expires after 
+                  Enter the email address registered for the election. You&apos;ll receive
+                  a 6-digit verification code at that address. This confirms you&apos;re an eligible
+                  voter and prevents anyone from voting on your behalf. The code expires after
                   10 minutes for security.
                 </p>
               </div>
@@ -94,8 +94,8 @@ export default function AboutPage() {
               <div className="ml-5">
                 <h4 className="text-lg font-semibold text-gray-900">Cast your vote</h4>
                 <p className="text-gray-600 mt-1">
-                  Once verified, you&apos;ll see the ballot with all questions. Depending on the 
-                  question type, you&apos;ll select your answer, choose from options, or rank your 
+                  Once verified, you&apos;ll see the ballot with all questions. Depending on the
+                  question type, you&apos;ll select your answer, choose from options, or rank your
                   preferences by dragging them into order. You can review everything before submitting.
                 </p>
               </div>
@@ -108,8 +108,8 @@ export default function AboutPage() {
               <div className="ml-5">
                 <h4 className="text-lg font-semibold text-gray-900">Get your receipt</h4>
                 <p className="text-gray-600 mt-1">
-                  After submitting, you&apos;ll receive a unique receipt code. This lets you verify 
-                  that your vote was recorded in the system without revealing how you voted. 
+                  After submitting, you&apos;ll receive a unique receipt code. This lets you verify
+                  that your vote was recorded in the system without revealing how you voted.
                   Save it for your records.
                 </p>
               </div>
@@ -122,8 +122,8 @@ export default function AboutPage() {
               <div className="ml-5">
                 <h4 className="text-lg font-semibold text-gray-900">Results after close</h4>
                 <p className="text-gray-600 mt-1">
-                  Results are only revealed after the voting period ends. No one -- not even 
-                  administrators -- can see results while voting is still open. This prevents 
+                  Results are only revealed after the voting period ends. No one -- not even
+                  administrators -- can see results while voting is still open. This prevents
                   tactical voting and ensures everyone votes based on their own views.
                 </p>
               </div>
@@ -137,7 +137,7 @@ export default function AboutPage() {
             Voting Methods
           </h3>
           <p className="text-gray-600 mb-8">
-            Each election can include multiple questions, and each question can use the 
+            Each election can include multiple questions, and each question can use the
             voting method best suited to the decision being made.
           </p>
 
@@ -149,7 +149,7 @@ export default function AboutPage() {
               </div>
               <div className="p-6">
                 <p className="text-gray-600 mb-4">
-                  The simplest form of voting. A clear question is asked and members vote 
+                  The simplest form of voting. A clear question is asked and voters choose
                   either <strong>Yes</strong> or <strong>No</strong>.
                 </p>
                 <div className="bg-gray-50 rounded-lg p-4">
@@ -163,7 +163,7 @@ export default function AboutPage() {
                   </div>
                 </div>
                 <p className="text-sm text-gray-500 mt-4">
-                  <strong>Best for:</strong> Binary decisions, motions, policy positions where 
+                  <strong>Best for:</strong> Binary decisions, motions, policy positions where
                   there are two clear options.
                 </p>
               </div>
@@ -176,7 +176,7 @@ export default function AboutPage() {
               </div>
               <div className="p-6">
                 <p className="text-gray-600 mb-4">
-                  Members choose <strong>one option</strong> from a list of possibilities. 
+                  Voters choose <strong>one option</strong> from a list of possibilities.
                   The option with the most votes wins (simple plurality).
                 </p>
                 <div className="bg-gray-50 rounded-lg p-4">
@@ -192,7 +192,7 @@ export default function AboutPage() {
                   </div>
                 </div>
                 <p className="text-sm text-gray-500 mt-4">
-                  <strong>Best for:</strong> Choosing between several distinct options where 
+                  <strong>Best for:</strong> Choosing between several distinct options where
                   a single preference is all that&apos;s needed.
                 </p>
               </div>
@@ -208,9 +208,9 @@ export default function AboutPage() {
               </div>
               <div className="p-6">
                 <p className="text-gray-600 mb-4">
-                  Members <strong>rank all options in order of preference</strong> (1st choice, 
-                  2nd choice, 3rd choice, etc.) by dragging them into order. This uses 
-                  <strong> Instant-Runoff Voting (IRV)</strong> -- the same method used in 
+                  Voters <strong>rank all options in order of preference</strong> (1st choice,
+                  2nd choice, 3rd choice, etc.) by dragging them into order. This uses
+                  <strong> Instant-Runoff Voting (IRV)</strong> -- the same method used in
                   Australian federal elections.
                 </p>
                 <div className="bg-gray-50 rounded-lg p-4">
@@ -262,14 +262,14 @@ export default function AboutPage() {
                     <div className="flex items-start">
                       <div className="flex-shrink-0 w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-600 mt-0.5">4</div>
                       <p className="ml-3 text-sm text-gray-600">
-                        <strong>Redistribute votes.</strong> Anyone who voted for the eliminated option 
+                        <strong>Redistribute votes.</strong> Anyone who voted for the eliminated option
                         has their vote transferred to their next preference.
                       </p>
                     </div>
                     <div className="flex items-start">
                       <div className="flex-shrink-0 w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-600 mt-0.5">5</div>
                       <p className="ml-3 text-sm text-gray-600">
-                        <strong>Repeat</strong> until one option has a majority. The full round-by-round 
+                        <strong>Repeat</strong> until one option has a majority. The full round-by-round
                         count is displayed in the results so you can see exactly how votes flowed.
                       </p>
                     </div>
@@ -277,8 +277,8 @@ export default function AboutPage() {
                 </div>
 
                 <p className="text-sm text-gray-500 mt-6">
-                  <strong>Best for:</strong> Elections with more than two options where you want to 
-                  ensure the winner has broad support, not just the most first-preference votes. 
+                  <strong>Best for:</strong> Elections with more than two options where you want to
+                  ensure the winner has broad support, not just the most first-preference votes.
                   Prevents vote-splitting and &quot;wasted&quot; votes.
                 </p>
               </div>
@@ -294,9 +294,9 @@ export default function AboutPage() {
               </div>
               <div className="p-6">
                 <p className="text-gray-600 mb-4">
-                  Members <strong>rank all options in order of preference</strong>, just like Ranked Choice. 
-                  But instead of eliminating candidates round by round, every option is compared 
-                  <strong> head-to-head against every other option</strong> using the rankings. If one option 
+                  Voters <strong>rank all options in order of preference</strong>, just like Ranked Choice.
+                  But instead of eliminating candidates round by round, every option is compared
+                  <strong> head-to-head against every other option</strong> using the rankings. If one option
                   beats all others in direct comparison, it&apos;s the clear winner.
                 </p>
                 <div className="bg-gray-50 rounded-lg p-4">
@@ -311,7 +311,7 @@ export default function AboutPage() {
                     <div>D. Tax incentives for developers</div>
                   </div>
                   <div className="mt-3 text-sm text-gray-600">
-                    The system checks: Does A beat B? Does A beat C? Does A beat D? Does B beat C? 
+                    The system checks: Does A beat B? Does A beat C? Does A beat D? Does B beat C?
                     ...and so on for every possible pair.
                   </div>
                 </div>
@@ -322,25 +322,25 @@ export default function AboutPage() {
                     <div className="flex items-start">
                       <div className="flex-shrink-0 w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-600 mt-0.5">1</div>
                       <p className="ml-3 text-sm text-gray-600">
-                        <strong>Pairwise comparison.</strong> Every option is matched against every other option. 
-                        Using the rankings, the system counts how many voters prefer A over B, B over A, and so on 
+                        <strong>Pairwise comparison.</strong> Every option is matched against every other option.
+                        Using the rankings, the system counts how many voters prefer A over B, B over A, and so on
                         for every possible pair.
                       </p>
                     </div>
                     <div className="flex items-start">
                       <div className="flex-shrink-0 w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-600 mt-0.5">2</div>
                       <p className="ml-3 text-sm text-gray-600">
-                        <strong>Check for a Condorcet winner.</strong> If one option beats every other option 
-                        in head-to-head matchups, it wins outright. This is the strongest possible mandate -- 
+                        <strong>Check for a Condorcet winner.</strong> If one option beats every other option
+                        in head-to-head matchups, it wins outright. This is the strongest possible mandate --
                         a majority prefers this option over every alternative.
                       </p>
                     </div>
                     <div className="flex items-start">
                       <div className="flex-shrink-0 w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-600 mt-0.5">3</div>
                       <p className="ml-3 text-sm text-gray-600">
-                        <strong>Resolve cycles (if needed).</strong> Sometimes preferences are cyclical -- A beats B, 
-                        B beats C, but C beats A. When this happens, the <strong>Schulze method</strong> is used 
-                        to find the winner by calculating the &quot;strongest paths&quot; of preference through 
+                        <strong>Resolve cycles (if needed).</strong> Sometimes preferences are cyclical -- A beats B,
+                        B beats C, but C beats A. When this happens, the <strong>Schulze method</strong> is used
+                        to find the winner by calculating the &quot;strongest paths&quot; of preference through
                         all candidates.
                       </p>
                     </div>
@@ -351,26 +351,26 @@ export default function AboutPage() {
                   <h5 className="text-sm font-semibold text-blue-900 mb-2">Condorcet vs Ranked Choice (IRV) -- what&apos;s the difference?</h5>
                   <div className="text-sm text-blue-800 space-y-2">
                     <p>
-                      Both use ranked ballots, but they count differently. <strong>IRV</strong> eliminates the 
-                      least popular option each round and redistributes votes -- like a series of runoff elections. 
+                      Both use ranked ballots, but they count differently. <strong>IRV</strong> eliminates the
+                      least popular option each round and redistributes votes -- like a series of runoff elections.
                       <strong> Condorcet</strong> compares every option against every other option simultaneously.
                     </p>
                     <p>
-                      Condorcet is generally considered more thorough because it always finds the option with the 
-                      broadest support. IRV can occasionally eliminate a broadly popular &quot;compromise&quot; 
+                      Condorcet is generally considered more thorough because it always finds the option with the
+                      broadest support. IRV can occasionally eliminate a broadly popular &quot;compromise&quot;
                       candidate early if they have fewer first-preference votes.
                     </p>
                     <p>
-                      <strong>When to use which:</strong> Use Condorcet when finding the option with the widest 
-                      consensus matters most. Use IRV when the process should mirror familiar Australian 
+                      <strong>When to use which:</strong> Use Condorcet when finding the option with the widest
+                      consensus matters most. Use IRV when the process should mirror familiar Australian
                       preferential voting.
                     </p>
                   </div>
                 </div>
 
                 <p className="text-sm text-gray-500 mt-4">
-                  <strong>Best for:</strong> Finding the option with the broadest consensus. Particularly good 
-                  for policy decisions where the &quot;least objectionable&quot; choice may be more important than 
+                  <strong>Best for:</strong> Finding the option with the broadest consensus. Particularly good
+                  for policy decisions where the &quot;least objectionable&quot; choice may be more important than
                   the most passionately supported one.
                 </p>
               </div>
@@ -393,9 +393,9 @@ export default function AboutPage() {
               </div>
               <h4 className="text-lg font-semibold text-gray-900 mb-2">Anonymous Voting</h4>
               <p className="text-gray-600 text-sm">
-                Your vote is stored separately from your identity. The system records 
-                <em> that</em> you voted (to prevent double-voting) but cannot link your 
-                identity to <em>how</em> you voted. Not even administrators can see 
+                Your vote is stored separately from your identity. The system records
+                <em> that</em> you voted (to prevent double-voting) but cannot link your
+                identity to <em>how</em> you voted. Not even administrators can see
                 individual votes.
               </p>
             </div>
@@ -406,10 +406,10 @@ export default function AboutPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                 </svg>
               </div>
-              <h4 className="text-lg font-semibold text-gray-900 mb-2">One Member, One Vote</h4>
+              <h4 className="text-lg font-semibold text-gray-900 mb-2">One Voter, One Vote</h4>
               <p className="text-gray-600 text-sm">
-                Only verified members on the electoral roll can vote. Each member can only 
-                vote once per election, enforced at the database level. Email verification 
+                Only verified voters on the electoral roll can vote. Each voter can only
+                vote once per election, enforced at the database level. Email verification
                 codes expire after 10 minutes and are limited to 3 per hour.
               </p>
             </div>
@@ -422,7 +422,7 @@ export default function AboutPage() {
               </div>
               <h4 className="text-lg font-semibold text-gray-900 mb-2">Verifiable Results</h4>
               <p className="text-gray-600 text-sm">
-                After voting, you receive a unique receipt code. You can use this to confirm 
+                After voting, you receive a unique receipt code. You can use this to confirm
                 your vote was counted in the final tally without revealing your choices to anyone.
               </p>
             </div>
@@ -435,13 +435,13 @@ export default function AboutPage() {
               </div>
               <h4 className="text-lg font-semibold text-gray-900 mb-2">Open Source</h4>
               <p className="text-gray-600 text-sm mb-3">
-                The entire platform is open source. Any member can inspect the code to 
-                verify that it works correctly and that votes are handled securely. 
+                The entire platform is open source. Anyone can inspect the code to
+                verify that it works correctly and that votes are handled securely.
                 Transparency builds trust.
               </p>
-              <a 
-                href="https://github.com/votekitorg/votekit" 
-                target="_blank" 
+              <a
+                href="https://github.com/votekitorg/votekit"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center text-sm text-primary hover:text-primary-dark font-medium"
               >
@@ -464,16 +464,16 @@ export default function AboutPage() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h4 className="font-semibold text-gray-900 mb-2">Can anyone vote?</h4>
               <p className="text-gray-600 text-sm">
-                No. Only members whose email address is on the verified electoral roll can vote. 
-                Your membership is confirmed via email verification each time you vote.
+                No. Only voters whose email address is on the verified electoral roll can vote.
+                Eligibility is confirmed by email verification before a ballot is issued.
               </p>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h4 className="font-semibold text-gray-900 mb-2">Can I change my vote after submitting?</h4>
               <p className="text-gray-600 text-sm">
-                No. Once your vote is submitted, it cannot be changed or withdrawn. This is why 
-                you&apos;re shown a review screen before final submission. Take your time to make sure 
+                No. Once your vote is submitted, it cannot be changed or withdrawn. This is why
+                you&apos;re shown a review screen before final submission. Take your time to make sure
                 you&apos;re happy with your choices.
               </p>
             </div>
@@ -481,25 +481,25 @@ export default function AboutPage() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h4 className="font-semibold text-gray-900 mb-2">Can administrators see how I voted?</h4>
               <p className="text-gray-600 text-sm">
-                No. The system is designed so that your identity (that you voted) is stored 
-                separately from your actual vote. There is no technical way for anyone -- including 
-                administrators or developers -- to link a specific vote to a specific member.
+                No. The system is designed so that your identity (that you voted) is stored
+                separately from your actual vote. There is no technical way for anyone -- including
+                administrators or developers -- to link a specific vote to a specific voter.
               </p>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h4 className="font-semibold text-gray-900 mb-2">When can I see the results?</h4>
               <p className="text-gray-600 text-sm">
-                Results are only published after the voting period closes. This prevents any 
-                influence from partial results on members who haven&apos;t yet voted.
+                Results are only published after the voting period closes. This prevents any
+                influence from partial results on people who haven&apos;t yet voted.
               </p>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h4 className="font-semibold text-gray-900 mb-2">What is my receipt code for?</h4>
               <p className="text-gray-600 text-sm">
-                Your receipt code is proof that your vote was recorded. After results are published, 
-                you can verify that a vote with your receipt code exists in the final count. It 
+                Your receipt code is proof that your vote was recorded. After results are published,
+                you can verify that a vote with your receipt code exists in the final count. It
                 doesn&apos;t reveal how you voted -- it just confirms your vote was included.
               </p>
             </div>
@@ -507,26 +507,19 @@ export default function AboutPage() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h4 className="font-semibold text-gray-900 mb-2">Are these elections binding?</h4>
               <p className="text-gray-600 text-sm">
-                That depends on the organisation running the election. Each election description 
-                will state whether it is binding or advisory. The platform itself is simply a tool 
+                That depends on the person or organisation running the election. Each election description
+                will state whether it is binding or advisory. The platform itself is simply a tool
                 for conducting carefully managed elections.
               </p>
             </div>
           </div>
         </section>
 
-        {/* CTA */}
         <div className="text-center bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-          <h3 className="text-2xl font-bold text-gray-900 mb-3">Current elections</h3>
-          <p className="text-gray-600 mb-6">
-            Check the home page for active elections, or use the voting link provided by your organisation.
+          <h3 className="text-2xl font-bold text-gray-900 mb-3">Ready to vote?</h3>
+          <p className="text-gray-600">
+            Elections are not listed publicly. Open the election-specific link you were given and enter your verification code when prompted.
           </p>
-          <Link
-            href="/"
-            className="inline-flex items-center px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary-dark transition-colors"
-          >
-            View Active Elections
-          </Link>
         </div>
       </main>
 

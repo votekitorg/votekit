@@ -28,17 +28,24 @@ const capabilities = [
     ),
   },
   {
-    title: 'Controlled participation',
-    description: 'Only eligible members can vote, with secure invitations and safeguards against duplicate ballots.',
+    title: 'Private, verifiable ballots',
+    description: 'Every voter receives a receipt code that can confirm inclusion in the final count without revealing their choices.',
+    icon: (
+      <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm-3.75-8.8 2.4 2.4 5.1-5.2" />
+    ),
+  },
+  {
+    title: 'Controlled voter access',
+    description: 'Election-specific links and expiring verification codes keep participation limited to eligible voters and prevent duplicate ballots.',
     icon: (
       <path d="M8.5 11a3.25 3.25 0 1 0 0-6.5 3.25 3.25 0 0 0 0 6.5Zm7.25-.75a2.5 2.5 0 1 0 0-5m-13 14.25v-1.25A4.25 4.25 0 0 1 7 14h3a4.25 4.25 0 0 1 4.25 4.25v1.25m2-5.25a4.25 4.25 0 0 1 5 4.18v1.07" />
     ),
   },
   {
-    title: 'Verifiable outcomes',
-    description: 'Receipt codes and clear audit records build confidence without revealing how anyone voted.',
+    title: 'Flexible voting methods',
+    description: 'Run yes/no, single-choice, multiple-choice, ranked-choice or Condorcet elections from the same platform.',
     icon: (
-      <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm-3.75-8.8 2.4 2.4 5.1-5.2" />
+      <path d="M6.5 6.5h11m-11 5.5h11m-11 5.5h7M4 6.5h.01M4 12h.01M4 17.5h.01" />
     ),
   },
 ];
@@ -73,13 +80,13 @@ export default function HomePage() {
             <div>
               <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-[#bad9c7] bg-[#edf8f1] px-3.5 py-1.5 text-sm font-semibold text-[#086a3d]">
                 <span className="h-2 w-2 rounded-full bg-[#078348]" />
-                Secure elections for member organisations
+                Private, transparent online elections
               </div>
               <h1 className="max-w-3xl text-5xl font-bold leading-[1.04] tracking-[-0.045em] text-[#102019] sm:text-6xl lg:text-[4.6rem]">
-                Decisions your members can trust.
+                Elections anyone can run. Results everyone can trust.
               </h1>
               <p className="mt-7 max-w-2xl text-lg leading-8 text-[#536159] sm:text-xl">
-                VoteKit gives associations, unions and member-based organisations a clear, private and accountable way to run elections online.
+                VoteKit is a flexible election platform for any group, organisation or decision. Protect ballot secrecy, control who can vote, and prove every ballot was included without exposing how anyone voted.
               </p>
 
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
@@ -95,7 +102,7 @@ export default function HomePage() {
               </div>
 
               <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-sm font-medium text-[#526158]">
-                {['Anonymous ballots', 'Auditable records', 'Controlled access'].map(item => (
+                {['Multiple voting methods', 'Private ballots', 'Verifiable receipts'].map(item => (
                   <span key={item} className="flex items-center gap-2">
                     <span className="text-[#078348]"><CheckIcon /></span>
                     {item}
@@ -156,7 +163,7 @@ export default function HomePage() {
               <p className="mt-5 text-lg leading-8 text-[#5a675f]">From voter eligibility to the final result, VoteKit keeps the process understandable, controlled and defensible.</p>
             </div>
 
-            <div className="mt-12 grid gap-5 md:grid-cols-3">
+            <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
               {capabilities.map(capability => (
                 <article key={capability.title} className="rounded-2xl border border-[#dfe5e0] bg-[#fbfcfb] p-7 transition hover:-translate-y-0.5 hover:border-[#bfd5c7] hover:shadow-lg">
                   <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#e7f5ec] text-[#078348]">
@@ -177,12 +184,12 @@ export default function HomePage() {
             <div>
               <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#63d397]">Simple for voters</p>
               <h2 className="mt-4 text-3xl font-bold tracking-[-0.035em] sm:text-4xl">No public election directory. No searching around.</h2>
-              <p className="mt-5 max-w-xl text-lg leading-8 text-[#b9c8bf]">Eligible voters receive a private, election-specific link from their organisation. That link takes them directly to identity verification and their ballot.</p>
+              <p className="mt-5 max-w-xl text-lg leading-8 text-[#b9c8bf]">Eligible voters receive an election-specific link. An expiring code verifies access, then VoteKit separates their identity from their completed ballot.</p>
             </div>
 
             <ol className="grid gap-4 sm:grid-cols-3">
               {[
-                ['01', 'Receive', 'Open the secure link sent by your organisation.'],
+                ['01', 'Open', 'Follow the election-specific link you were given.'],
                 ['02', 'Verify', 'Confirm your identity without connecting it to your choices.'],
                 ['03', 'Vote', 'Submit your ballot and keep your verification receipt.'],
               ].map(([number, title, description]) => (
@@ -203,8 +210,8 @@ export default function HomePage() {
                 <path d="M12 3.5 19 6v5.25c0 4.25-2.72 7.72-7 9.25-4.28-1.53-7-5-7-9.25V6l7-2.5Zm-3 8.75 2 2 4-4.25" />
               </svg>
             </span>
-            <h2 className="mt-6 text-3xl font-bold tracking-[-0.035em] text-[#142019] sm:text-4xl">Governance deserves better than a generic survey tool.</h2>
-            <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#5b685f]">VoteKit is purpose-built for formal member decisions, with the privacy, access control and accountability those decisions require.</p>
+            <h2 className="mt-6 text-3xl font-bold tracking-[-0.035em] text-[#142019] sm:text-4xl">An election is more than a survey.</h2>
+            <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#5b685f]">VoteKit combines flexible ballot types, controlled voter access, secret ballots and receipt-based verification in one purpose-built platform.</p>
             <Link href="/about" className="mt-8 inline-flex items-center justify-center rounded-xl bg-[#078348] px-6 py-3.5 font-semibold text-white transition hover:bg-[#066d3d]">
               Explore the platform
             </Link>
