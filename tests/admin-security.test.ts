@@ -31,6 +31,18 @@ function loginRequest(email: string, password: string, forwardedFor?: string): N
   });
 }
 
+function logoutRequest(sessionId: string): NextRequest {
+  return new NextRequest('http://localhost/api/admin/auth', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'x-csrf-token': CSRF,
+      cookie: `csrf-token=${CSRF}; admin-session=${sessionId}`
+    },
+    body: new URLSearchParams({ action: 'logout' }).toString()
+  });
+}
+
 beforeAll(async () => {
   db = (await import('@/lib/db')).default;
   authPost = (await import('@/app/api/admin/auth/route')).POST;
@@ -76,6 +88,23 @@ describe('admin login hardening and audit logging', () => {
     expect(audit.action).toBe('admin.login.success');
     expect(audit.target_type).toBe('admin_user');
     expect(JSON.parse(audit.details)).toMatchObject({ email: 'admin@example.com', ipAddress: 'direct' });
+  });
+
+  it('logs out without a fetch redirect and invalidates the server session', async () => {
+    const loginResponse = await authPost(loginRequest('admin@example.com', 'correct horse battery staple'));
+    const sessionCookie = loginResponse.headers.get('set-cookie');
+    const sessionId = sessionCookie?.match(/admin-session=([^;]+)/)?.[1];
+    expect(sessionId).toBeTruthy();
+
+    const response = await authPost(logoutRequest(sessionId as string));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('location')).toBeNull();
+    expect(await response.json()).toEqual({ success: true });
+    expect(response.headers.get('set-cookie')).toContain('admin-session=;');
+    expect(db.prepare('SELECT id FROM sessions WHERE id = ?').get(sessionId)).toBeUndefined();
+    expect(db.prepare(`SELECT action FROM admin_audit_log WHERE action = 'admin.logout' ORDER BY id DESC LIMIT 1`).get())
+      .toMatchObject({ action: 'admin.logout' });
   });
 
   it('locks out by email across spoofed forwarded IP changes and audits failures', async () => {

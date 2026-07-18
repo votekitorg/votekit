@@ -64,11 +64,18 @@ export default function AdminLayout({ children, currentUser }: AdminLayoutProps)
   const visibleNavigation = navigation.filter(item => item.roles.includes(user.role));
 
   async function logout() {
-    await csrfFetch('/api/admin/auth', {
-      method: 'POST',
-      body: new URLSearchParams({ action: 'logout' })
-    });
-    window.location.href = '/admin/login';
+    try {
+      const response = await csrfFetch('/api/admin/auth', {
+        method: 'POST',
+        body: new URLSearchParams({ action: 'logout' })
+      });
+
+      if (!response.ok) throw new Error('Logout failed');
+      window.location.replace('/admin/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+      window.location.replace('/admin/login');
+    }
   }
 
   return (

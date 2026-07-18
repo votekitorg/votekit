@@ -581,6 +581,11 @@ export function getAdminSession(sessionId?: string): AdminSession | null {
   };
 }
 
+export function deleteAdminSession(sessionId?: string): void {
+  if (!sessionId) return;
+  db.prepare('DELETE FROM sessions WHERE id = ? AND is_admin = 1').run(sessionId);
+}
+
 export async function setAdminCookie(sessionId: string) {
   const cookieStore = await cookies();
   cookieStore.set('admin-session', sessionId, {
