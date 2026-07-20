@@ -16,14 +16,17 @@ interface Plebiscite {
   created_at: string;
   vote_count: number;
   question_count: number;
+  archived_at?: string | null;
 }
 
 export const dynamic = 'force-dynamic';
 
 async function getDashboardData(session: AdminSession) {
   const accessibleIds = listAccessibleElectionIds(session);
-  if (accessibleIds?.length === 0) return { plebiscites: [], stats: { totalPlebiscites: 0, totalVoters: 0, totalVotes: 0, activePlebiscites: 0 } };
-  const scope = accessibleIds ? `WHERE p.id IN (${accessibleIds.map(() => '?').join(',')})` : '';
+  if (accessibleIds?.length === 0) return { plebiscites: [], archivedPlebiscites: [], stats: { totalPlebiscites: 0, totalVoters: 0, totalVotes: 0, activePlebiscites: 0 } };
+  const scope = accessibleIds
+    ? `WHERE p.archived_at IS NULL AND p.id IN (${accessibleIds.map(() => '?').join(',')})`
+    : 'WHERE p.archived_at IS NULL';
   const params = accessibleIds || [];
   // Get plebiscites with stats
   const plebiscites = db.prepare(`
@@ -37,17 +40,31 @@ async function getDashboardData(session: AdminSession) {
     LIMIT 10
   `).all(...params) as Plebiscite[];
 
+  const archivedPlebiscites = session.role === 'owner' ? db.prepare(`
+    SELECT p.*,
+      (SELECT COUNT(*) FROM participation WHERE plebiscite_id = p.id) as vote_count,
+      (SELECT COUNT(*) FROM questions WHERE plebiscite_id = p.id) as question_count
+    FROM plebiscites p
+    WHERE p.archived_at IS NOT NULL
+    ORDER BY p.archived_at DESC
+  `).all() as Plebiscite[] : [];
+
   // Get overall stats
-  const idScope = accessibleIds ? `WHERE id IN (${accessibleIds.map(() => '?').join(',')})` : '';
-  const childScope = accessibleIds ? `WHERE plebiscite_id IN (${accessibleIds.map(() => '?').join(',')})` : '';
+  const idScope = accessibleIds
+    ? `WHERE archived_at IS NULL AND id IN (${accessibleIds.map(() => '?').join(',')})`
+    : 'WHERE archived_at IS NULL';
+  const childScope = accessibleIds
+    ? `WHERE plebiscite_id IN (${accessibleIds.map(() => '?').join(',')})`
+    : 'WHERE plebiscite_id IN (SELECT id FROM plebiscites WHERE archived_at IS NULL)';
   const totalPlebiscites = db.prepare(`SELECT COUNT(*) as count FROM plebiscites ${idScope}`).get(...params) as { count: number };
   const totalVoters = db.prepare(`SELECT COUNT(DISTINCT email) as count FROM voter_roll ${childScope}`).get(...params) as { count: number };
   const totalVotes = db.prepare(`SELECT COUNT(*) as count FROM participation ${childScope}`).get(...params) as { count: number };
-  const activeWhere = accessibleIds ? `status = 'open' AND id IN (${accessibleIds.map(() => '?').join(',')})` : `status = 'open'`;
+  const activeWhere = accessibleIds ? `archived_at IS NULL AND status = 'open' AND id IN (${accessibleIds.map(() => '?').join(',')})` : `archived_at IS NULL AND status = 'open'`;
   const activePlebiscites = db.prepare(`SELECT COUNT(*) as count FROM plebiscites WHERE ${activeWhere}`).get(...params) as { count: number };
 
   return {
     plebiscites,
+    archivedPlebiscites,
     stats: {
       totalPlebiscites: totalPlebiscites.count,
       totalVoters: totalVoters.count,
@@ -88,7 +105,7 @@ export default async function AdminDashboard() {
     redirect('/admin/login');
   }
 
-  const { plebiscites, stats } = await getDashboardData(adminSession);
+  const { plebiscites, archivedPlebiscites, stats } = await getDashboardData(adminSession);
   const canManage = canManageElections(adminSession.role);
 
   return (
@@ -304,6 +321,28 @@ export default async function AdminDashboard() {
             )}
           </div>
         </div>
+
+        {adminSession.role === 'owner' && archivedPlebiscites.length > 0 && (
+          <div className="card">
+            <div className="card-header">
+              <h2 className="text-lg font-semibold text-gray-900">Archived Elections</h2>
+              <p className="mt-1 text-sm text-gray-600">Hidden from Returning Officers, Admins and Observers.</p>
+            </div>
+            <div className="divide-y divide-gray-200">
+              {archivedPlebiscites.map((plebiscite) => (
+                <div key={plebiscite.id} className="flex items-center justify-between gap-4 px-6 py-4">
+                  <div>
+                    <div className="font-medium text-gray-900">{plebiscite.title}</div>
+                    <div className="text-sm text-gray-500">{plebiscite.vote_count} votes · {getStatusBadge(plebiscite.status)}</div>
+                  </div>
+                  <Link href={`/admin/plebiscites/${plebiscite.id}`} className="text-primary hover:text-primary-dark">
+                    View or restore
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );

@@ -502,7 +502,9 @@ export async function replaceAdminInvitation(id: number, actor: AdminSession): P
 
 export function getElectionRole(session: AdminSession, plebisciteId: number): AdminRole | null {
   if (session.role === 'owner') return 'owner';
-  const row = db.prepare('SELECT role FROM election_team_members WHERE plebiscite_id = ? AND admin_user_id = ?')
+  const row = db.prepare(`SELECT etm.role FROM election_team_members etm
+    JOIN plebiscites p ON p.id = etm.plebiscite_id
+    WHERE etm.plebiscite_id = ? AND etm.admin_user_id = ? AND p.archived_at IS NULL`)
     .get(plebisciteId, session.adminUserId) as { role: ElectionRole } | undefined;
   return row?.role || null;
 }
@@ -530,7 +532,9 @@ export function listElectionTeam(plebisciteId: number): ElectionTeamMember[] {
 
 export function listAccessibleElectionIds(session: AdminSession): number[] | null {
   if (session.role === 'owner') return null;
-  return (db.prepare('SELECT plebiscite_id FROM election_team_members WHERE admin_user_id = ?').all(session.adminUserId) as Array<{plebiscite_id:number}>).map(r => r.plebiscite_id);
+  return (db.prepare(`SELECT etm.plebiscite_id FROM election_team_members etm
+    JOIN plebiscites p ON p.id = etm.plebiscite_id
+    WHERE etm.admin_user_id = ? AND p.archived_at IS NULL`).all(session.adminUserId) as Array<{plebiscite_id:number}>).map(r => r.plebiscite_id);
 }
 
 export function requireAdminRole(session: AdminSession | null, allowed: AdminRole[] = ELECTION_MANAGEMENT_ROLES): AdminSession | null {

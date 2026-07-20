@@ -23,6 +23,7 @@ interface Plebiscite {
   manifest_hash?: string;
   recovery_confirmed_at?: string;
   close_state?: 'none' | 'closing' | 'failed';
+  archived_at?: string | null;
 }
 
 interface StatusInfo {
@@ -37,11 +38,13 @@ export default function PlebisciteManager({
   plebiscite, 
   statusInfo,
   canManage = true,
+  isOwner = false,
   encryptedManifest
 }: { 
   plebiscite: Plebiscite; 
   statusInfo: StatusInfo;
   canManage?: boolean;
+  isOwner?: boolean;
   encryptedManifest: EncryptedElectionManifest | null;
 }) {
   const router = useRouter();
@@ -193,7 +196,7 @@ export default function PlebisciteManager({
   }
 
   async function handleDelete() {
-    if (!confirm('Delete this election? This cannot be undone.')) return;
+    if (prompt(`Permanently delete "${plebiscite.title}"? This cannot be undone. Type DELETE to confirm.`) !== 'DELETE') return;
     
     setLoading(true);
     try {
@@ -203,6 +206,29 @@ export default function PlebisciteManager({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       router.push('/admin');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleArchive(action: 'archive' | 'restore') {
+    const message = action === 'archive'
+      ? 'Archive this election? It will be hidden from all Returning Officers, Admins and Observers until restored.'
+      : 'Restore this election to the normal dashboard?';
+    if (!confirm(message)) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await csrfFetch('/api/admin/plebiscites', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: plebiscite.id, action })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      if (action === 'archive') router.push('/admin');
+      else router.refresh();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -231,7 +257,13 @@ export default function PlebisciteManager({
         </p>
       )}
 
-      {canManage && statusInfo.canOpen && plebiscite.privacy_mode === 'encrypted' && (
+      {isOwner && plebiscite.archived_at && (
+        <button onClick={() => handleArchive('restore')} disabled={loading} className="btn-primary w-full">
+          {loading ? 'Restoring...' : 'Restore Election'}
+        </button>
+      )}
+
+      {!plebiscite.archived_at && canManage && statusInfo.canOpen && plebiscite.privacy_mode === 'encrypted' && (
         <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
           <p className="text-sm text-blue-900">
             This election encrypts complete ballots in each voter’s browser. Prepare and safely store the offline recovery kit before opening.
@@ -248,7 +280,7 @@ export default function PlebisciteManager({
         </div>
       )}
 
-      {canManage && statusInfo.canOpen && (plebiscite.privacy_mode === 'legacy' || recoveryConfirmed) && (
+      {!plebiscite.archived_at && canManage && statusInfo.canOpen && (plebiscite.privacy_mode === 'legacy' || recoveryConfirmed) && (
         <button
           onClick={() => handleAction('open')}
           disabled={loading}
@@ -258,7 +290,7 @@ export default function PlebisciteManager({
         </button>
       )}
 
-      {canManage && statusInfo.canClose && (
+      {!plebiscite.archived_at && canManage && statusInfo.canClose && (
         <>
           <button
             onClick={copyUrl}
@@ -292,7 +324,17 @@ export default function PlebisciteManager({
         </>
       )}
 
-      {canManage && plebiscite.status === 'draft' && (
+      {isOwner && !plebiscite.archived_at && plebiscite.status !== 'open' && (
+        <button
+          onClick={() => handleArchive('archive')}
+          disabled={loading}
+          className="btn-secondary w-full"
+        >
+          {loading ? 'Archiving...' : 'Archive Election'}
+        </button>
+      )}
+
+      {isOwner && plebiscite.status === 'draft' && (
         <button
           onClick={handleDelete}
           disabled={loading}

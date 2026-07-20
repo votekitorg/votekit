@@ -10,6 +10,7 @@ process.env.DATABASE_PATH = path.join(tmpDir, 'test.db');
 const CSRF = 'production-guardrails-csrf';
 let db: any;
 let adminSessionId: string;
+let ownerSessionId: string;
 let plebiscitesPost: (request: NextRequest) => Promise<Response>;
 let plebiscitesPut: (request: NextRequest) => Promise<Response>;
 let plebiscitesDelete: (request: NextRequest) => Promise<Response>;
@@ -20,13 +21,13 @@ function brisbaneInput(date: Date): string {
   return new Date(date.getTime() + 10 * 60 * 60 * 1000).toISOString().slice(0, 16);
 }
 
-function adminRequest(url: string, method: string, body?: unknown): NextRequest {
+function adminRequest(url: string, method: string, body?: unknown, sessionId = adminSessionId): NextRequest {
   return new NextRequest(url, {
     method,
     headers: {
       'content-type': 'application/json',
       'x-csrf-token': CSRF,
-      cookie: `csrf-token=${CSRF}; admin-session=${adminSessionId}`
+      cookie: `csrf-token=${CSRF}; admin-session=${sessionId}`
     },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
@@ -61,6 +62,16 @@ beforeAll(async () => {
     INSERT INTO sessions (id, email, plebiscite_id, is_admin, admin_user_id, admin_role, expires_at)
     VALUES (?, 'admin@example.com', -1, 1, ?, 'admin', ?)
   `).run(adminSessionId, adminId, new Date(Date.now() + 60 * 60 * 1000).toISOString());
+
+  const ownerId = Number(db.prepare(`
+    INSERT INTO admin_users (email, name, password_hash, role, authority_role, active)
+    VALUES ('owner@example.com', 'Owner', 'test-hash', 'admin', 'owner', 1)
+  `).run().lastInsertRowid);
+  ownerSessionId = 'production-guardrails-owner';
+  db.prepare(`
+    INSERT INTO sessions (id, email, plebiscite_id, is_admin, admin_user_id, admin_role, expires_at)
+    VALUES (?, 'owner@example.com', -1, 1, ?, 'admin', ?)
+  `).run(ownerSessionId, ownerId, new Date(Date.now() + 60 * 60 * 1000).toISOString());
 });
 
 afterAll(() => {
@@ -123,7 +134,7 @@ describe('production lifecycle guardrails', () => {
       `http://localhost/api/admin/plebiscites?id=${electionId}`,
       'DELETE'
     ));
-    expect(deleteOpen.status).toBe(400);
+    expect(deleteOpen.status).toBe(403);
   });
 
   it('serves unique non-cacheable CSRF tokens in hardened cookies', async () => {
@@ -137,5 +148,47 @@ describe('production lifecycle guardrails', () => {
     const cookie = first.headers.get('set-cookie') || '';
     expect(cookie).toContain('HttpOnly');
     expect(cookie.toLowerCase()).toContain('samesite=strict');
+  });
+
+  it('reserves archive, restore and permanent deletion for the Owner', async () => {
+    const createResponse = await plebiscitesPost(adminRequest(
+      'http://localhost/api/admin/plebiscites',
+      'POST',
+      validElection({ title: 'Disposable Test Election' })
+    ));
+    const electionId = (await createResponse.json()).plebiscite.id;
+
+    const returningOfficerArchive = await plebiscitesPut(adminRequest(
+      'http://localhost/api/admin/plebiscites', 'PUT', { id: electionId, action: 'archive' }
+    ));
+    expect(returningOfficerArchive.status).toBe(403);
+
+    const returningOfficerDelete = await plebiscitesDelete(adminRequest(
+      `http://localhost/api/admin/plebiscites?id=${electionId}`, 'DELETE'
+    ));
+    expect(returningOfficerDelete.status).toBe(403);
+
+    const archive = await plebiscitesPut(adminRequest(
+      'http://localhost/api/admin/plebiscites', 'PUT', { id: electionId, action: 'archive' }, ownerSessionId
+    ));
+    expect(archive.status).toBe(200);
+    expect(db.prepare('SELECT archived_at FROM plebiscites WHERE id = ?').get(electionId).archived_at).toBeTruthy();
+
+    const archivedEdit = await plebiscitesPut(adminRequest(
+      'http://localhost/api/admin/plebiscites', 'PUT', { id: electionId, title: 'Should Not Change' }, ownerSessionId
+    ));
+    expect(archivedEdit.status).toBe(409);
+
+    const restore = await plebiscitesPut(adminRequest(
+      'http://localhost/api/admin/plebiscites', 'PUT', { id: electionId, action: 'restore' }, ownerSessionId
+    ));
+    expect(restore.status).toBe(200);
+    expect(db.prepare('SELECT archived_at FROM plebiscites WHERE id = ?').get(electionId).archived_at).toBeNull();
+
+    const ownerDelete = await plebiscitesDelete(adminRequest(
+      `http://localhost/api/admin/plebiscites?id=${electionId}`, 'DELETE', undefined, ownerSessionId
+    ));
+    expect(ownerDelete.status).toBe(200);
+    expect(db.prepare('SELECT id FROM plebiscites WHERE id = ?').get(electionId)).toBeUndefined();
   });
 });

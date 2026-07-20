@@ -24,6 +24,7 @@ interface Plebiscite {
   manifest_hash?: string;
   recovery_confirmed_at?: string;
   close_state?: 'none' | 'closing' | 'failed';
+  archived_at?: string | null;
   created_at: string;
 }
 
@@ -97,6 +98,16 @@ function getStatusInfo(plebiscite: Plebiscite) {
   const openDate = parseElectionCloseDate(plebiscite.open_date);
   const closeDate = parseElectionCloseDate(plebiscite.close_date);
 
+  if (plebiscite.archived_at) {
+    return {
+      status: 'Archived',
+      color: 'gray',
+      canOpen: false,
+      canClose: false,
+      message: 'Hidden from all non-Owner dashboards'
+    };
+  }
+
   if (plebiscite.status === 'draft') {
     return {
       status: 'Draft',
@@ -153,6 +164,7 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
   }
 
   const { plebiscite, questions, stats } = data;
+  if (plebiscite.archived_at && adminSession.role !== 'owner') redirect('/admin');
   const team = listElectionTeam(electionId);
   const returningOfficers = listAdminUsers().filter(user => user.role === 'returning_officer' && user.active)
     .map(user => ({ id: user.id, email: user.email, name: user.name }));
@@ -337,10 +349,12 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
                   privacy_mode: plebiscite.privacy_mode,
                   manifest_hash: plebiscite.manifest_hash,
                   recovery_confirmed_at: plebiscite.recovery_confirmed_at,
-                  close_state: plebiscite.close_state
+                  close_state: plebiscite.close_state,
+                  archived_at: plebiscite.archived_at
                 }}
                 statusInfo={{status: statusInfo.status, color: statusInfo.color, canOpen: statusInfo.canOpen, canClose: statusInfo.canClose, message: statusInfo.message}}
                 canManage={canManage}
+                isOwner={adminSession.role === 'owner'}
                 encryptedManifest={plebiscite.privacy_mode === 'encrypted' && encryptedBallotsEnabled
                   ? buildEncryptedManifest(plebiscite)
                   : null}

@@ -46,7 +46,9 @@ export async function GET(request: NextRequest) {
   try {
     const accessibleIds = listAccessibleElectionIds(adminSession);
     if (accessibleIds?.length === 0) return NextResponse.json({ plebiscites: [] });
-    const scope = accessibleIds ? `WHERE p.id IN (${accessibleIds.map(() => '?').join(',')})` : '';
+    const scope = accessibleIds
+      ? `WHERE p.archived_at IS NULL AND p.id IN (${accessibleIds.map(() => '?').join(',')})`
+      : 'WHERE p.archived_at IS NULL';
     const plebiscites = db.prepare(`
       SELECT 
         p.*,
@@ -253,6 +255,42 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    if (action === 'archive' || action === 'restore') {
+      if (adminSession.role !== 'owner') {
+        return NextResponse.json({ error: 'Only the Owner can archive or restore elections' }, { status: 403 });
+      }
+      if (action === 'archive') {
+        if (plebiscite.archived_at) return NextResponse.json({ error: 'Election is already archived' }, { status: 400 });
+        if (plebiscite.status === 'open') {
+          return NextResponse.json({ error: 'Close voting before archiving this election' }, { status: 400 });
+        }
+        db.prepare('UPDATE plebiscites SET archived_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+        recordAdminAuditLog({
+          adminUserId: adminSession.adminUserId,
+          action: 'plebiscite.archive',
+          targetType: 'plebiscite',
+          targetId: id,
+          details: { slug: plebiscite.slug }
+        });
+        return NextResponse.json({ success: true, archived: true });
+      }
+
+      if (!plebiscite.archived_at) return NextResponse.json({ error: 'Election is not archived' }, { status: 400 });
+      db.prepare('UPDATE plebiscites SET archived_at = NULL WHERE id = ?').run(id);
+      recordAdminAuditLog({
+        adminUserId: adminSession.adminUserId,
+        action: 'plebiscite.restore',
+        targetType: 'plebiscite',
+        targetId: id,
+        details: { slug: plebiscite.slug }
+      });
+      return NextResponse.json({ success: true, archived: false });
+    }
+
+    if (plebiscite.archived_at) {
+      return NextResponse.json({ error: 'Restore this election before making changes' }, { status: 409 });
+    }
+
     if (action === 'open') {
       if (plebiscite.status !== 'draft') {
         return NextResponse.json(
@@ -442,6 +480,9 @@ export async function DELETE(request: NextRequest) {
         { error: 'Election ID is required' },
         { status: 400 }
       );
+    }
+    if (adminSession.role !== 'owner') {
+      return NextResponse.json({ error: 'Only the Owner can permanently delete elections' }, { status: 403 });
     }
     if (!canManageElection(adminSession, Number(id))) {
       return NextResponse.json({ error: 'You do not have permission to manage this election' }, { status: 403 });

@@ -339,6 +339,7 @@ function runMigrations() {
   runPrivacyMigrations(database);
   runAdministrativeRoleMigrations(database);
   runVoterAccessMigrations(database);
+  runElectionArchiveMigration(database);
 }
 
 function tableInfo(database: Database.Database, tableName: string): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {
@@ -352,6 +353,13 @@ function tableSql(database: Database.Database, tableName: string): string {
 
 function hasColumn(database: Database.Database, tableName: string, columnName: string): boolean {
   return tableInfo(database, tableName).some(column => column.name === columnName);
+}
+
+function runElectionArchiveMigration(database: Database.Database): void {
+  if (!hasColumn(database, 'plebiscites', 'archived_at')) {
+    database.exec('ALTER TABLE plebiscites ADD COLUMN archived_at DATETIME');
+  }
+  database.exec('CREATE INDEX IF NOT EXISTS idx_plebiscites_archived ON plebiscites(archived_at)');
 }
 
 function runPrivacyMigrations(database: Database.Database): void {
