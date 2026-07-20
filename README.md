@@ -70,7 +70,8 @@ ADMIN_PASSWORD=your-secure-admin-password-here
 
 # Email Configuration (Resend API)
 RESEND_API_KEY=your-resend-api-key-here
-FROM_EMAIL=noreply@yourorganization.com
+FROM_EMAIL="VoteKit <hello@yourorganization.com>"
+REPLY_TO_EMAIL=owner@yourorganization.com
 VOTEKIT_PUBLIC_URL=https://vote.yourorganization.com
 
 # Database (persistent SQLite file, automatically created)
