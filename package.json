@@ -1,6 +1,6 @@
 {
   "name": "votekit",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -17,6 +17,7 @@
     "firebase": "^12.16.0",
     "jose": "^6.2.3",
     "next": "15.5.20",
+    "pdfkit": "^0.19.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "resend": "^6.9.2",
@@ -26,6 +27,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.19.33",
+    "@types/pdfkit": "^0.17.6",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@types/uuid": "^10.0.0",

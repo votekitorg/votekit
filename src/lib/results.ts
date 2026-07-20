@@ -14,11 +14,14 @@ export interface PlebisciteResultsData {
     open_date: string;
     close_date: string;
     status: string;
+    accessMode: 'voter_roll' | 'anonymous_codes';
     privacyMode: 'legacy' | 'encrypted';
     privacyThreshold: number;
   };
   participation: {
     totalVotes: number;
+    eligibleCredentials: number;
+    participationRate: number | null;
   };
   encryptedAudit?: {
     manifest: EncryptedElectionManifest;
@@ -81,6 +84,9 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
   const participationCount = db.prepare(`
     SELECT COUNT(*) as count FROM participation WHERE plebiscite_id = ?
   `).get(plebiscite.id) as { count: number };
+  const eligibleCredentials = plebiscite.access_mode === 'anonymous_codes'
+    ? (db.prepare('SELECT COUNT(*) AS count FROM anonymous_access_codes WHERE plebiscite_id = ?').get(plebiscite.id) as { count: number }).count
+    : (db.prepare('SELECT COUNT(*) AS count FROM voter_roll WHERE plebiscite_id = ?').get(plebiscite.id) as { count: number }).count;
 
   const encryptedPublishedBallots = plebiscite.privacy_mode === 'encrypted'
     ? db.prepare(`
@@ -208,11 +214,14 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
       open_date: plebiscite.open_date,
       close_date: plebiscite.close_date,
       status: plebiscite.status,
+      accessMode: plebiscite.access_mode || 'voter_roll',
       privacyMode: plebiscite.privacy_mode || 'legacy',
       privacyThreshold: Number(plebiscite.privacy_threshold || 5)
     },
     participation: {
-      totalVotes: participationCount.count
+      totalVotes: participationCount.count,
+      eligibleCredentials,
+      participationRate: eligibleCredentials > 0 ? (participationCount.count / eligibleCredentials) * 100 : null
     },
     ...(encryptedArtifact ? {
       encryptedAudit: {

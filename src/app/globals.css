@@ -221,3 +221,25 @@ a {
 .markdown-content pre code {
   @apply bg-transparent p-0;
 }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    background: white !important;
+    color-scheme: light;
+  }
+
+  .card {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  .results-question {
+    break-inside: avoid;
+  }
+}

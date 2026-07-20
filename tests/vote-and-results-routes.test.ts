@@ -41,6 +41,10 @@ function resultsRequest(): NextRequest {
   return new NextRequest(`http://localhost/api/results/${SLUG}`);
 }
 
+function pdfResultsRequest(): NextRequest {
+  return new NextRequest(`http://localhost/api/results/${SLUG}?format=pdf`);
+}
+
 beforeAll(async () => {
   db = (await import('@/lib/db')).default;
   votePost = (await import('@/app/api/vote/route')).POST;
@@ -108,7 +112,9 @@ describe('POST /api/vote (multiple choice)', () => {
 describe('GET /api/results/[slug]', () => {
   it('returns 403 while the election is still open', async () => {
     const response = await resultsGet(resultsRequest(), { params: Promise.resolve({ slug: SLUG }) });
+    const pdfResponse = await resultsGet(pdfResultsRequest(), { params: Promise.resolve({ slug: SLUG }) });
     expect(response.status).toBe(403);
+    expect(pdfResponse.status).toBe(403);
   });
 
   it('publishes results after close, tallying each option at most once per ballot', async () => {
@@ -122,6 +128,7 @@ describe('GET /api/results/[slug]', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(body.participation).toEqual({ totalVotes: 1, eligibleCredentials: 1, participationRate: 100 });
     const question = body.questions[0];
     expect(question.results).toEqual({ Alpha: 1, Beta: 1, Gamma: 1 });
     expect(question.publicBallots).toHaveLength(2);
@@ -130,5 +137,17 @@ describe('GET /api/results/[slug]', () => {
     for (const ballot of question.publicBallots) {
       expect(Object.keys(ballot).sort()).toEqual(['ballot', 'receiptCode']);
     }
+  });
+
+  it('downloads a valid official PDF result report for a closed election', async () => {
+    const response = await resultsGet(pdfResultsRequest(), { params: Promise.resolve({ slug: SLUG }) });
+    const pdf = Buffer.from(await response.arrayBuffer());
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('application/pdf');
+    expect(response.headers.get('content-disposition')).toContain('integration-election-official-results.pdf');
+    expect(pdf.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+    expect(pdf.length).toBeGreaterThan(3_000);
+    if (process.env.RESULTS_PDF_OUTPUT) fs.writeFileSync(process.env.RESULTS_PDF_OUTPUT, pdf);
   });
 });

@@ -7,6 +7,7 @@ import {
 } from '@/lib/results';
 import db from '@/lib/db';
 import { isReceipt } from '@/lib/encrypted-ballots';
+import { buildResultsPdf, resultsReportFilename } from '@/lib/results-report';
 
 export async function GET(
   request: NextRequest,
@@ -23,6 +24,17 @@ export async function GET(
         headers: {
           'Content-Type': 'text/csv',
           'Content-Disposition': `attachment; filename="${resultsCsvFilename(slug)}"`
+        }
+      });
+    }
+
+    if (format === 'pdf') {
+      const pdf = await buildResultsPdf(results);
+      return new NextResponse(new Uint8Array(pdf), {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="${resultsReportFilename(slug)}"`,
+          'Content-Length': String(pdf.length)
         }
       });
     }

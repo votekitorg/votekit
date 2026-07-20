@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   outputFileTracingRoot: __dirname,
-  serverExternalPackages: ['better-sqlite3'],
+  serverExternalPackages: ['better-sqlite3', 'pdfkit'],
   poweredByHeader: false,
   async headers() {
     return [
@@ -33,7 +33,7 @@ const nextConfig = {
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.externals = config.externals || [];
-      config.externals.push('better-sqlite3');
+      config.externals.push('better-sqlite3', 'pdfkit');
     }
     return config;
   }

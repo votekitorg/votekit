@@ -4,6 +4,8 @@ import ResultsChart from '@/components/ResultsChart';
 import CondorcetResults from '@/components/CondorcetResults';
 import { getPlebisciteResults, ResultsUnavailableError, type PlebisciteResultsData } from '@/lib/results';
 import ReceiptLookup from '@/components/ReceiptLookup';
+import ResultsActions from '@/components/ResultsActions';
+import { resultsReportFingerprint } from '@/lib/results-integrity';
 
 type QuestionResult = PlebisciteResultsData['questions'][number];
 
@@ -31,6 +33,31 @@ function formatDate(dateString: string): string {
     minute: '2-digit',
     timeZone: 'Australia/Brisbane'
   });
+}
+
+function methodLabel(type: string): string {
+  if (type === 'yes_no') return 'Yes / No';
+  if (type === 'multiple_choice') return 'Multiple choice';
+  if (type === 'ranked_choice') return 'Ranked choice · IRV';
+  return 'Condorcet · Schulze';
+}
+
+function outcomeSummary(question: QuestionResult): string {
+  if (question.type === 'ranked_choice') {
+    if (question.results.winner) return `${question.results.winner} won after ${question.results.rounds?.length || 0} counting round${question.results.rounds?.length === 1 ? '' : 's'}.`;
+    const tied = question.results.rounds?.find((round: any) => round.tiedCandidates?.length)?.tiedCandidates;
+    return tied?.length ? `Tied result: ${tied.join(', ')}.` : 'No winner was determined.';
+  }
+  if (question.type === 'condorcet') {
+    if (question.results.winner) return `${question.results.winner} is the ${question.results.condorcetWinner ? 'Condorcet winner' : 'Schulze-method winner'}.`;
+    return question.results.tiedCandidates?.length ? `Tied result: ${question.results.tiedCandidates.join(', ')}.` : 'No winner was determined.';
+  }
+  const entries = Object.entries(question.results as Record<string, number>).sort((a, b) => b[1] - a[1]);
+  if (!entries.length || question.totalVotes === 0) return 'No ballots were recorded for this question.';
+  const leaders = entries.filter(([, count]) => count === entries[0][1]);
+  if (leaders.length > 1) return `Tied result: ${leaders.map(([name]) => name).join(', ')}.`;
+  const denominator = question.type === 'multiple_choice' ? entries.reduce((sum, [, count]) => sum + count, 0) : question.totalVotes;
+  return `${entries[0][0]} received the highest count with ${entries[0][1]} (${denominator > 0 ? ((entries[0][1] / denominator) * 100).toFixed(1) : '0.0'}%).`;
 }
 
 function IRVResultsDisplay({ results }: { results: any }) {
@@ -218,8 +245,8 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center">
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center mr-3">
                 <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
@@ -232,29 +259,19 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
-              <a
-                href={`/api/results/${slug}?format=csv`}
-                className="btn-secondary"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Download CSV
-              </a>
-              <Link href="/" className="btn-primary">
-                View More Elections
-              </Link>
-            </div>
+            <ResultsActions slug={slug} />
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         {/* Plebiscite Information */}
         <div className="mb-8">
-          <div className="text-center mb-6">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+          <div className="text-center mb-8">
+            <div className="mb-4 inline-flex items-center rounded-full border border-green-200 bg-green-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-green-800">
+              Closed · Final result published
+            </div>
+            <h2 className="text-3xl font-bold tracking-tight text-gray-900 mb-4 sm:text-4xl">
               {plebiscite.title}
             </h2>
             <div className="flex justify-center space-x-4 text-sm text-gray-600 mb-4">
@@ -270,16 +287,35 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
           </div>
 
           {/* Participation Stats */}
-          <div className="max-w-md mx-auto mb-8">
-            <div className="card">
-              <div className="card-body text-center">
-                <div className="text-3xl font-bold text-primary mb-2">
-                  {participation.totalVotes}
-                </div>
-                <div className="text-sm text-gray-600">
-                  Total Votes Cast
-                </div>
+          <div className="mx-auto mb-10 grid max-w-4xl grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              ['Ballots cast', participation.totalVotes.toLocaleString()],
+              ['Eligible credentials', participation.eligibleCredentials.toLocaleString()],
+              ['Participation', participation.participationRate === null ? '—' : `${participation.participationRate.toFixed(1)}%`],
+              ['Questions', questions.length.toLocaleString()]
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-gray-200 bg-white p-5 text-center shadow-sm">
+                <div className="text-2xl font-bold text-primary sm:text-3xl">{value}</div>
+                <div className="mt-1 text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
               </div>
+            ))}
+          </div>
+
+          <div className="mx-auto mb-10 max-w-4xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-200 bg-gray-50 px-5 py-3">
+              <h3 className="font-semibold text-gray-900">Result at a glance</h3>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {questions.map((question, index) => (
+                <div key={question.id} className="grid gap-2 px-5 py-4 sm:grid-cols-[2rem_1fr_auto] sm:items-center">
+                  <div className="font-mono text-sm font-bold text-primary">{String(index + 1).padStart(2, '0')}</div>
+                  <div>
+                    <div className="font-semibold text-gray-900">{question.title}</div>
+                    <div className="mt-1 text-sm text-gray-600">{outcomeSummary(question)}</div>
+                  </div>
+                  <span className="badge badge-gray w-fit">{methodLabel(question.type)}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -294,7 +330,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
             </div>
           ) : (
             questions.map((question, index) => (
-              <div key={question.id}>
+              <div key={question.id} className="results-question">
                 {question.type === 'ranked_choice' ? (
                   <div className="card">
                     <div className="card-header">
@@ -356,23 +392,35 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
         </div>
 
         {/* Footer Information */}
-        <div className="mt-16 text-center">
-          <div className="max-w-2xl mx-auto">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h4 className="text-lg font-semibold text-blue-900 mb-3">About These Results</h4>
-              <div className="text-sm text-blue-800 space-y-2">
-                <p>
-                  All votes were cast securely and anonymously. Results are final and have been preserved for audit purposes.
-                </p>
-                <p>
-                  For ranked choice questions, Instant Runoff Voting (IRV) was used to determine winners through elimination rounds. For Condorcet questions, head-to-head pairwise comparison was used, with the Schulze method resolving any cycles.
-                </p>
-                <p>
-                  Individual votes cannot be traced back to voters while maintaining full verifiability through receipt codes.
-                </p>
+        <div className="mt-16 overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50">
+          <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[1.4fr_1fr]">
+            <div>
+              <h4 className="text-xl font-semibold text-emerald-950">Verification and transparency</h4>
+              <div className="mt-3 space-y-3 text-sm leading-6 text-emerald-900">
+                <p>Ballots are counted anonymously. Participation records establish that a credential voted, but are not connected to the published ballot contents.</p>
+                <p>Voters can use their private receipt code to confirm that their ballot is included. Public ballot details remain subject to VoteKit’s minimum privacy threshold.</p>
+                <p>Ranked-choice counts use instant-runoff rounds. Condorcet counts use head-to-head comparisons and the Schulze strongest-path method when necessary. VoteKit reports unresolved ties rather than choosing an arbitrary winner.</p>
               </div>
             </div>
+            <div className="rounded-xl border border-emerald-200 bg-white/80 p-5">
+              <div className="text-xs font-semibold uppercase tracking-wider text-emerald-800">Report fingerprint · SHA-256</div>
+              <div className="mt-3 break-all font-mono text-xs leading-5 text-gray-700">{resultsReportFingerprint(data)}</div>
+              <div className="mt-4 text-xs text-gray-600">This identifies the exact published result dataset used by the online page, CSV and PDF report.</div>
+            </div>
           </div>
+          {data.encryptedAudit && (
+            <div className="border-t border-emerald-200 bg-white/60 px-6 py-5 sm:px-8">
+              <div className="text-sm font-semibold text-emerald-950">Encrypted ballot audit</div>
+              <div className="mt-2 grid gap-2 font-mono text-xs text-gray-600 sm:grid-cols-2">
+                <div className="break-all">Manifest: {data.encryptedAudit.manifestHash}</div>
+                <div className="break-all">Published output: {data.encryptedAudit.outputHash}</div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-8 flex justify-center print:hidden">
+          <ResultsActions slug={slug} />
         </div>
       </main>
     </div>
