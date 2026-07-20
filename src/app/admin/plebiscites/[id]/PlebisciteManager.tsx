@@ -19,6 +19,8 @@ interface Plebiscite {
   title: string;
   status: 'draft' | 'open' | 'closed';
   open_date: string;
+  opening_mode?: 'immediate' | 'scheduled';
+  scheduled_open_error?: string | null;
   privacy_mode: 'legacy' | 'encrypted';
   manifest_hash?: string;
   recovery_confirmed_at?: string;
@@ -171,7 +173,7 @@ export default function PlebisciteManager({
   }
 
   async function handleAction(action: string) {
-    const openingEarly = action === 'open' && parseElectionCloseDate(plebiscite.open_date) > new Date();
+    const openingEarly = action === 'open' && plebiscite.opening_mode === 'scheduled' && parseElectionCloseDate(plebiscite.open_date) > new Date();
     const message = openingEarly
       ? 'The scheduled open date has not been reached yet. Open voting early? The scheduled dates will not be changed.'
       : `Are you sure you want to ${action} this election?`;
@@ -286,7 +288,7 @@ export default function PlebisciteManager({
           disabled={loading}
           className="btn-primary w-full"
         >
-          {loading ? 'Opening...' : 'Open Voting'}
+          {loading ? 'Opening...' : 'Open Voting Now'}
         </button>
       )}
 

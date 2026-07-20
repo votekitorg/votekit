@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import db, { cleanupExpiredCodes } from '@/lib/db';
 import { createVoterSession, checkVoterVerificationBruteForce, clearVoterVerificationFailedAttempts, recordVoterVerificationAttempt, validateCSRFRequest } from '@/lib/auth';
 import { votingClosedError } from '@/lib/election-window';
+import { reconcileScheduledElection } from '@/lib/election-opening';
 
 export async function POST(request: NextRequest) {
   if (!validateCSRFRequest(request)) {
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest) {
     // Clean up expired codes first
     cleanupExpiredCodes();
 
+    await reconcileScheduledElection({ slug: plebisciteSlug });
     // Get plebiscite
     const plebiscite = db.prepare('SELECT * FROM plebiscites WHERE slug = ? AND status = ?').get(plebisciteSlug, 'open') as any;
     if (!plebiscite) {

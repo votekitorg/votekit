@@ -17,7 +17,7 @@ interface Question {
 export default function CreatePlebisciteForm({ currentUser }: { currentUser: { email: string; name: string | null; role: 'owner' | 'returning_officer' | 'admin' | 'observer' } }) {
   const now = new Date();
   const toBrisbaneInput = (date: Date) => new Date(date.getTime() + 10 * 60 * 60 * 1000).toISOString().slice(0, 16);
-  const defaultOpenDate = toBrisbaneInput(now);
+  const defaultOpenDate = toBrisbaneInput(new Date(now.getTime() + 60 * 60 * 1000));
   const defaultCloseDate = toBrisbaneInput(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000));
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -27,6 +27,7 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
     info_url: '',
     access_mode: 'voter_roll' as 'voter_roll' | 'anonymous_codes',
     sms_enabled: false,
+    opening_mode: 'immediate' as 'immediate' | 'scheduled',
     open_date: defaultOpenDate,
     close_date: defaultCloseDate
   });
@@ -38,9 +39,10 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
   const router = useRouter();
 
   const steps = [
-    { id: 1, name: 'Basic Information', description: 'Title, dates, and description' },
+    { id: 1, name: 'Basic Information', description: 'Purpose and voter access' },
     { id: 2, name: 'Questions', description: 'Add questions and voting methods' },
-    { id: 3, name: 'Review', description: 'Preview before publishing' }
+    { id: 3, name: 'Voting Timing', description: 'Open and close settings' },
+    { id: 4, name: 'Review', description: 'Confirm and create' }
   ];
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -114,23 +116,6 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
       setError('Description is required');
       return false;
     }
-    if (!formData.open_date) {
-      setError('Opening date is required');
-      return false;
-    }
-    if (!formData.close_date) {
-      setError('Closing date is required');
-      return false;
-    }
-    if (parseElectionCloseDate(formData.open_date) >= parseElectionCloseDate(formData.close_date)) {
-      setError('Closing date must be after opening date');
-      return false;
-    }
-    if (parseElectionCloseDate(formData.open_date) < new Date()) {
-      setError('Opening date cannot be in the past');
-      return false;
-    }
-    
     return true;
   };
 
@@ -165,6 +150,36 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
     return true;
   };
 
+  const validateStep3 = (): boolean => {
+    setError('');
+    const now = new Date();
+    const closeDate = parseElectionCloseDate(formData.close_date);
+    if (!formData.close_date || Number.isNaN(closeDate.getTime())) {
+      setError('A valid closing date is required');
+      return false;
+    }
+    if (closeDate <= now) {
+      setError('Closing date must be in the future');
+      return false;
+    }
+    if (formData.opening_mode === 'scheduled') {
+      const openDate = parseElectionCloseDate(formData.open_date);
+      if (!formData.open_date || Number.isNaN(openDate.getTime())) {
+        setError('A valid scheduled opening date is required');
+        return false;
+      }
+      if (openDate <= now) {
+        setError('Scheduled opening must be in the future');
+        return false;
+      }
+      if (openDate >= closeDate) {
+        setError('Closing date must be after the scheduled opening');
+        return false;
+      }
+    }
+    return true;
+  };
+
   const nextStep = () => {
     let canProceed = false;
     
@@ -172,9 +187,11 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
       canProceed = validateStep1();
     } else if (currentStep === 2) {
       canProceed = validateStep2();
+    } else if (currentStep === 3) {
+      canProceed = validateStep3();
     }
     
-    if (canProceed && currentStep < 3) {
+    if (canProceed && currentStep < 4) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -187,7 +204,7 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
   };
 
   const handleSubmit = async () => {
-    if (!validateStep1() || !validateStep2()) {
+    if (!validateStep1() || !validateStep2() || !validateStep3()) {
       return;
     }
 
@@ -349,43 +366,6 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
                   </p>
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h3 className="text-sm font-medium text-blue-900 mb-2">Voting Schedule</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="open_date" className="block text-sm font-medium text-blue-800 mb-2">
-                        Opening Date & Time *
-                      </label>
-                      <input
-                        type="datetime-local"
-                        id="open_date"
-                        name="open_date"
-                        value={formData.open_date}
-                        onChange={handleInputChange}
-                        className="input-field"
-                      />
-                      <p className="text-xs text-blue-700 mt-1">When voting begins</p>
-                    </div>
-
-                    <div>
-                      <label htmlFor="close_date" className="block text-sm font-medium text-blue-800 mb-2">
-                        Closing Date & Time *
-                      </label>
-                      <input
-                        type="datetime-local"
-                        id="close_date"
-                        name="close_date"
-                        value={formData.close_date}
-                        onChange={handleInputChange}
-                        className="input-field"
-                      />
-                      <p className="text-xs text-blue-700 mt-1">When voting ends</p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-blue-700 mt-2">
-                    💡 Allow adequate time for members to participate. Consider timezone differences for your membership.
-                  </p>
-                </div>
               </div>
             </div>
           )}
@@ -611,8 +591,52 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
             </div>
           )}
 
-          {/* Step 3: Review */}
+          {/* Step 3: Voting timing */}
           {currentStep === 3 && (
+            <div className="card">
+              <div className="card-header">
+                <h2 className="text-lg font-semibold text-gray-900">Voting Timing</h2>
+                <p className="text-sm text-gray-600 mt-1">Choose when voting becomes available. All times are Australia/Brisbane.</p>
+              </div>
+              <div className="card-body space-y-6">
+                <fieldset>
+                  <legend className="text-sm font-medium text-gray-700">Opening *</legend>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <label className={`cursor-pointer rounded-xl border-2 p-4 ${formData.opening_mode === 'immediate' ? 'border-primary bg-green-50' : 'border-gray-200 bg-white'}`}>
+                      <input type="radio" name="opening_mode" value="immediate" checked={formData.opening_mode === 'immediate'} onChange={handleInputChange} className="mr-2" />
+                      <strong className="text-gray-900">Open immediately when ready</strong>
+                      <span className="mt-1 block text-sm text-gray-600">Default. After creation, add voters or generate codes on the management page, then click Open Voting Now.</span>
+                    </label>
+                    <label className={`cursor-pointer rounded-xl border-2 p-4 ${formData.opening_mode === 'scheduled' ? 'border-primary bg-green-50' : 'border-gray-200 bg-white'}`}>
+                      <input type="radio" name="opening_mode" value="scheduled" checked={formData.opening_mode === 'scheduled'} onChange={handleInputChange} className="mr-2" />
+                      <strong className="text-gray-900">Schedule opening for later</strong>
+                      <span className="mt-1 block text-sm text-gray-600">Voting opens automatically at the chosen time when setup is complete. You can still open it early.</span>
+                    </label>
+                  </div>
+                </fieldset>
+
+                {formData.opening_mode === 'scheduled' && (
+                  <div>
+                    <label htmlFor="open_date" className="block text-sm font-medium text-gray-700 mb-2">Scheduled opening date and time *</label>
+                    <input type="datetime-local" id="open_date" name="open_date" value={formData.open_date} onChange={handleInputChange} className="input-field" />
+                  </div>
+                )}
+
+                <div>
+                  <label htmlFor="close_date" className="block text-sm font-medium text-gray-700 mb-2">Closing date and time *</label>
+                  <input type="datetime-local" id="close_date" name="close_date" value={formData.close_date} onChange={handleInputChange} className="input-field" />
+                  <p className="mt-2 text-sm text-gray-500">Defaults to seven days from now. Voting always stops at this time unless you close it earlier.</p>
+                </div>
+
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                  Voters and anonymous codes are added after creation on the election management page. VoteKit will never open an election without questions and at least one valid voting credential.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Review */}
+          {currentStep === 4 && (
             <div className="space-y-6">
               <div className="card">
                 <div className="card-header">
@@ -642,12 +666,16 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
                         <dd className="text-sm text-gray-900 font-medium">{formData.title}</dd>
                       </div>
                       <div>
-                        <dt className="text-sm font-medium text-gray-500">Voting Period</dt>
+                        <dt className="text-sm font-medium text-gray-500">Opening</dt>
                         <dd className="text-sm text-gray-900">
-                          {parseElectionCloseDate(formData.open_date).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane' })}
-                          {' - '}
-                          {parseElectionCloseDate(formData.close_date).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane' })}
+                          {formData.opening_mode === 'immediate'
+                            ? 'Open immediately when setup is complete'
+                            : parseElectionCloseDate(formData.open_date).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane' })}
                         </dd>
+                      </div>
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Closing</dt>
+                        <dd className="text-sm text-gray-900">{parseElectionCloseDate(formData.close_date).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane' })}</dd>
                       </div>
                       <div className="sm:col-span-2">
                         <dt className="text-sm font-medium text-gray-500">Description</dt>
@@ -722,7 +750,7 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
                 <div className="alert-error max-w-md">{error}</div>
               )}
               
-              {currentStep < 3 ? (
+              {currentStep < 4 ? (
                 <button
                   type="button"
                   onClick={nextStep}

@@ -4,6 +4,7 @@ import { createVoterSession, validateCSRFRequest } from '@/lib/auth';
 import { votingClosedError } from '@/lib/election-window';
 import { verifyFirebasePhoneToken } from '@/lib/firebase-token';
 import { normalizePhoneNumber } from '@/lib/voter-access';
+import { reconcileScheduledElection } from '@/lib/election-opening';
 
 export async function POST(request: NextRequest) {
   if (!validateCSRFRequest(request)) return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
@@ -14,6 +15,7 @@ export async function POST(request: NextRequest) {
     }
     const verifiedPhone = normalizePhoneNumber(await verifyFirebasePhoneToken(body.idToken));
     if (!verifiedPhone) return NextResponse.json({ error: 'Invalid verified phone number' }, { status: 400 });
+    await reconcileScheduledElection({ slug: body.plebisciteSlug });
     const election = db.prepare(`SELECT * FROM plebiscites WHERE slug = ? AND status = 'open' AND access_mode = 'voter_roll'`)
       .get(body.plebisciteSlug) as any;
     if (!election) return NextResponse.json({ error: 'Election not found or not currently open' }, { status: 404 });

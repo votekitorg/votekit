@@ -3,11 +3,13 @@ import db from '@/lib/db';
 import { createVoterSession, validateCSRFRequest } from '@/lib/auth';
 import { votingClosedError } from '@/lib/election-window';
 import { hashLinkToken } from '@/lib/voter-access';
+import { reconcileScheduledElection } from '@/lib/election-opening';
 
 export async function POST(request: NextRequest) {
   if (!validateCSRFRequest(request)) return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
   const body = await request.json();
   if (typeof body.token !== 'string' || body.token.length > 100 || typeof body.plebisciteSlug !== 'string') return NextResponse.json({ error: 'Invalid ballot link' }, { status: 400 });
+  await reconcileScheduledElection({ slug: body.plebisciteSlug });
   const election = db.prepare(`SELECT * FROM plebiscites WHERE slug = ? AND status = 'open' AND access_mode = 'voter_roll'`).get(body.plebisciteSlug) as any;
   if (!election) return NextResponse.json({ error: 'Election not found or not currently open' }, { status: 404 });
   const closedError = votingClosedError(election); if (closedError) return NextResponse.json({ error: closedError }, { status: 403 });

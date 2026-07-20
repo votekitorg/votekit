@@ -3,9 +3,10 @@ import { canAccessElection, canManageElection, canManageElections, getAdminSessi
   validateCSRFRequest
 } from '@/lib/auth';
 import db, { closePlebisciteWithPrivacyHardening, generateUniqueSlug } from '@/lib/db';
-import { parseElectionCloseDate, votingClosedError } from '@/lib/election-window';
+import { parseElectionCloseDate } from '@/lib/election-window';
 import { randomUUID } from 'crypto';
-import { buildAndHashEncryptedManifest, encryptedBallotsEnabled } from '@/lib/encrypted-election-server';
+import { encryptedBallotsEnabled } from '@/lib/encrypted-election-server';
+import { openElectionNow } from '@/lib/election-opening';
 
 const MAX_TITLE_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 20_000;
@@ -34,6 +35,13 @@ function validateElectionDates(openDate: unknown, closeDate: unknown): string | 
   }
   if (parsedOpen >= parsedClose) return 'Close date must be after open date';
   return null;
+}
+
+function brisbaneDateTimeInput(date: Date): string {
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Australia/Brisbane', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  }).format(date).replace(' ', 'T');
 }
 
 export async function GET(request: NextRequest) {
@@ -85,7 +93,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title, description, info_url, open_date, close_date, questions = [], access_mode = 'voter_roll', sms_enabled = false } = body;
+    const { title, description, info_url, open_date, close_date, opening_mode = 'immediate', questions = [], access_mode = 'voter_roll', sms_enabled = false } = body;
 
     // Validation
     if (typeof title !== 'string' || !title.trim() || typeof description !== 'string' || !description.trim()) {
@@ -103,8 +111,19 @@ export async function POST(request: NextRequest) {
     if (info_url && (typeof info_url !== 'string' || info_url.length > 2048 || !validHttpUrl(info_url))) {
       return NextResponse.json({ error: 'Information URL must be a valid HTTP or HTTPS URL' }, { status: 400 });
     }
-    const dateError = validateElectionDates(open_date, close_date);
+    if (!['immediate', 'scheduled'].includes(opening_mode)) {
+      return NextResponse.json({ error: 'Invalid opening mode' }, { status: 400 });
+    }
+    const effectiveOpenDate = opening_mode === 'immediate' ? brisbaneDateTimeInput(new Date()) : open_date;
+    const dateError = validateElectionDates(effectiveOpenDate, close_date);
     if (dateError) return NextResponse.json({ error: dateError }, { status: 400 });
+    const now = new Date();
+    if (parseElectionCloseDate(close_date) <= now) {
+      return NextResponse.json({ error: 'Closing date must be in the future' }, { status: 400 });
+    }
+    if (opening_mode === 'scheduled' && parseElectionCloseDate(effectiveOpenDate) <= now) {
+      return NextResponse.json({ error: 'Scheduled opening must be in the future' }, { status: 400 });
+    }
     if (!['voter_roll', 'anonymous_codes'].includes(access_mode)) {
       return NextResponse.json({ error: 'Invalid voter access mode' }, { status: 400 });
     }
@@ -160,9 +179,9 @@ export async function POST(request: NextRequest) {
     const createElection = db.transaction(() => {
       const privacyMode = encryptedBallotsEnabled && access_mode === 'voter_roll' ? 'encrypted' : 'legacy';
       const result = db.prepare(`
-        INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, status, privacy_mode, created_by_admin_user_id, access_mode, sms_enabled)
-        VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)
-      `).run(slug, normalizedTitle, normalizedDescription, normalizedInfoUrl, open_date, close_date, privacyMode, adminSession.adminUserId, access_mode, sms_enabled ? 1 : 0);
+        INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, opening_mode, status, privacy_mode, created_by_admin_user_id, access_mode, sms_enabled)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)
+      `).run(slug, normalizedTitle, normalizedDescription, normalizedInfoUrl, effectiveOpenDate, close_date, opening_mode, privacyMode, adminSession.adminUserId, access_mode, sms_enabled ? 1 : 0);
       const plebisciteId = Number(result.lastInsertRowid);
       if (adminSession.role === 'returning_officer') {
         db.prepare(`INSERT INTO election_team_members (plebiscite_id, admin_user_id, role, assigned_by_admin_user_id)
@@ -192,7 +211,7 @@ export async function POST(request: NextRequest) {
         action: 'plebiscite.create',
         targetType: 'plebiscite',
         targetId: plebisciteId,
-        details: { slug, title: normalizedTitle, questionCount: questions.length, privacyMode, accessMode: access_mode }
+        details: { slug, title: normalizedTitle, questionCount: questions.length, privacyMode, accessMode: access_mode, openingMode: opening_mode, scheduledOpenDate: opening_mode === 'scheduled' ? effectiveOpenDate : null }
       });
       return plebisciteId;
     });
@@ -206,8 +225,9 @@ export async function POST(request: NextRequest) {
         title: normalizedTitle,
         description: normalizedDescription,
         info_url: normalizedInfoUrl,
-        open_date,
+        open_date: effectiveOpenDate,
         close_date,
+        opening_mode,
         status: 'draft'
       }
     });
@@ -299,52 +319,8 @@ export async function PUT(request: NextRequest) {
         );
       }
 
-      const voterCount = db.prepare('SELECT COUNT(*) AS count FROM voter_roll WHERE plebiscite_id = ?')
-        .get(id) as { count: number };
-      const accessCodeCount = db.prepare('SELECT COUNT(*) AS count FROM anonymous_access_codes WHERE plebiscite_id = ?')
-        .get(id) as { count: number };
-      const questionCount = db.prepare('SELECT COUNT(*) AS count FROM questions WHERE plebiscite_id = ?')
-        .get(id) as { count: number };
-      const credentialCount = plebiscite.access_mode === 'anonymous_codes' ? accessCodeCount.count : voterCount.count;
-      if (credentialCount === 0 || questionCount.count === 0) {
-        return NextResponse.json(
-          { error: plebiscite.access_mode === 'anonymous_codes'
-              ? 'Generate at least one anonymous voting code before opening this election'
-              : 'Add at least one voter before opening this election' },
-          { status: 400 }
-        );
-      }
-      if (votingClosedError(plebiscite)) {
-        return NextResponse.json(
-          { error: 'The closing date must be in the future before this election can open' },
-          { status: 400 }
-        );
-      }
-
-      if (plebiscite.privacy_mode === 'encrypted') {
-        if (!encryptedBallotsEnabled) {
-          return NextResponse.json({ error: 'Encrypted ballots are disabled on this installation' }, { status: 409 });
-        }
-        const key = db.prepare('SELECT manifest_hash FROM encrypted_election_keys WHERE plebiscite_id = ?').get(id) as any;
-        const currentManifest = await buildAndHashEncryptedManifest(plebiscite);
-        if (!key || !plebiscite.manifest_hash || !plebiscite.recovery_confirmed_at) {
-          return NextResponse.json({ error: 'Prepare and save the encrypted ballot recovery kit before opening' }, { status: 409 });
-        }
-        if (key.manifest_hash !== currentManifest.manifestHash || plebiscite.manifest_hash !== currentManifest.manifestHash) {
-          return NextResponse.json({ error: 'Election details changed after key preparation. Prepare a new recovery kit.' }, { status: 409 });
-        }
-      }
-
-      // Open plebiscite
-      db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?')
-        .run('open', id);
-      recordAdminAuditLog({
-        adminUserId: adminSession.adminUserId,
-        action: 'plebiscite.open',
-        targetType: 'plebiscite',
-        targetId: id,
-        details: { slug: plebiscite.slug }
-      });
+      const opened = await openElectionNow(Number(id), { adminUserId: adminSession.adminUserId, source: 'manual' });
+      if (!opened.opened) return NextResponse.json({ error: opened.error }, { status: 400 });
 
       return NextResponse.json({ success: true, status: 'open' });
     }
@@ -379,7 +355,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Regular update
-    const { title, description, info_url, open_date, close_date, access_mode, sms_enabled } = updateData;
+    const { title, description, info_url, open_date, close_date, opening_mode, access_mode, sms_enabled } = updateData;
 
     // Validation for regular updates
     if ((plebiscite as any).status !== 'draft') {
@@ -400,6 +376,9 @@ export async function PUT(request: NextRequest) {
     }
     if (access_mode !== undefined && !['voter_roll', 'anonymous_codes'].includes(access_mode)) {
       return NextResponse.json({ error: 'Invalid voter access mode' }, { status: 400 });
+    }
+    if (opening_mode !== undefined && !['immediate', 'scheduled'].includes(opening_mode)) {
+      return NextResponse.json({ error: 'Invalid opening mode' }, { status: 400 });
     }
     const dateError = validateElectionDates(open_date ?? plebiscite.open_date, close_date ?? plebiscite.close_date);
     if (dateError) return NextResponse.json({ error: dateError }, { status: 400 });
@@ -426,6 +405,10 @@ export async function PUT(request: NextRequest) {
     if (close_date !== undefined) {
       updateFields.push('close_date = ?');
       updateValues.push(close_date);
+    }
+    if (opening_mode !== undefined) {
+      updateFields.push('opening_mode = ?');
+      updateValues.push(opening_mode);
     }
     if (access_mode !== undefined) {
       updateFields.push('access_mode = ?');

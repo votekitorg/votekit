@@ -11,6 +11,36 @@ export interface IRVRound {
   eliminated: string[];
   winner?: string;
   tiedCandidates?: string[];
+  tieBreak?: IRVTieBreak;
+}
+
+export type IRVTieResolutionType = 'exclusion' | 'winner';
+export type IRVTieResolutionMethod = 'drawing_lots' | 'governing_rules';
+
+export interface IRVTieResolution {
+  round: number;
+  type: IRVTieResolutionType;
+  tiedCandidates: string[];
+  selectedCandidate: string;
+  method: IRVTieResolutionMethod;
+  note?: string | null;
+  resolvedAt?: string | null;
+}
+
+export interface IRVTieBreak {
+  type: IRVTieResolutionType;
+  tiedCandidates: string[];
+  selectedCandidate: string;
+  method: 'countback' | IRVTieResolutionMethod;
+  sourceRound?: number;
+  note?: string | null;
+  resolvedAt?: string | null;
+}
+
+export interface IRVPendingTie {
+  round: number;
+  type: IRVTieResolutionType;
+  tiedCandidates: string[];
 }
 
 export interface IRVResult {
@@ -18,6 +48,7 @@ export interface IRVResult {
   rounds: IRVRound[];
   totalVotes: number;
   exhaustedBallots: number;
+  pendingTie?: IRVPendingTie;
 }
 
 function sortCandidatesByVotesThenName(entries: [string, number][]): [string, number][] {
@@ -27,7 +58,37 @@ function sortCandidatesByVotesThenName(entries: [string, number][]): [string, nu
   });
 }
 
-export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
+function sameCandidates(left: string[], right: string[]): boolean {
+  return [...left].sort().join('\u0000') === [...right].sort().join('\u0000');
+}
+
+function manualResolution(
+  resolutions: IRVTieResolution[],
+  round: number,
+  type: IRVTieResolutionType,
+  tiedCandidates: string[]
+): IRVTieResolution | undefined {
+  return resolutions.find(resolution =>
+    resolution.round === round && resolution.type === type &&
+    sameCandidates(resolution.tiedCandidates, tiedCandidates) &&
+    tiedCandidates.includes(resolution.selectedCandidate)
+  );
+}
+
+function resolveExclusionByCountback(rounds: IRVRound[], tiedCandidates: string[]): { candidate: string; sourceRound: number } | null {
+  let stillTied = [...tiedCandidates];
+  for (let index = rounds.length - 1; index >= 0; index -= 1) {
+    const previous = rounds[index];
+    const counts = stillTied.map(candidate => [candidate, previous.votes[candidate] ?? 0] as const);
+    const lowest = Math.min(...counts.map(([, count]) => count));
+    const lowestCandidates = counts.filter(([, count]) => count === lowest).map(([candidate]) => candidate);
+    if (lowestCandidates.length === 1) return { candidate: lowestCandidates[0], sourceRound: previous.round };
+    stillTied = lowestCandidates;
+  }
+  return null;
+}
+
+export function tabulateIRV(votes: IRVVote[], candidates: string[], resolutions: IRVTieResolution[] = []): IRVResult {
   if (votes.length === 0) {
     return {
       winner: null,
@@ -52,7 +113,7 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
 
   let round = 1;
 
-  while (remainingCandidates.length > 1) {
+  while (remainingCandidates.length > 0) {
     // Count first preferences for remaining candidates
     const voteCounts: { [candidate: string]: number } = {};
     remainingCandidates.forEach(candidate => {
@@ -89,6 +150,15 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
       eliminated: []
     };
 
+    // A sole continuing candidate is elected. Recounting this final round also
+    // marks ballots with no continuing preference as exhausted.
+    if (remainingCandidates.length === 1) {
+      roundData.winner = remainingCandidates[0];
+      result.winner = remainingCandidates[0];
+      result.rounds.push(roundData);
+      break;
+    }
+
     // Check for winner
     if (sortedCandidates[0][1] >= majority) {
       roundData.winner = sortedCandidates[0][0];
@@ -97,11 +167,20 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
       break;
     }
 
-    // If only two candidates remain, the one with more votes wins. A true tie
-    // is reported as a tie for administrators to resolve under election rules.
+    // If only two candidates remain, the one with more active votes wins. A
+    // true final tie requires an explicit, audited election-rule decision.
     if (remainingCandidates.length === 2) {
       if (sortedCandidates[0][1] === sortedCandidates[1][1]) {
-        roundData.tiedCandidates = sortedCandidates.map(([candidate]) => candidate).sort();
+        const tiedCandidates = sortedCandidates.map(([candidate]) => candidate).sort();
+        const resolution = manualResolution(resolutions, round, 'winner', tiedCandidates);
+        if (resolution) {
+          roundData.winner = resolution.selectedCandidate;
+          roundData.tieBreak = { ...resolution };
+          result.winner = resolution.selectedCandidate;
+        } else {
+          roundData.tiedCandidates = tiedCandidates;
+          result.pendingTie = { round, type: 'winner', tiedCandidates };
+        }
         result.rounds.push(roundData);
         break;
       }
@@ -119,22 +198,40 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[]): IRVResult {
       .filter(([, count]) => count === lowestVoteCount)
       .map(([candidate]) => candidate);
 
-    // If all remaining candidates are tied, report the tie rather than silently
-    // selecting by candidate order/alphabetical order.
-    if (candidatesToEliminate.length === remainingCandidates.length) {
-      roundData.tiedCandidates = [...remainingCandidates].sort();
-      result.rounds.push(roundData);
-      break;
+    // Exactly one candidate is excluded per round. A tied exclusion first uses
+    // countback; if prior rounds cannot separate the candidates, counting pauses
+    // until a Returning Officer records the governing-rule decision.
+    let eliminatedCandidate: string;
+    if (candidatesToEliminate.length === 1) {
+      eliminatedCandidate = candidatesToEliminate[0];
+    } else {
+      const tiedCandidates = [...candidatesToEliminate].sort();
+      const countback = resolveExclusionByCountback(result.rounds, tiedCandidates);
+      if (countback) {
+        eliminatedCandidate = countback.candidate;
+        roundData.tieBreak = {
+          type: 'exclusion', tiedCandidates, selectedCandidate: eliminatedCandidate,
+          method: 'countback', sourceRound: countback.sourceRound
+        };
+      } else {
+        const resolution = manualResolution(resolutions, round, 'exclusion', tiedCandidates);
+        if (!resolution) {
+          roundData.tiedCandidates = tiedCandidates;
+          result.pendingTie = { round, type: 'exclusion', tiedCandidates };
+          result.rounds.push(roundData);
+          break;
+        }
+        eliminatedCandidate = resolution.selectedCandidate;
+        roundData.tieBreak = { ...resolution };
+      }
     }
 
-    // Eliminate candidate(s) with lowest votes
-    // If there's a tie for last place, eliminate all tied candidates
-    roundData.eliminated = candidatesToEliminate;
+    roundData.eliminated = [eliminatedCandidate];
     result.rounds.push(roundData);
 
     // Remove eliminated candidates from remaining candidates
     remainingCandidates = remainingCandidates.filter(
-      candidate => !candidatesToEliminate.includes(candidate)
+      candidate => candidate !== eliminatedCandidate
     );
 
     round++;
@@ -160,7 +257,9 @@ export function validateIRVVote(vote: string[], candidates: string[]): boolean {
 // Helper function to format IRV results for display
 export function formatIRVResults(result: IRVResult): string {
   if (!result.winner) {
-    return "No winner could be determined.";
+    return result.pendingTie
+      ? `Count paused: ${result.pendingTie.tiedCandidates.join(', ')} are tied in round ${result.pendingTie.round}.`
+      : "No winner could be determined.";
   }
 
   let output = `Winner: ${result.winner}\n`;
@@ -195,6 +294,11 @@ export function formatIRVResults(result: IRVResult): string {
 
 // Helper function to export IRV results as CSV
 export function exportIRVResultsCSV(result: IRVResult): string {
+  const csvCell = (value: unknown): string => {
+    let text = String(value ?? '');
+    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    return `"${text.replaceAll('"', '""')}"`;
+  };
   let csv = 'Round,Candidate,Votes,Percentage,Status\n';
   
   result.rounds.forEach(round => {
@@ -211,9 +315,23 @@ export function exportIRVResultsCSV(result: IRVResult): string {
           status = 'Winner';
         }
         
-        csv += `${round.round},"${candidate}",${votes},${percentage}%,${status}\n`;
+        csv += `${round.round},${csvCell(candidate)},${votes},${percentage}%,${status}\n`;
       });
+
+    if (round.tieBreak) {
+      const action = round.tieBreak.type === 'exclusion'
+        ? `Excluded ${round.tieBreak.selectedCandidate}`
+        : `Selected ${round.tieBreak.selectedCandidate} as winner`;
+      const method = round.tieBreak.method === 'countback'
+        ? `Countback to round ${round.tieBreak.sourceRound}`
+        : round.tieBreak.method === 'drawing_lots' ? 'Supervised drawing of lots' : 'Election governing rules';
+      csv += `${round.round},${csvCell('Tie resolution')},,,${csvCell(`${action}; ${method}${round.tieBreak.note ? `; ${round.tieBreak.note}` : ''}`)}\n`;
+    }
   });
+
+  if (result.pendingTie) {
+    csv += `${result.pendingTie.round},${csvCell('Count paused')},,,${csvCell(`Unresolved ${result.pendingTie.type} tie: ${result.pendingTie.tiedCandidates.join(' | ')}`)}\n`;
+  }
   
   return csv;
 }

@@ -4,6 +4,7 @@ import AdminLayout from '@/components/AdminLayout';
 import db from '@/lib/db';
 import Link from 'next/link';
 import { parseElectionCloseDate } from '@/lib/election-window';
+import { reconcileScheduledElections } from '@/lib/election-opening';
 
 interface Plebiscite {
   id: number;
@@ -104,6 +105,8 @@ export default async function AdminDashboard() {
   if (!adminSession) {
     redirect('/admin/login');
   }
+
+  await reconcileScheduledElections();
 
   const { plebiscites, archivedPlebiscites, stats } = await getDashboardData(adminSession);
   const canManage = canManageElections(adminSession.role);

@@ -9,6 +9,9 @@ import { parseElectionCloseDate } from '@/lib/election-window';
 import { buildEncryptedManifest, encryptedBallotsEnabled } from '@/lib/encrypted-election-server';
 import ElectionTeamManager from '@/components/ElectionTeamManager';
 import AnonymousCodeManager from '@/components/AnonymousCodeManager';
+import IRVTieResolutionManager from '@/components/IRVTieResolutionManager';
+import { getPlebisciteResults } from '@/lib/results';
+import { reconcileScheduledElection } from '@/lib/election-opening';
 
 interface Plebiscite {
   id: number;
@@ -25,6 +28,10 @@ interface Plebiscite {
   recovery_confirmed_at?: string;
   close_state?: 'none' | 'closing' | 'failed';
   archived_at?: string | null;
+  opening_mode?: 'immediate' | 'scheduled';
+  actual_opened_at?: string | null;
+  scheduled_open_attempted_at?: string | null;
+  scheduled_open_error?: string | null;
   created_at: string;
 }
 
@@ -109,12 +116,17 @@ function getStatusInfo(plebiscite: Plebiscite) {
   }
 
   if (plebiscite.status === 'draft') {
+    const scheduled = plebiscite.opening_mode === 'scheduled';
     return {
-      status: 'Draft',
-      color: 'gray',
+      status: scheduled ? 'Scheduled' : 'Draft',
+      color: scheduled ? 'blue' : 'gray',
       canOpen: true,
       canClose: false,
-      message: now < openDate ? `Scheduled to open ${openDate.toLocaleDateString()}. You can open it early.` : 'Ready to open'
+      message: plebiscite.scheduled_open_error
+        ? `Scheduled opening was paused: ${plebiscite.scheduled_open_error}. Complete setup, then open voting manually.`
+        : scheduled
+          ? (now < openDate ? `Scheduled to open ${openDate.toLocaleString('en-AU', { timeZone: 'Australia/Brisbane' })}. You can open it early.` : 'Scheduled opening is due and VoteKit is checking readiness.')
+          : 'Add voting credentials, then open voting immediately when ready.'
     };
   } else if (plebiscite.status === 'open') {
     return {
@@ -157,6 +169,8 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
   const canManage = canManageElection(adminSession, electionId);
   const canManageTeam = canManageElectionTeam(adminSession, electionId);
 
+  await reconcileScheduledElection({ id: electionId });
+
   const data = await getPlebiscite(id);
   
   if (!data) {
@@ -172,6 +186,11 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
     ? listPendingAdminInvitations(adminSession).filter(invitation => invitation.plebiscite_id === electionId)
     : [];
   const statusInfo = getStatusInfo(plebiscite);
+  const pendingIrvTies = plebiscite.status === 'closed'
+    ? getPlebisciteResults(plebiscite.slug).questions.flatMap(question => question.type === 'ranked_choice' && question.results.pendingTie
+      ? [{ questionId: question.id, questionTitle: question.title, ...question.results.pendingTie }]
+      : [])
+    : [];
 
   return (
     <AdminLayout currentUser={adminSession}>
@@ -212,6 +231,10 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
             )}
           </div>
         </div>
+
+        {canManage && ['owner', 'returning_officer'].includes(adminSession.role) && (
+          <IRVTieResolutionManager ties={pendingIrvTies} />
+        )}
 
         <ElectionTeamManager plebisciteId={electionId} members={team} returningOfficers={returningOfficers} pendingInvitations={pendingInvitations} canManage={canManageTeam} />
 
@@ -320,7 +343,9 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
               <div>
                 <dt className="text-sm font-medium text-gray-500">Voting Period</dt>
                 <dd className="mt-1 text-sm text-gray-900">
-                  {formatElectionDate(plebiscite.open_date)} - {formatElectionDate(plebiscite.close_date)}
+                  {plebiscite.status === 'draft' && plebiscite.opening_mode !== 'scheduled'
+                    ? 'Opens immediately when setup is complete'
+                    : `${formatElectionDate(plebiscite.open_date)} - ${formatElectionDate(plebiscite.close_date)}`}
                 </dd>
               </div>
 
@@ -346,6 +371,8 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
                 plebiscite={{
                   id: plebiscite.id, slug: plebiscite.slug, title: plebiscite.title,
                   status: plebiscite.status, open_date: plebiscite.open_date,
+                  opening_mode: plebiscite.opening_mode,
+                  scheduled_open_error: plebiscite.scheduled_open_error,
                   privacy_mode: plebiscite.privacy_mode,
                   manifest_hash: plebiscite.manifest_hash,
                   recovery_confirmed_at: plebiscite.recovery_confirmed_at,

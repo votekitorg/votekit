@@ -65,6 +65,8 @@ assert(resultsLib.includes('receipt_code, vote_data'), 'results helper reads rec
 assert(resultsLib.includes('publicBallots'), 'results helper publishes anonymous ballots for verification after close');
 assert(irv.includes('tiedCandidates'), 'IRV reports tied candidates instead of silently choosing a winner');
 assert(!irv.includes('remainingCandidates.sort()[0]'), 'IRV no longer selects alphabetical winner for full tie');
+assert(irv.includes('roundData.eliminated = [eliminatedCandidate]'), 'IRV excludes exactly one lowest candidate per round');
+assert(irv.includes('resolveExclusionByCountback') && irv.includes('pendingTie'), 'IRV uses countback and pauses unresolved tied exclusions');
 assert(irv.includes('validPreferences.length === vote.length'), 'IRV validation rejects unknown candidates');
 assert(condorcet.includes('validPreferences.length === vote.length'), 'Condorcet validation rejects unknown candidates');
 assert(voteRoute.includes('new Set(voteValue).size !== voteValue.length'), 'multiple-choice submission rejects duplicate selections');
@@ -79,6 +81,9 @@ assert(voteRoute.includes('submitVotes.immediate'), 'vote submission serializes 
 assert(verifyRoute.includes('votingClosedError'), 'verification enforces the close-date hard cutoff');
 assert(confirmRoute.includes('votingClosedError'), 'code confirmation enforces the close-date hard cutoff');
 assert(!electionWindow.includes('not_yet_open') && !electionWindow.includes('plebiscite.open_date'), 'open_date is not enforced as a voting blocker (status=open is authoritative)');
+const electionOpening = read('src/lib/election-opening.ts');
+assert(electionOpening.includes("opening_mode !== 'scheduled'") && electionOpening.includes('scheduled_open_attempted_at'), 'scheduled opening is explicit, readiness-gated and attempted at most once');
+assert(electionOpening.includes("source === 'scheduled'") && electionOpening.includes('plebiscite.open.scheduled'), 'automatic scheduled opening is audited distinctly');
 assert(resultsLib.includes("plebiscite.status !== 'closed'"), 'results remain unavailable until the election is closed');
 assert(electionWindow.includes("`${trimmed}+10:00`"), 'timezone-naive close dates are interpreted as Australia/Brisbane time');
 assert(db.includes('closePlebisciteWithPrivacyHardening'), 'close-time privacy hardening exists in the db layer');

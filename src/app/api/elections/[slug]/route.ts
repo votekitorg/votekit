@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { votingClosedError } from '@/lib/election-window';
 import { buildEncryptedManifest, encryptedBallotsEnabled } from '@/lib/encrypted-election-server';
+import { reconcileScheduledElection } from '@/lib/election-opening';
 
 export async function GET(
   _request: NextRequest,
@@ -9,6 +10,7 @@ export async function GET(
 ) {
   try {
     const { slug } = await params;
+    await reconcileScheduledElection({ slug });
 
     const plebiscite = db.prepare('SELECT * FROM plebiscites WHERE slug = ?').get(slug) as any;
     

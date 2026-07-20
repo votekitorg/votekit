@@ -12,6 +12,7 @@ import {
   MAX_VERIFICATION_IP_ATTEMPTS,
   MAX_VERIFICATION_GLOBAL_ATTEMPTS
 } from '@/lib/email';
+import { reconcileScheduledElection } from '@/lib/election-opening';
 
 const NEUTRAL_VERIFICATION_MESSAGE = 'If that email is eligible, a verification code will be sent shortly.';
 
@@ -78,6 +79,7 @@ export async function POST(request: NextRequest) {
     incrementRateLimitKey(ipRateLimitKey);
     incrementRateLimitKey(globalRateLimitKey);
 
+    await reconcileScheduledElection({ slug: plebisciteSlug });
     // Get plebiscite
     const plebiscite = db.prepare('SELECT * FROM plebiscites WHERE slug = ? AND status = ?').get(plebisciteSlug, 'open') as any;
     if (!plebiscite) {

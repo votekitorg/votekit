@@ -45,6 +45,7 @@ function methodLabel(type: string): string {
 function outcomeSummary(question: QuestionResult): string {
   if (question.type === 'ranked_choice') {
     if (question.results.winner) return `${question.results.winner} won after ${question.results.rounds?.length || 0} counting round${question.results.rounds?.length === 1 ? '' : 's'}.`;
+    if (question.results.pendingTie) return `Count paused: tie-break required between ${question.results.pendingTie.tiedCandidates.join(', ')}.`;
     const tied = question.results.rounds?.find((round: any) => round.tiedCandidates?.length)?.tiedCandidates;
     return tied?.length ? `Tied result: ${tied.join(', ')}.` : 'No winner was determined.';
   }
@@ -86,11 +87,11 @@ function IRVResultsDisplay({ results }: { results: any }) {
         </div>
       )}
 
-      {!results.winner && results.rounds.some((round: any) => round.tiedCandidates?.length > 0) && (
+      {!results.winner && results.pendingTie && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <h4 className="text-lg font-semibold text-yellow-900">Tie reported</h4>
+          <h4 className="text-lg font-semibold text-yellow-900">Count paused for tie-break</h4>
           <p className="text-yellow-800">
-            {results.rounds.find((round: any) => round.tiedCandidates?.length > 0)?.tiedCandidates.join(', ')} are tied. This result needs to be resolved under the election rules.
+            {results.pendingTie.tiedCandidates.join(', ')} are tied {results.pendingTie.type === 'winner' ? 'for the final result' : 'for exclusion'}. The Returning Officer must apply the election’s declared tie-break rule before counting continues.
           </p>
         </div>
       )}
@@ -114,6 +115,14 @@ function IRVResultsDisplay({ results }: { results: any }) {
                   </span>
                 )}
               </div>
+              {round.tieBreak && (
+                <div className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                  Tie-break: {round.tieBreak.method === 'countback'
+                    ? `${round.tieBreak.selectedCandidate} was selected by countback to round ${round.tieBreak.sourceRound}.`
+                    : `${round.tieBreak.selectedCandidate} was ${round.tieBreak.type === 'winner' ? 'declared the winner' : 'selected for exclusion'} by ${round.tieBreak.method === 'drawing_lots' ? 'a supervised drawing of lots' : 'the election’s governing rules'}.`}
+                  {round.tieBreak.note ? ` ${round.tieBreak.note}` : ''}
+                </div>
+              )}
               
               <div className="space-y-2">
                 {Object.entries(round.votes)

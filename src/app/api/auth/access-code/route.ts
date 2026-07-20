@@ -3,6 +3,7 @@ import db from '@/lib/db';
 import { createAnonymousVoterSession, validateCSRFRequest } from '@/lib/auth';
 import { votingClosedError } from '@/lib/election-window';
 import { hashAccessToken, normalizeAccessCode } from '@/lib/voter-access';
+import { reconcileScheduledElection } from '@/lib/election-opening';
 
 export async function POST(request: NextRequest) {
   if (!validateCSRFRequest(request)) return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
@@ -12,6 +13,7 @@ export async function POST(request: NextRequest) {
   }
   const normalized = normalizeAccessCode(body.code);
   if (normalized.length !== 28) return NextResponse.json({ error: 'Invalid or already used voting code' }, { status: 400 });
+  await reconcileScheduledElection({ slug: body.plebisciteSlug });
   const election = db.prepare(`SELECT * FROM plebiscites WHERE slug = ? AND status = 'open' AND access_mode = 'anonymous_codes'`)
     .get(body.plebisciteSlug) as any;
   if (!election) return NextResponse.json({ error: 'Election not found or not currently open' }, { status: 404 });

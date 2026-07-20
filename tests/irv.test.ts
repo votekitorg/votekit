@@ -35,6 +35,7 @@ describe('tabulateIRV', () => {
     );
     expect(result.winner).toBeNull();
     expect(result.rounds[0].tiedCandidates).toEqual(['A', 'B']);
+    expect(result.pendingTie).toEqual({ round: 1, type: 'winner', tiedCandidates: ['A', 'B'] });
   });
 
   it('reports an all-candidates tie instead of eliminating everyone', () => {
@@ -46,7 +47,7 @@ describe('tabulateIRV', () => {
     expect(result.rounds[0].tiedCandidates).toEqual(['A', 'B', 'C']);
   });
 
-  it('eliminates all tied lowest candidates in one round (documented batch policy)', () => {
+  it('pauses instead of batch-eliminating tied lowest candidates', () => {
     const result = tabulateIRV(
       [
         { preferences: ['A'] },
@@ -59,10 +60,53 @@ describe('tabulateIRV', () => {
       ],
       ['A', 'B', 'C', 'D']
     );
-    // C and D are tied lowest (1 vote each) and are eliminated together.
-    expect(result.rounds[0].eliminated).toEqual(expect.arrayContaining(['C', 'D']));
-    expect(result.rounds[0].eliminated).toHaveLength(2);
+    expect(result.rounds[0].eliminated).toEqual([]);
+    expect(result.pendingTie).toEqual({ round: 1, type: 'exclusion', tiedCandidates: ['C', 'D'] });
+    expect(result.winner).toBeNull();
+  });
+
+  it('continues after an audited tied-exclusion resolution and elects the sole remaining candidate', () => {
+    const votes = [
+      { preferences: ['A'] }, { preferences: ['A'] }, { preferences: ['A'] },
+      { preferences: ['B'] }, { preferences: ['B'] },
+      { preferences: ['C'] }, { preferences: ['D', 'A'] }
+    ];
+    const result = tabulateIRV(votes, ['A', 'B', 'C', 'D'], [{
+      round: 1,
+      type: 'exclusion',
+      tiedCandidates: ['C', 'D'],
+      selectedCandidate: 'D',
+      method: 'drawing_lots'
+    }]);
+
+    expect(result.rounds[0].eliminated).toEqual(['D']);
+    expect(result.rounds[0].tieBreak?.method).toBe('drawing_lots');
     expect(result.winner).toBe('A');
+  });
+
+  it('uses the most recent distinguishing count to resolve a later exclusion tie', () => {
+    const result = tabulateIRV([
+      { preferences: ['A'] }, { preferences: ['A'] }, { preferences: ['A'] }, { preferences: ['A'] },
+      { preferences: ['B', 'A'] }, { preferences: ['B', 'A'] },
+      { preferences: ['C'] }, { preferences: ['C'] }, { preferences: ['C'] },
+      { preferences: ['X', 'B', 'A'] }
+    ], ['A', 'B', 'C', 'X']);
+
+    expect(result.rounds[0].eliminated).toEqual(['X']);
+    expect(result.rounds[1].votes).toEqual({ A: 4, B: 3, C: 3 });
+    expect(result.rounds[1].eliminated).toEqual(['B']);
+    expect(result.rounds[1].tieBreak).toMatchObject({ method: 'countback', selectedCandidate: 'B', sourceRound: 1 });
+    expect(result.winner).toBe('A');
+  });
+
+  it('accepts an audited final-tie winner resolution', () => {
+    const result = tabulateIRV(
+      [{ preferences: ['A'] }, { preferences: ['B'] }],
+      ['A', 'B'],
+      [{ round: 1, type: 'winner', tiedCandidates: ['A', 'B'], selectedCandidate: 'B', method: 'governing_rules', note: 'Casting vote under rule 12' }]
+    );
+    expect(result.winner).toBe('B');
+    expect(result.rounds[0].tieBreak).toMatchObject({ method: 'governing_rules', selectedCandidate: 'B' });
   });
 
   it('counts ballots with no remaining preferences as exhausted', () => {

@@ -340,6 +340,7 @@ function runMigrations() {
   runAdministrativeRoleMigrations(database);
   runVoterAccessMigrations(database);
   runElectionArchiveMigration(database);
+  runElectionWorkflowMigrations(database);
 }
 
 function tableInfo(database: Database.Database, tableName: string): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {
@@ -360,6 +361,44 @@ function runElectionArchiveMigration(database: Database.Database): void {
     database.exec('ALTER TABLE plebiscites ADD COLUMN archived_at DATETIME');
   }
   database.exec('CREATE INDEX IF NOT EXISTS idx_plebiscites_archived ON plebiscites(archived_at)');
+}
+
+function runElectionWorkflowMigrations(database: Database.Database): void {
+  const migrateWorkflow = database.transaction(() => {
+    if (!hasColumn(database, 'plebiscites', 'opening_mode')) {
+      database.exec(`ALTER TABLE plebiscites ADD COLUMN opening_mode TEXT
+        CHECK(opening_mode IN ('immediate', 'scheduled')) NOT NULL DEFAULT 'immediate'`);
+    }
+    if (!hasColumn(database, 'plebiscites', 'actual_opened_at')) {
+      database.exec('ALTER TABLE plebiscites ADD COLUMN actual_opened_at DATETIME');
+    }
+    if (!hasColumn(database, 'plebiscites', 'scheduled_open_attempted_at')) {
+      database.exec('ALTER TABLE plebiscites ADD COLUMN scheduled_open_attempted_at DATETIME');
+    }
+    if (!hasColumn(database, 'plebiscites', 'scheduled_open_error')) {
+      database.exec('ALTER TABLE plebiscites ADD COLUMN scheduled_open_error TEXT');
+    }
+
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS irv_tie_resolutions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        question_id INTEGER NOT NULL,
+        round_number INTEGER NOT NULL,
+        resolution_type TEXT CHECK(resolution_type IN ('exclusion', 'winner')) NOT NULL,
+        tied_candidates TEXT NOT NULL,
+        selected_candidate TEXT NOT NULL,
+        method TEXT CHECK(method IN ('drawing_lots', 'governing_rules')) NOT NULL,
+        note TEXT,
+        resolved_by_admin_user_id INTEGER,
+        resolved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(question_id, round_number, resolution_type),
+        FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE,
+        FOREIGN KEY (resolved_by_admin_user_id) REFERENCES admin_users(id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_irv_tie_question ON irv_tie_resolutions(question_id);
+    `);
+  });
+  migrateWorkflow();
 }
 
 function runPrivacyMigrations(database: Database.Database): void {

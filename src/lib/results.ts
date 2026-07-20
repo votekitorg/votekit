@@ -1,5 +1,5 @@
 import db from '@/lib/db';
-import { tabulateIRV, exportIRVResultsCSV } from '@/lib/irv';
+import { tabulateIRV, exportIRVResultsCSV, type IRVTieResolution } from '@/lib/irv';
 import { tabulateCondorcet, exportCondorcetResultsCSV } from '@/lib/condorcet';
 import { buildEncryptedManifest } from '@/lib/encrypted-election-server';
 import type { EncryptedElectionManifest } from '@/lib/encrypted-ballots';
@@ -169,12 +169,25 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
         return { preferences: voteData.preferences || [] };
       });
 
-      const irvResult = tabulateIRV(irvVotes, options);
+      const tieResolutions = db.prepare(`
+        SELECT round_number, resolution_type, tied_candidates, selected_candidate, method, note, resolved_at
+        FROM irv_tie_resolutions WHERE question_id = ? ORDER BY round_number, id
+      `).all(question.id).map((row: any): IRVTieResolution => ({
+        round: Number(row.round_number),
+        type: row.resolution_type,
+        tiedCandidates: JSON.parse(row.tied_candidates),
+        selectedCandidate: row.selected_candidate,
+        method: row.method,
+        note: row.note,
+        resolvedAt: row.resolved_at
+      }));
+      const irvResult = tabulateIRV(irvVotes, options, tieResolutions);
       questionResult.results = {
         winner: irvResult.winner,
         rounds: irvResult.rounds,
         totalVotes: irvResult.totalVotes,
-        exhaustedBallots: irvResult.exhaustedBallots
+        exhaustedBallots: irvResult.exhaustedBallots,
+        pendingTie: irvResult.pendingTie
       };
     } else if (question.type === 'condorcet') {
       const condorcetVotes = votes.map((vote: any) => {

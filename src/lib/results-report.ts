@@ -64,6 +64,7 @@ function simpleOutcome(question: PlebisciteResultsData['questions'][number]): st
 function questionOutcome(question: PlebisciteResultsData['questions'][number]): string {
   if (question.type === 'ranked_choice') {
     if (question.results.winner) return `${question.results.winner} won after ${question.results.rounds?.length || 0} counting round${question.results.rounds?.length === 1 ? '' : 's'}.`;
+    if (question.results.pendingTie) return `Count paused: tie-break required between ${question.results.pendingTie.tiedCandidates.join(', ')}.`;
     const tied = question.results.rounds?.find((round: any) => round.tiedCandidates?.length)?.tiedCandidates;
     return tied?.length ? `Tied result: ${tied.join(', ')}.` : 'No winner was determined.';
   }
@@ -222,6 +223,12 @@ export async function buildResultsPdf(data: PlebisciteResultsData, now: Date = n
           round.winner ? `Winner: ${round.winner}` : ''
         ].filter(Boolean).join(' · ');
         if (notes) doc.fillColor(COLOURS.muted).font('Helvetica').fontSize(8).text(notes);
+        if (round.tieBreak) {
+          const decision = round.tieBreak.method === 'countback'
+            ? `${round.tieBreak.selectedCandidate} selected by countback to round ${round.tieBreak.sourceRound}`
+            : `${round.tieBreak.selectedCandidate} ${round.tieBreak.type === 'winner' ? 'declared winner' : 'selected for exclusion'} by ${round.tieBreak.method === 'drawing_lots' ? 'supervised drawing of lots' : 'the governing rules'}`;
+          doc.fillColor(COLOURS.greenDark).font('Helvetica-Bold').fontSize(8).text(`Tie-break: ${decision}${round.tieBreak.note ? ` · ${round.tieBreak.note}` : ''}`);
+        }
         entries.forEach(([candidate, count]) => {
           ensureSpace(15);
           doc.fillColor(COLOURS.ink).font(round.winner === candidate ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.5).text(candidate, 58, doc.y, { width: contentWidth - 150, ellipsis: true });
@@ -231,7 +238,7 @@ export async function buildResultsPdf(data: PlebisciteResultsData, now: Date = n
         rule();
       });
       ensureSpace(40);
-      body(`Total ballots: ${question.results.totalVotes ?? question.totalVotes}. Exhausted ballots: ${question.results.exhaustedBallots ?? 0}. A candidate wins after receiving a majority of active ballots; otherwise the lowest candidate is eliminated and preferences transfer.`);
+      body(`Total ballots: ${question.results.totalVotes ?? question.totalVotes}. Exhausted ballots: ${question.results.exhaustedBallots ?? 0}. A candidate wins after receiving a majority of active ballots; otherwise one lowest candidate is eliminated and preferences transfer. Tied exclusions use countback, then an audited election-rule decision if countback cannot separate them.`);
     } else if (question.type === 'condorcet') {
       heading('Overall ranking', 2);
       const rankings = question.results.rankings || [];
