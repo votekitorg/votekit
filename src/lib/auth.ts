@@ -616,9 +616,15 @@ export async function clearAdminCookie() {
 }
 
 // Voter authentication (email verification based)
-export function createVoterSession(email: string, plebisciteId: number, voterRollId?: number, credentialType: Session['credentialType'] = 'email'): string {
+export function createVoterSession(
+  email: string,
+  plebisciteId: number,
+  voterRollId?: number,
+  credentialType: Session['credentialType'] = 'email',
+  ttlSeconds = 2 * 60 * 60
+): string {
   const sessionId = uuidv4();
-  const expiresAt = new Date(Date.now() + (2 * 60 * 60 * 1000));
+  const expiresAt = new Date(Date.now() + (ttlSeconds * 1000));
 
   const resolvedVoterId = voterRollId ?? (db.prepare(`
     SELECT id FROM voter_roll WHERE email = ? AND plebiscite_id = ? LIMIT 1
@@ -633,9 +639,9 @@ export function createVoterSession(email: string, plebisciteId: number, voterRol
   return sessionId;
 }
 
-export function createAnonymousVoterSession(plebisciteId: number, anonymousCodeId: number): string {
+export function createAnonymousVoterSession(plebisciteId: number, anonymousCodeId: number, ttlSeconds = 2 * 60 * 60): string {
   const sessionId = uuidv4();
-  const expiresAt = new Date(Date.now() + (2 * 60 * 60 * 1000));
+  const expiresAt = new Date(Date.now() + (ttlSeconds * 1000));
   db.prepare(`
     INSERT INTO sessions (id, email, plebiscite_id, is_admin, expires_at, anonymous_code_id, credential_type)
     VALUES (?, ?, ?, 0, ?, ?, 'anonymous_code')

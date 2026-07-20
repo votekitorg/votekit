@@ -32,6 +32,7 @@ interface Plebiscite {
   actual_opened_at?: string | null;
   scheduled_open_attempted_at?: string | null;
   scheduled_open_error?: string | null;
+  results_visibility?: 'eligible' | 'public';
   created_at: string;
 }
 
@@ -377,7 +378,8 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
                   manifest_hash: plebiscite.manifest_hash,
                   recovery_confirmed_at: plebiscite.recovery_confirmed_at,
                   close_state: plebiscite.close_state,
-                  archived_at: plebiscite.archived_at
+                  archived_at: plebiscite.archived_at,
+                  results_visibility: plebiscite.results_visibility
                 }}
                 statusInfo={{status: statusInfo.status, color: statusInfo.color, canOpen: statusInfo.canOpen, canClose: statusInfo.canClose, message: statusInfo.message}}
                 canManage={canManage}

@@ -148,6 +148,9 @@ describe('encrypted ballot route lifecycle', () => {
     expect(JSON.parse(db.prepare('SELECT ballot_data FROM published_ballots WHERE plebiscite_id = ?').get(electionId).ballot_data))
       .toEqual({ 'approve-question': 'Yes' });
 
+    // This lifecycle test inspects the published report payload; access-control
+    // behavior is covered separately.
+    db.prepare("UPDATE plebiscites SET results_visibility = 'public' WHERE id = ?").run(electionId);
     const results = await resultsGet(new NextRequest('http://localhost/api/results/encrypted-route-test'), {
       params: Promise.resolve({ slug: 'encrypted-route-test' })
     });

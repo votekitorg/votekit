@@ -497,8 +497,10 @@ export default function AboutPage() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h4 className="font-semibold text-gray-900 mb-2">When can I see the results?</h4>
               <p className="text-gray-600 text-sm">
-                Results are only published after the voting period closes. This prevents any
-                influence from partial results on people who haven&apos;t yet voted.
+                Results are only available after the election is formally closed. Return to the
+                election link and verify with your registered email or phone, or enter the same
+                anonymous voting code. This confirms eligibility without connecting you to your
+                ballot. An election Owner may separately choose to publish results publicly.
               </p>
             </div>
 

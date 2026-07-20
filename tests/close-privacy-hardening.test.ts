@@ -195,6 +195,7 @@ describe('close-time privacy hardening', () => {
   });
 
   it('keeps results and receipt verification fully reproducible after hardening', async () => {
+    db.prepare("UPDATE plebiscites SET results_visibility = 'public' WHERE id = ?").run(plebisciteA);
     const response = await resultsGet(
       new NextRequest('http://localhost/api/results/close-hardening-a'),
       { params: Promise.resolve({ slug: 'close-hardening-a' }) }

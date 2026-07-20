@@ -6,6 +6,8 @@ import { getPlebisciteResults, ResultsUnavailableError, type PlebisciteResultsDa
 import ReceiptLookup from '@/components/ReceiptLookup';
 import ResultsActions from '@/components/ResultsActions';
 import { resultsReportFingerprint } from '@/lib/results-integrity';
+import ResultsAccessGate from '@/components/ResultsAccessGate';
+import { canViewResultsFromCookies, getResultsAccessElection } from '@/lib/results-access';
 
 type QuestionResult = PlebisciteResultsData['questions'][number];
 
@@ -225,6 +227,22 @@ function PublicBallotsDisplay({ ballots }: { ballots: QuestionResult['publicBall
 
 export default async function ResultsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  const accessElection = getResultsAccessElection(slug);
+  if (accessElection?.status === 'closed' && !(await canViewResultsFromCookies(accessElection))) {
+    if (!accessElection.archived_at) {
+      return <ResultsAccessGate
+        slug={slug}
+        title={accessElection.title}
+        accessMode={accessElection.access_mode}
+        smsEnabled={Boolean(accessElection.sms_enabled)}
+      />;
+    }
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="text-center"><h2 className="text-lg font-semibold text-gray-900">Results Not Available</h2><p className="mt-2 text-gray-600">This election may not exist, or its results are unavailable.</p></div>
+      </div>
+    );
+  }
   const data = await getResults(slug);
 
   if (!data) {

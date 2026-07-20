@@ -26,6 +26,7 @@ interface Plebiscite {
   recovery_confirmed_at?: string;
   close_state?: 'none' | 'closing' | 'failed';
   archived_at?: string | null;
+  results_visibility?: 'eligible' | 'public';
 }
 
 interface StatusInfo {
@@ -238,6 +239,28 @@ export default function PlebisciteManager({
     }
   }
 
+  async function handleResultsVisibility(visibility: 'eligible' | 'public') {
+    const message = visibility === 'public'
+      ? 'Publish these results to anyone with the link? The results page, PDF and CSV will become public.'
+      : 'Restrict these results to eligible electors and assigned election officials?';
+    if (!confirm(message)) return;
+    setLoading(true);
+    setError('');
+    try {
+      const response = await csrfFetch('/api/admin/plebiscites', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: plebiscite.id, action: 'set_results_visibility', visibility })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not change results visibility');
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not change results visibility');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function copyUrl() {
     const url = `${window.location.origin}/vote/${plebiscite.slug}`;
     navigator.clipboard.writeText(url);
@@ -257,6 +280,25 @@ export default function PlebisciteManager({
         <p className="text-sm text-gray-500 text-center">
           Observer access is read-only.
         </p>
+      )}
+
+      {isOwner && !plebiscite.archived_at && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div className="text-sm font-semibold text-gray-900">Results visibility</div>
+          <p className="mt-1 text-sm text-gray-600">
+            {plebiscite.results_visibility === 'public'
+              ? 'Public: anyone with the results link can view and download them.'
+              : 'Private: only eligible electors and assigned election officials can view or download them.'}
+          </p>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => handleResultsVisibility(plebiscite.results_visibility === 'public' ? 'eligible' : 'public')}
+            className="btn-secondary mt-3 w-full"
+          >
+            {plebiscite.results_visibility === 'public' ? 'Make Results Private' : 'Publish Results Publicly'}
+          </button>
+        </div>
       )}
 
       {isOwner && plebiscite.archived_at && (

@@ -104,6 +104,28 @@ export async function sendVerificationEmail(
   }
 }
 
+export async function sendResultsVerificationEmail(
+  email: string,
+  code: string,
+  electionTitle: string
+): Promise<EmailResult> {
+  const safeTitle = escapeHtml(electionTitle);
+  const subjectTitle = electionTitle.replace(/[\r\n]+/g, ' ').trim();
+  try {
+    const result = await getResend().emails.send({
+      ...senderOptions(),
+      to: email,
+      subject: `Results access code: ${subjectTitle}`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px"><h1 style="color:#00843D">VoteKit</h1><div style="background:#f8f9fa;border-radius:10px;padding:28px"><h2 style="color:#1B5E20;margin-top:0">View election results</h2><p>Use this code to view the final results for <strong>${safeTitle}</strong>.</p><div style="text-align:center;margin:25px 0"><span style="background:#00843D;color:white;font-size:24px;font-weight:bold;padding:15px 25px;border-radius:5px;letter-spacing:3px;font-family:monospace">${code}</span></div><p style="color:#666;font-size:14px">This code expires in 10 minutes. It confirms that you were eligible for this election, but it is not connected to your ballot.</p></div></div>`,
+      text: `VoteKit\n\nView election results\n\nUse this code to view the final results for ${electionTitle}: ${code}\n\nThe code expires in 10 minutes. It confirms eligibility but is not connected to your ballot.`
+    });
+    return { success: true, messageId: result.data?.id };
+  } catch (error) {
+    console.error('Failed to send results verification email:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
+  }
+}
+
 export async function sendAdminInvitationEmail(input: {
   email: string;
   name?: string | null;

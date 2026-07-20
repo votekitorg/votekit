@@ -55,6 +55,7 @@ export default function VotingPage({ params }: VotingPageProps) {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [accessCode, setAccessCode] = useState('');
+  const [resultAccessCode, setResultAccessCode] = useState('');
   const [phone, setPhone] = useState('');
   const [smsCode, setSmsCode] = useState('');
   const [smsSent, setSmsSent] = useState(false);
@@ -83,7 +84,9 @@ export default function VotingPage({ params }: VotingPageProps) {
         if (response.ok) {
           // Check election status
           if (result.plebiscite.status === 'closed') {
-            router.push(`/results/${slug}`);
+            // Preserve private credential fragments so the original ballot link
+            // can also authenticate an elector to the closed results page.
+            router.push(`/results/${slug}${window.location.hash}`);
             return;
           }
           
@@ -248,6 +251,7 @@ export default function VotingPage({ params }: VotingPageProps) {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Invalid or already used voting code');
+      setResultAccessCode(accessCode);
       history.replaceState(null, '', window.location.pathname);
       setAccessCode('');
       setStep('vote');
@@ -707,6 +711,16 @@ export default function VotingPage({ params }: VotingPageProps) {
               </p>
             </div>
 
+            <div className="mx-auto max-w-3xl rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+              <div className="font-semibold">How you will view the final results</div>
+              <p className="mt-1">
+                {plebiscite.access_mode === 'anonymous_codes'
+                  ? 'Keep your voting code. After the election closes, return to this election link and enter the same code to view the results.'
+                  : `After the election closes, return to this election link and verify again using your registered ${plebiscite.sms_enabled ? 'email address or phone number' : 'email address'}.`}
+              </p>
+              <p className="mt-1">This proves that you are an eligible elector. It is never connected to the contents of your ballot.</p>
+            </div>
+
             <VoteForm
               questions={questions}
               onSubmit={handleVoteSubmit}
@@ -755,6 +769,21 @@ export default function VotingPage({ params }: VotingPageProps) {
                     Download Private Receipt
                   </button>
                 )}
+              </div>
+            </div>
+
+            <div className="card mb-8 text-left">
+              <div className="card-header"><h3 className="text-lg font-semibold text-gray-900">Viewing the final results</h3></div>
+              <div className="card-body text-sm text-gray-700">
+                {plebiscite.access_mode === 'anonymous_codes' ? (
+                  <>
+                    <p>Keep the voting code below. When the election closes, return to this election link and enter the same code to view the final results.</p>
+                    {resultAccessCode && <div className="mt-4 rounded-lg bg-gray-50 p-4 text-center font-mono font-semibold tracking-wider">{resultAccessCode}</div>}
+                  </>
+                ) : (
+                  <p>When the election closes, return to this election link and verify using your registered {plebiscite.sms_enabled ? 'email address or phone number' : 'email address'} to view the final results.</p>
+                )}
+                <p className="mt-3 text-xs text-gray-500">Eligibility verification is separate from your anonymous ballot and cannot reveal how you voted.</p>
               </div>
             </div>
 

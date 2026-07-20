@@ -307,6 +307,24 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: true, archived: false });
     }
 
+    if (action === 'set_results_visibility') {
+      if (adminSession.role !== 'owner') {
+        return NextResponse.json({ error: 'Only the Owner can change results visibility' }, { status: 403 });
+      }
+      if (updateData.visibility !== 'eligible' && updateData.visibility !== 'public') {
+        return NextResponse.json({ error: 'Invalid results visibility' }, { status: 400 });
+      }
+      db.prepare('UPDATE plebiscites SET results_visibility = ? WHERE id = ?').run(updateData.visibility, id);
+      recordAdminAuditLog({
+        adminUserId: adminSession.adminUserId,
+        action: 'plebiscite.results_visibility.change',
+        targetType: 'plebiscite',
+        targetId: id,
+        details: { slug: plebiscite.slug, from: plebiscite.results_visibility || 'eligible', to: updateData.visibility }
+      });
+      return NextResponse.json({ success: true, resultsVisibility: updateData.visibility });
+    }
+
     if (plebiscite.archived_at) {
       return NextResponse.json({ error: 'Restore this election before making changes' }, { status: 409 });
     }

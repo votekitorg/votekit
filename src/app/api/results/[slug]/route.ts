@@ -8,6 +8,7 @@ import {
 import db from '@/lib/db';
 import { isReceipt } from '@/lib/encrypted-ballots';
 import { buildResultsPdf, resultsReportFilename } from '@/lib/results-report';
+import { canViewResultsFromRequest, getResultsAccessElection } from '@/lib/results-access';
 
 export async function GET(
   request: NextRequest,
@@ -15,6 +16,10 @@ export async function GET(
 ) {
   try {
     const { slug } = await params;
+    const election = getResultsAccessElection(slug);
+    if (!election || !canViewResultsFromRequest(request, election)) {
+      return NextResponse.json({ error: 'Results access required' }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+    }
     const url = new URL(request.url);
     const format = url.searchParams.get('format'); // 'csv' for CSV export
     const results = getPlebisciteResults(slug);
@@ -23,7 +28,8 @@ export async function GET(
       return new NextResponse(buildResultsCsv(slug, results), {
         headers: {
           'Content-Type': 'text/csv',
-          'Content-Disposition': `attachment; filename="${resultsCsvFilename(slug)}"`
+          'Content-Disposition': `attachment; filename="${resultsCsvFilename(slug)}"`,
+          'Cache-Control': 'private, no-store'
         }
       });
     }
@@ -34,12 +40,13 @@ export async function GET(
         headers: {
           'Content-Type': 'application/pdf',
           'Content-Disposition': `attachment; filename="${resultsReportFilename(slug)}"`,
-          'Content-Length': String(pdf.length)
+          'Content-Length': String(pdf.length),
+          'Cache-Control': 'private, no-store'
         }
       });
     }
 
-    return NextResponse.json(results);
+    return NextResponse.json(results, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     if (error instanceof ResultsUnavailableError) {
       return NextResponse.json(
@@ -62,6 +69,10 @@ export async function POST(
 ) {
   try {
     const { slug } = await params;
+    const accessElection = getResultsAccessElection(slug);
+    if (!accessElection || !canViewResultsFromRequest(request, accessElection)) {
+      return NextResponse.json({ error: 'Results access required' }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+    }
     const body = await request.json();
     if (!isReceipt(body?.receipt)) {
       return NextResponse.json({ error: 'Receipt not found' }, { status: 404, headers: { 'Cache-Control': 'no-store' } });

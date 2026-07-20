@@ -341,6 +341,7 @@ function runMigrations() {
   runVoterAccessMigrations(database);
   runElectionArchiveMigration(database);
   runElectionWorkflowMigrations(database);
+  runResultsAccessMigration(database);
 }
 
 function tableInfo(database: Database.Database, tableName: string): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {
@@ -399,6 +400,13 @@ function runElectionWorkflowMigrations(database: Database.Database): void {
     `);
   });
   migrateWorkflow();
+}
+
+function runResultsAccessMigration(database: Database.Database): void {
+  if (!hasColumn(database, 'plebiscites', 'results_visibility')) {
+    database.exec(`ALTER TABLE plebiscites ADD COLUMN results_visibility TEXT
+      CHECK(results_visibility IN ('eligible', 'public')) NOT NULL DEFAULT 'eligible'`);
+  }
 }
 
 function runPrivacyMigrations(database: Database.Database): void {

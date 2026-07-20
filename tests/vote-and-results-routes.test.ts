@@ -122,7 +122,9 @@ describe('GET /api/results/[slug]', () => {
     db.prepare('INSERT INTO votes (question_id, vote_data, receipt_code) VALUES (?, ?, ?)')
       .run(questionId, JSON.stringify({ choices: ['Gamma', 'Gamma', 'Gamma'] }), 'crafted-receipt-code');
 
-    db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?').run('closed', plebisciteId);
+    // This test exercises public report rendering. Private-by-default access is
+    // covered independently in results-access-control.test.ts.
+    db.prepare("UPDATE plebiscites SET status = 'closed', results_visibility = 'public' WHERE id = ?").run(plebisciteId);
 
     const response = await resultsGet(resultsRequest(), { params: Promise.resolve({ slug: SLUG }) });
     const body = await response.json();
