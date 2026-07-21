@@ -7,7 +7,7 @@ A privacy-conscious, auditable online election platform for member organisations
 ### 🗳️ **Secure Voting System**
 - **Flexible Voter Access**: email OTP, Firebase SMS, private one-click voter links, or anonymous single-use code pools
 - **Anonymous Voting**: Votes are stored separately from voter identity
-- **Receipt Codes**: Verifiable vote receipts without revealing choices
+- **Receipt Codes**: Verify recorded choices without linking a ballot to voter identity
 - **One Vote Per Member**: Enforced at database level with participation tracking
 
 ### 📊 **Multiple Question Types**
@@ -184,7 +184,7 @@ For ranked choice questions, the platform implements proper IRV tabulation:
 
 ### Vote Privacy
 - Votes are stored in a separate table from voter participation
-- Receipt codes allow verification without revealing choices
+- Receipt codes identify published anonymous ballot choices but are never stored against voter identity
 - No database foreign keys link voters to their specific votes
 - When an admin closes an election, its anonymous ballot rows are rebuilt in
   cryptographically shuffled order with fresh row IDs, and voter sessions and

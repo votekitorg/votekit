@@ -29,7 +29,7 @@ const capabilities = [
   },
   {
     title: 'Private, verifiable ballots',
-    description: 'Every voter receives a receipt code that can confirm inclusion in the final count without revealing their choices.',
+    description: 'Every voter receives a private receipt that can confirm their recorded choices without linking the ballot to their identity.',
     icon: (
       <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm-3.75-8.8 2.4 2.4 5.1-5.2" />
     ),

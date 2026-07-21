@@ -65,6 +65,7 @@ export default function VotingPage({ params }: VotingPageProps) {
   
   // Vote submission
   const [receiptCodes, setReceiptCodes] = useState<string[]>([]);
+  const [copiedCredential, setCopiedCredential] = useState('');
   const [pendingEncryptedSubmission, setPendingEncryptedSubmission] = useState<null | {
     submissionId: string;
     encryptedPackage: EncryptedBallotPackage;
@@ -349,6 +350,30 @@ export default function VotingPage({ params }: VotingPageProps) {
     URL.revokeObjectURL(url);
   };
 
+  const copyCredential = async (value: string, identifier: string) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const field = document.createElement('textarea');
+        field.value = value;
+        field.style.position = 'fixed';
+        field.style.opacity = '0';
+        document.body.appendChild(field);
+        field.select();
+        const copied = document.execCommand('copy');
+        field.remove();
+        if (!copied) throw new Error('Copy command was unavailable');
+      }
+      setCopiedCredential(identifier);
+      window.setTimeout(() => {
+        setCopiedCredential(current => current === identifier ? '' : current);
+      }, 2000);
+    } catch {
+      window.prompt('Copy this code:', value);
+    }
+  };
+
   const resendCode = async () => {
     if (!canResend) return;
     
@@ -495,7 +520,7 @@ export default function VotingPage({ params }: VotingPageProps) {
                     </>}
                     <li>Vote on all questions</li>
                     <li>Review and submit your votes</li>
-                    <li>Save your receipt codes for verification</li>
+                    <li>Optionally save your receipt codes to verify your recorded ballot later</li>
                   </ol>
                 </div>
               </div>
@@ -712,12 +737,16 @@ export default function VotingPage({ params }: VotingPageProps) {
             </div>
 
             <div className="mx-auto max-w-3xl rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-              <div className="font-semibold">How you will view the final results</div>
-              <p className="mt-1">
-                {plebiscite.access_mode === 'anonymous_codes'
-                  ? 'Keep your voting code. After the election closes, return to this election link and enter the same code to view the results.'
-                  : `After the election closes, return to this election link and verify again using your registered ${plebiscite.sms_enabled ? 'email address or phone number' : 'email address'}.`}
-              </p>
+              <div className="font-semibold">Viewing the final results is optional</div>
+              {plebiscite.access_mode === 'anonymous_codes' ? <>
+                <p className="mt-1">Your voting code will be shown again after you submit. Save it if you want to view the results after the election closes.</p>
+                {resultAccessCode && <div className="mt-3 flex flex-col gap-2 rounded-lg bg-white/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="break-all font-mono font-semibold tracking-wider">{resultAccessCode}</span>
+                  <button type="button" className="btn-secondary shrink-0" onClick={() => void copyCredential(resultAccessCode, 'voting-code-before')}>
+                    {copiedCredential === 'voting-code-before' ? 'Copied' : 'Copy voting code'}
+                  </button>
+                </div>}
+              </> : <p className="mt-1">After the election closes, return to this election link and verify again using your registered {plebiscite.sms_enabled ? 'email address or phone number' : 'email address'}.</p>}
               <p className="mt-1">This proves that you are an eligible elector. It is never connected to the contents of your ballot.</p>
             </div>
 
@@ -737,30 +766,37 @@ export default function VotingPage({ params }: VotingPageProps) {
               </svg>
             </div>
 
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Vote Submitted</h2>
-            <p className="text-lg text-gray-600 mb-8">
-              Your ballot has been recorded for: <strong>{plebiscite.title}</strong>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">You’re done!</h2>
+            <p className="text-lg text-gray-700">
+              Your ballot has been submitted for <strong>{plebiscite.title}</strong>.
             </p>
+            <p className="mt-2 mb-8 font-semibold text-green-800">No further action is required.</p>
 
             <div className="card text-left mb-8">
               <div className="card-header">
                 <h3 className="text-lg font-semibold text-gray-900">
-                  {plebiscite.privacy_mode === 'encrypted' ? 'Private Ballot Receipt' : 'Receipt Codes'}
+                  Optional: verify your recorded ballot later
                 </h3>
               </div>
               <div className="card-body">
                 <p className="text-sm text-gray-600 mb-4">
                   {plebiscite.privacy_mode === 'encrypted'
-                    ? 'Save this private receipt. After closure it verifies your complete shuffled ballot. VoteKit cannot recover it.'
-                    : 'Save these receipt codes. They can be used to verify that your ballot was included without revealing your choices.'}
+                    ? 'If you want to verify your vote later, save this private receipt. After results are published, it lets you view the choices recorded for your complete anonymous ballot and confirm they match how you voted and were included in the count.'
+                    : 'If you want to verify your vote later, save these receipt codes. After results are published, each code lets you view the choice recorded for that question and confirm it matches how you voted and was included in the count.'}
                 </p>
+                <p className="mb-4 text-sm font-medium text-amber-800">Anyone with a receipt code may be able to view the choices it identifies, so keep it private.</p>
                 <div className="bg-gray-50 rounded-lg p-4">
                   {receiptCodes.map((code, index) => (
-                    <div key={index} className="flex justify-between items-center py-2">
+                    <div key={index} className="flex flex-col gap-2 border-b border-gray-200 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-sm font-medium text-gray-700">
                         {plebiscite.privacy_mode === 'encrypted' ? 'Complete ballot:' : `Question ${index + 1}:`}
                       </span>
-                      <span className="font-mono text-sm bg-white px-2 py-1 rounded border">{code}</span>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <span className="break-all rounded border bg-white px-2 py-1 font-mono text-sm">{code}</span>
+                        <button type="button" className="btn-secondary shrink-0" onClick={() => void copyCredential(code, `receipt-${index}`)}>
+                          {copiedCredential === `receipt-${index}` ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -773,12 +809,17 @@ export default function VotingPage({ params }: VotingPageProps) {
             </div>
 
             <div className="card mb-8 text-left">
-              <div className="card-header"><h3 className="text-lg font-semibold text-gray-900">Viewing the final results</h3></div>
+              <div className="card-header"><h3 className="text-lg font-semibold text-gray-900">Optional: view the final results</h3></div>
               <div className="card-body text-sm text-gray-700">
                 {plebiscite.access_mode === 'anonymous_codes' ? (
                   <>
-                    <p>Keep the voting code below. When the election closes, return to this election link and enter the same code to view the final results.</p>
-                    {resultAccessCode && <div className="mt-4 rounded-lg bg-gray-50 p-4 text-center font-mono font-semibold tracking-wider">{resultAccessCode}</div>}
+                    <p>The voting code below is separate from your receipt. Save it only if you want to return after the election closes and view the final results.</p>
+                    {resultAccessCode && <div className="mt-4 flex flex-col gap-2 rounded-lg bg-gray-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <span className="break-all font-mono font-semibold tracking-wider">{resultAccessCode}</span>
+                      <button type="button" className="btn-secondary shrink-0" onClick={() => void copyCredential(resultAccessCode, 'voting-code-after')}>
+                        {copiedCredential === 'voting-code-after' ? 'Copied' : 'Copy voting code'}
+                      </button>
+                    </div>}
                   </>
                 ) : (
                   <p>When the election closes, return to this election link and verify using your registered {plebiscite.sms_enabled ? 'email address or phone number' : 'email address'} to view the final results.</p>

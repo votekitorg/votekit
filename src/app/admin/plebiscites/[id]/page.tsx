@@ -486,7 +486,7 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
                     <li>Check your email for a 6-digit verification code</li>
                     <li>Enter the code to access the ballot</li>
                     <li>Vote on all questions and submit</li>
-                    <li>Save your receipt codes for verification</li>
+                    <li>Optionally save your receipt codes to verify your recorded ballot later</li>
                   </ol>
                 </div>
               </div>

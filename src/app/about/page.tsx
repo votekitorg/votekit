@@ -115,9 +115,9 @@ export default function AboutPage() {
               <div className="ml-5">
                 <h4 className="text-lg font-semibold text-gray-900">Get your receipt</h4>
                 <p className="text-gray-600 mt-1">
-                  After submitting, you&apos;ll receive a unique receipt code. This lets you verify
-                  that your vote was recorded in the system without revealing how you voted.
-                  Save it for your records.
+                  After submitting, you&apos;ll receive a unique receipt code. Saving it is optional.
+                  After results are published, it lets you view the recorded choices it identifies
+                  and confirm they match how you voted, without linking the ballot to your identity.
                 </p>
               </div>
             </div>
@@ -429,8 +429,9 @@ export default function AboutPage() {
               </div>
               <h4 className="text-lg font-semibold text-gray-900 mb-2">Verifiable Results</h4>
               <p className="text-gray-600 text-sm">
-                After voting, you receive a unique receipt code. You can use this to confirm
-                your vote was counted in the final tally without revealing your choices to anyone.
+                After voting, you receive a unique private receipt code. You can use it to view
+                the anonymous recorded choices it identifies and confirm they were included in the
+                final count. Anyone with the receipt may be able to view those choices.
               </p>
             </div>
 
@@ -508,8 +509,9 @@ export default function AboutPage() {
               <h4 className="font-semibold text-gray-900 mb-2">What is my receipt code for?</h4>
               <p className="text-gray-600 text-sm">
                 Your receipt code is proof that your vote was recorded. After results are published,
-                you can verify that a vote with your receipt code exists in the final count. It
-                doesn&apos;t reveal how you voted -- it just confirms your vote was included.
+                you can view the anonymous recorded choices identified by that receipt and confirm
+                they match how you voted and were included in the count. The receipt is not linked
+                to your identity, but anyone who has it may be able to view those choices.
               </p>
             </div>
 
