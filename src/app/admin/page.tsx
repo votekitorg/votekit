@@ -113,7 +113,7 @@ export default async function AdminDashboard() {
 
   return (
     <AdminLayout currentUser={adminSession}>
-      <div className="space-y-8">
+      <div className="min-w-0 space-y-8">
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
@@ -121,7 +121,7 @@ export default async function AdminDashboard() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
           <div className="card">
             <div className="card-body">
               <div className="flex items-center">
@@ -217,7 +217,7 @@ export default async function AdminDashboard() {
         </div>
 
         {/* Recent Elections */}
-        <div className="card">
+        <div className="card min-w-0 overflow-hidden">
           <div className="card-header">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold text-gray-900">Recent Elections</h2>
@@ -241,8 +241,8 @@ export default async function AdminDashboard() {
                 )}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+              <div className="w-full max-w-full overflow-x-auto overscroll-x-contain">
+                <table className="min-w-[900px] divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
