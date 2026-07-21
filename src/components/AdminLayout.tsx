@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 import { csrfFetch } from '@/lib/csrf-client';
 
 interface AdminLayoutProps {
@@ -60,6 +61,7 @@ function getIcon(iconName: string) {
 
 export default function AdminLayout({ children, currentUser }: AdminLayoutProps) {
   const pathname = usePathname();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const user = currentUser || { email: 'admin', name: null, role: 'admin' as const };
   const visibleNavigation = navigation.filter(item => item.roles.includes(user.role));
 
@@ -79,9 +81,9 @@ export default function AdminLayout({ children, currentUser }: AdminLayoutProps)
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="flex min-h-screen max-w-full overflow-x-hidden bg-gray-50">
       {/* Sidebar */}
-      <div className="w-64 bg-white shadow-sm border-r border-gray-200">
+      <div className="hidden w-64 shrink-0 border-r border-gray-200 bg-white shadow-sm lg:block">
         {/* Logo */}
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center">
@@ -134,17 +136,30 @@ export default function AdminLayout({ children, currentUser }: AdminLayoutProps)
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
+        <header className="relative border-b border-gray-200 bg-white px-4 py-4 shadow-sm sm:px-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium text-gray-900">
-              {navigation.find(item => item.href === pathname)?.name || 'Admin Panel'}
-            </h2>
-            <div className="flex items-center space-x-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                aria-label="Toggle admin navigation"
+                aria-expanded={mobileMenuOpen}
+                onClick={() => setMobileMenuOpen(open => !open)}
+                className="rounded-lg p-2 text-gray-700 hover:bg-gray-100 lg:hidden"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={mobileMenuOpen ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'} />
+                </svg>
+              </button>
+              <h2 className="truncate text-lg font-medium text-gray-900">
+                {navigation.find(item => item.href === pathname)?.name || 'Admin Panel'}
+              </h2>
+            </div>
+            <div className="ml-4 flex shrink-0 items-center space-x-3 sm:space-x-4">
               <Link
                 href="/"
-                className="text-sm text-gray-600 hover:text-primary transition-colors"
+                className="hidden text-sm text-gray-600 transition-colors hover:text-primary sm:inline"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -152,16 +167,47 @@ export default function AdminLayout({ children, currentUser }: AdminLayoutProps)
               </Link>
               <div className="flex items-center">
                 <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                <span className="text-sm text-gray-600">
+                <span className="hidden max-w-56 truncate text-sm text-gray-600 md:inline">
                   {user.name || user.email} ({roleLabels[user.role]})
                 </span>
               </div>
             </div>
           </div>
+
+          {mobileMenuOpen && (
+            <nav className="absolute left-0 right-0 top-full z-40 border-b border-gray-200 bg-white p-4 shadow-lg lg:hidden">
+              <div className="space-y-1">
+                {visibleNavigation.map(item => {
+                  const isActive = pathname === item.href;
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`flex items-center rounded-lg px-3 py-3 text-sm font-medium transition-colors ${
+                        isActive ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {getIcon(item.icon)}
+                      <span className="ml-3">{item.name}</span>
+                    </Link>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="flex w-full items-center rounded-lg px-3 py-3 text-sm font-medium text-red-700 transition-colors hover:bg-red-50"
+                >
+                  {getIcon('logout')}
+                  <span className="ml-3">Logout</span>
+                </button>
+              </div>
+            </nav>
+          )}
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-6">
+        <main className="min-w-0 flex-1 p-4 sm:p-6">
           {children}
         </main>
       </div>
