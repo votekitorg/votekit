@@ -431,7 +431,7 @@ export default function AboutPage() {
               <p className="text-gray-600 text-sm">
                 After voting, you receive a unique private receipt code. You can use it to view
                 the anonymous recorded choices it identifies and confirm they were included in the
-                final count. VoteKit does not store the receipt against your identity.
+                final count.
               </p>
             </div>
 
@@ -510,8 +510,8 @@ export default function AboutPage() {
               <p className="text-gray-600 text-sm">
                 Your receipt code is proof that your vote was recorded. After results are published,
                 you can view the anonymous recorded choices identified by that receipt and confirm
-                they match how you voted and were included in the count. VoteKit does not store the
-                receipt against your identity, so administrators cannot use VoteKit to identify which receipt is yours.
+                they match how you voted and were included in the count. The receipt is not linked
+                to your identity.
               </p>
             </div>
 

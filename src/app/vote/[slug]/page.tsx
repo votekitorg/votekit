@@ -784,7 +784,6 @@ export default function VotingPage({ params }: VotingPageProps) {
                     ? 'If you want to verify your vote later, save this private receipt. After results are published, it lets you view the choices recorded for your complete anonymous ballot and confirm they match how you voted and were included in the count.'
                     : 'If you want to verify your vote later, save these receipt codes. After results are published, each code lets you view the choice recorded for that question and confirm it matches how you voted and was included in the count.'}
                 </p>
-                <p className="mb-4 text-sm font-medium text-green-800">VoteKit does not store your receipt against your identity, so election administrators cannot use VoteKit to determine which receipt belongs to you.</p>
                 <div className="bg-gray-50 rounded-lg p-4">
                   {receiptCodes.map((code, index) => (
                     <div key={index} className="flex flex-col gap-2 border-b border-gray-200 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">

@@ -21,9 +21,9 @@ describe('voter completion guidance', () => {
     expect(votingPage).toContain("copyCredential(resultAccessCode, 'voting-code-after')");
   });
 
-  it('accurately explains recorded-choice verification and reassures voters about identity separation', () => {
-    expect(votingPage).toContain('VoteKit does not store your receipt against your identity, so election administrators cannot use VoteKit to determine which receipt belongs to you.');
+  it('accurately explains recorded-choice verification without an unnecessary receipt warning', () => {
     expect(votingPage).not.toContain('Anyone with a receipt code');
+    expect(votingPage).not.toContain('VoteKit does not store your receipt against your identity');
     expect(aboutPage).not.toContain('Anyone with the receipt');
     expect(homePage).not.toContain('without revealing their choices');
     expect(aboutPage).not.toContain('without revealing how you voted');
