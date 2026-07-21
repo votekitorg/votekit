@@ -13,6 +13,13 @@ if [[ "$EUID" -ne 0 ]]; then
   exit 1
 fi
 
+install -d -m 0755 /run/lock
+exec 9>/run/lock/votekit-deploy.lock
+if ! flock -n 9; then
+  echo "Another VoteKit deployment is already in progress" >&2
+  exit 75
+fi
+
 install -d -m 0755 "$RELEASE_ROOT"
 install -d -m 0750 -o votekit -g votekit /var/lib/votekit /var/backups/votekit
 install -d -m 0750 -o votekit -g votekit /var/lib/votekit/.npm-cache
@@ -106,5 +113,8 @@ while IFS= read -r CANDIDATE; do
   fi
 done < <(find "$RELEASE_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -nr | cut -d' ' -f2-)
 
+if [[ -d "$INCOMING" ]]; then
+  rm -rf -- "$INCOMING"
+fi
 trap - EXIT
 printf 'Deployed VoteKit release %s\n' "$RELEASE_SHA"
