@@ -5,9 +5,11 @@ import type { PlebisciteResultsData } from '@/lib/results';
 const fixture: PlebisciteResultsData = {
   plebiscite: {
     id: 1, slug: 'test', title: 'Test', description: 'Description', open_date: '2026-01-01T09:00',
-    close_date: '2026-01-02T09:00', status: 'closed', accessMode: 'voter_roll', privacyMode: 'legacy', privacyThreshold: 5
+    close_date: '2026-01-02T09:00', status: 'closed', accessMode: 'voter_roll', privacyMode: 'legacy', privacyThreshold: 20,
+    ballotPublicationMode: 'threshold'
   },
   participation: { totalVotes: 1, eligibleCredentials: 2, participationRate: 50 },
+  countRuns: [],
   questions: [{
     id: 1, publicId: 'q1', title: 'Approve?', type: 'yes_no', options: ['Yes', 'No'], totalVotes: 1,
     results: { Yes: 1, No: 0 }, publicBallots: [{ receiptCode: 'receipt', ballot: { choice: 'Yes' } }]

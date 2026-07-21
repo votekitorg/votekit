@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { canManageElection, getAdminSessionFromRequest, recordAdminAuditLog, validateCSRFRequest } from '@/lib/auth';
 import db from '@/lib/db';
 import { getPlebisciteResults } from '@/lib/results';
+import { createResultCountRun, getResultCountRun } from '@/lib/result-count-runs';
 
 const METHODS = new Set(['drawing_lots', 'governing_rules']);
 
@@ -16,12 +17,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const questionId = Number(body.questionId);
+    const countRunId = body.countRunId === undefined ? null : Number(body.countRunId);
     const round = Number(body.round);
     const type = body.type;
     const selectedCandidate = typeof body.selectedCandidate === 'string' ? body.selectedCandidate : '';
     const method = body.method;
     const note = typeof body.note === 'string' ? body.note.trim() : '';
-    if (!questionId || !Number.isInteger(round) || round < 1 || !['exclusion', 'winner'].includes(type) ||
+    if (!questionId || (countRunId !== null && (!Number.isSafeInteger(countRunId) || countRunId <= 0)) || !Number.isInteger(round) || round < 1 || !['exclusion', 'winner'].includes(type) ||
       !METHODS.has(method) || !selectedCandidate || note.length > 2_000) {
       return NextResponse.json({ error: 'Invalid tie-resolution details' }, { status: 400 });
     }
@@ -34,7 +36,7 @@ export async function POST(request: NextRequest) {
       FROM questions q JOIN plebiscites p ON p.id = q.plebiscite_id
       WHERE q.id = ?
     `).get(questionId) as any;
-    if (!question || question.type !== 'ranked_choice') {
+    if (!question || (question.type !== 'ranked_choice' && countRunId === null)) {
       return NextResponse.json({ error: 'Ranked-choice question not found' }, { status: 404 });
     }
     if (!canManageElection(session, Number(question.plebiscite_id))) {
@@ -44,9 +46,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Counting ties can only be resolved after voting closes' }, { status: 409 });
     }
 
-    const data = getPlebisciteResults(question.slug);
-    const resultQuestion = data.questions.find(item => item.id === questionId);
-    const pending = resultQuestion?.results?.pendingTie;
+    const countRun = countRunId === null ? null : getResultCountRun(countRunId);
+    if (countRunId !== null && (!countRun || countRun.questionId !== questionId || countRun.method !== 'irv')) {
+      return NextResponse.json({ error: 'Alternative IRV count not found' }, { status: 404 });
+    }
+    const pending = countRun
+      ? countRun.result?.pendingTie
+      : getPlebisciteResults(question.slug).questions.find(item => item.id === questionId)?.results?.pendingTie;
     if (!pending || pending.round !== round || pending.type !== type) {
       return NextResponse.json({ error: 'This is no longer the current unresolved tie' }, { status: 409 });
     }
@@ -72,13 +78,32 @@ export async function POST(request: NextRequest) {
           tiedCandidates: pending.tiedCandidates,
           selectedCandidate,
           method,
-          note: note || null
+          note: note || null,
+          countRunId
         }
       });
     });
     resolve.immediate();
 
-    const updated = getPlebisciteResults(question.slug).questions.find(item => item.id === questionId)?.results;
+    const rerun = countRun ? createResultCountRun({ questionId, method: 'irv', adminUserId: session.adminUserId }) : null;
+    if (rerun) {
+      recordAdminAuditLog({
+        adminUserId: session.adminUserId,
+        action: 'result_count_run.create',
+        targetType: 'result_count_run',
+        targetId: rerun.id,
+        details: {
+          plebisciteId: rerun.plebisciteId,
+          questionId: rerun.questionId,
+          method: rerun.method,
+          status: rerun.status,
+          sourceBallotHash: rerun.sourceBallotHash,
+          resultHash: rerun.resultHash,
+          followsTieDecisionForCountRunId: countRunId
+        }
+      });
+    }
+    const updated = rerun?.result ?? getPlebisciteResults(question.slug).questions.find(item => item.id === questionId)?.results;
     return NextResponse.json({ success: true, winner: updated?.winner || null, pendingTie: updated?.pendingTie || null });
   } catch (error: any) {
     if (String(error?.message || '').includes('UNIQUE constraint failed')) {

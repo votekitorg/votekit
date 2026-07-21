@@ -124,7 +124,7 @@ describe('GET /api/results/[slug]', () => {
 
     // This test exercises public report rendering. Private-by-default access is
     // covered independently in results-access-control.test.ts.
-    db.prepare("UPDATE plebiscites SET status = 'closed', results_visibility = 'public' WHERE id = ?").run(plebisciteId);
+    db.prepare("UPDATE plebiscites SET status = 'closed', results_visibility = 'public', ballot_publication_mode = 'always' WHERE id = ?").run(plebisciteId);
 
     const response = await resultsGet(resultsRequest(), { params: Promise.resolve({ slug: SLUG }) });
     const body = await response.json();

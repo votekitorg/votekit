@@ -56,6 +56,7 @@ beforeAll(async () => {
     INSERT INTO plebiscites (slug, title, description, open_date, close_date, status)
     VALUES ('close-hardening-b', 'Election B', 'desc', '2026-01-01T09:00', '2030-01-01T17:00', 'open')
   `).run().lastInsertRowid);
+  db.prepare("UPDATE plebiscites SET ballot_publication_mode = 'always' WHERE id = ?").run(plebisciteA);
 
   questionA = Number(db.prepare(`
     INSERT INTO questions (plebiscite_id, title, type, options, display_order)

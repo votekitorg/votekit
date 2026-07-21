@@ -18,7 +18,6 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
   const now = new Date();
   const toBrisbaneInput = (date: Date) => new Date(date.getTime() + 10 * 60 * 60 * 1000).toISOString().slice(0, 16);
   const defaultOpenDate = toBrisbaneInput(new Date(now.getTime() + 60 * 60 * 1000));
-  const defaultCloseDate = toBrisbaneInput(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000));
 
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
@@ -29,7 +28,7 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
     sms_enabled: false,
     opening_mode: 'immediate' as 'immediate' | 'scheduled',
     open_date: defaultOpenDate,
-    close_date: defaultCloseDate
+    close_date: ''
   });
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -625,7 +624,7 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
                 <div>
                   <label htmlFor="close_date" className="block text-sm font-medium text-gray-700 mb-2">Closing date and time *</label>
                   <input type="datetime-local" id="close_date" name="close_date" value={formData.close_date} onChange={handleInputChange} className="input-field" />
-                  <p className="mt-2 text-sm text-gray-500">Defaults to seven days from now. Voting always stops at this time unless you close it earlier.</p>
+                  <p className="mt-2 text-sm text-gray-500">Choose this deliberately. Voting stops at this fixed Brisbane time unless you close it earlier.</p>
                 </div>
 
                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">

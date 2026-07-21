@@ -325,6 +325,40 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: true, resultsVisibility: updateData.visibility });
     }
 
+    if (action === 'set_ballot_publication') {
+      if (adminSession.role !== 'owner') {
+        return NextResponse.json({ error: 'Only the Owner can change anonymous ballot publication' }, { status: 403 });
+      }
+      if (plebiscite.status !== 'draft') {
+        return NextResponse.json({ error: 'Anonymous ballot publication is locked once voting opens' }, { status: 409 });
+      }
+      if (plebiscite.archived_at) {
+        return NextResponse.json({ error: 'Restore this election before changing ballot publication' }, { status: 409 });
+      }
+      const mode = updateData.mode;
+      const threshold = Number(updateData.threshold);
+      if (!['threshold', 'always'].includes(mode) ||
+        (mode === 'threshold' && (!Number.isSafeInteger(threshold) || threshold < 20 || threshold > 10_000_000))) {
+        return NextResponse.json({ error: 'Choose always publish or a threshold between 20 and 10,000,000' }, { status: 400 });
+      }
+      const previousMode = plebiscite.ballot_publication_mode || 'threshold';
+      const previousThreshold = Number(plebiscite.privacy_threshold || 20);
+      db.prepare(`UPDATE plebiscites SET ballot_publication_mode = ?, privacy_threshold = ? WHERE id = ?`)
+        .run(mode, mode === 'threshold' ? threshold : previousThreshold, id);
+      recordAdminAuditLog({
+        adminUserId: adminSession.adminUserId,
+        action: 'plebiscite.ballot_publication.change',
+        targetType: 'plebiscite',
+        targetId: id,
+        details: {
+          slug: plebiscite.slug,
+          from: { mode: previousMode, threshold: previousThreshold },
+          to: { mode, threshold: mode === 'threshold' ? threshold : null }
+        }
+      });
+      return NextResponse.json({ success: true, mode, threshold: mode === 'threshold' ? threshold : null });
+    }
+
     if (plebiscite.archived_at) {
       return NextResponse.json({ error: 'Restore this election before making changes' }, { status: 409 });
     }

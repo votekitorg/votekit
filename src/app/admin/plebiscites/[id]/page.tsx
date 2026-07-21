@@ -12,6 +12,8 @@ import AnonymousCodeManager from '@/components/AnonymousCodeManager';
 import IRVTieResolutionManager from '@/components/IRVTieResolutionManager';
 import { getPlebisciteResults } from '@/lib/results';
 import { reconcileScheduledElection } from '@/lib/election-opening';
+import { listResultCountRuns } from '@/lib/result-count-runs';
+import ResultCountRunManager from '@/components/ResultCountRunManager';
 
 interface Plebiscite {
   id: number;
@@ -33,6 +35,8 @@ interface Plebiscite {
   scheduled_open_attempted_at?: string | null;
   scheduled_open_error?: string | null;
   results_visibility?: 'eligible' | 'public';
+  ballot_publication_mode?: 'threshold' | 'always';
+  privacy_threshold?: number;
   created_at: string;
 }
 
@@ -40,7 +44,7 @@ interface Question {
   id: number;
   title: string;
   description?: string;
-  type: 'yes_no' | 'multiple_choice' | 'ranked_choice';
+  type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
   options: string[];
   display_order: number;
 }
@@ -192,6 +196,13 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
       ? [{ questionId: question.id, questionTitle: question.title, ...question.results.pendingTie }]
       : [])
     : [];
+  const countRuns = plebiscite.status === 'closed' ? listResultCountRuns(plebiscite.id) : [];
+  const latestIrvRuns = [...countRuns].reverse().filter((run, index, reversed) =>
+    run.method === 'irv' && reversed.findIndex(candidate => candidate.method === 'irv' && candidate.questionId === run.questionId) === index
+  );
+  const pendingAlternativeTies = latestIrvRuns.flatMap(run => run.status === 'pending_tie' && run.result.pendingTie
+    ? [{ questionId: run.questionId, questionTitle: `${run.questionTitle} (alternative IRV count #${run.id})`, countRunId: run.id, ...run.result.pendingTie }]
+    : []);
 
   return (
     <AdminLayout currentUser={adminSession}>
@@ -234,7 +245,14 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
         </div>
 
         {canManage && ['owner', 'returning_officer'].includes(adminSession.role) && (
-          <IRVTieResolutionManager ties={pendingIrvTies} />
+          <IRVTieResolutionManager ties={[...pendingIrvTies, ...pendingAlternativeTies]} />
+        )}
+
+        {plebiscite.status === 'closed' && canManage && ['owner', 'returning_officer'].includes(adminSession.role) && (
+          <ResultCountRunManager
+            questions={questions.filter((question): question is Question & { type: 'ranked_choice' | 'condorcet' } => ['ranked_choice', 'condorcet'].includes(question.type))}
+            runs={countRuns}
+          />
         )}
 
         <ElectionTeamManager plebisciteId={electionId} members={team} returningOfficers={returningOfficers} pendingInvitations={pendingInvitations} canManage={canManageTeam} />
@@ -379,7 +397,9 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
                   recovery_confirmed_at: plebiscite.recovery_confirmed_at,
                   close_state: plebiscite.close_state,
                   archived_at: plebiscite.archived_at,
-                  results_visibility: plebiscite.results_visibility
+                  results_visibility: plebiscite.results_visibility,
+                  ballot_publication_mode: plebiscite.ballot_publication_mode,
+                  privacy_threshold: plebiscite.privacy_threshold
                 }}
                 statusInfo={{status: statusInfo.status, color: statusInfo.color, canOpen: statusInfo.canOpen, canClose: statusInfo.canClose, message: statusInfo.message}}
                 canManage={canManage}

@@ -283,6 +283,25 @@ export async function buildResultsPdf(data: PlebisciteResultsData, now: Date = n
     body(`${question.totalVotes.toLocaleString()} ballot${question.totalVotes === 1 ? '' : 's'} counted · ${question.publicBallots.length.toLocaleString()} anonymous ballot record${question.publicBallots.length === 1 ? '' : 's'} publicly available under VoteKit’s privacy threshold rules.`);
   });
 
+  if (data.countRuns.length > 0) {
+    doc.addPage();
+    heading('Alternative count runs');
+    body('These immutable audited counts use the same frozen anonymous ballots. They do not replace the declared results in the preceding section.');
+    data.countRuns.forEach(run => {
+      ensureSpace(130);
+      heading(`Count run #${run.id}: ${run.questionTitle}`, 2);
+      labelledValue('Method', run.method.toUpperCase());
+      labelledValue('Status', run.status === 'pending_tie' ? 'Paused for audited tie decision' : 'Complete');
+      labelledValue('Created', run.createdAt);
+      labelledValue('Created by', run.createdByName || 'Election official');
+      labelledValue('Algorithm', run.settings.algorithm);
+      labelledValue('Outcome', run.result.winner || (run.result.pendingTie ? 'Pending tie decision' : 'Tie reported'));
+      labelledValue('Source ballot fingerprint', run.sourceBallotHash);
+      labelledValue('Result fingerprint', run.resultHash);
+      doc.moveDown(0.8);
+    });
+  }
+
   // Verification page
   doc.addPage();
   heading('Verification and trust');
@@ -308,7 +327,7 @@ export async function buildResultsPdf(data: PlebisciteResultsData, now: Date = n
   }
 
   heading('How voters verify inclusion', 2);
-  body('Each voter receives a private receipt code after submitting. On the online results page, a voter can use that code to confirm that the published anonymous ballot matches their saved receipt. Receipt publication is subject to the configured minimum privacy threshold.');
+  body('Each voter receives a private receipt code after submitting. On the online results page, a voter can use that code to retrieve the matching recorded ballot and confirm its choices. This private lookup remains available even when the public anonymous ballot list is suppressed by the election’s privacy threshold.');
   doc.moveDown(0.8);
   heading('Interpretation notes', 2);
   body('Percentages are rounded to one decimal place. Multiple-choice percentages use total selections and may sum to more than 100% of ballots when voters can choose multiple options. A reported tie must be resolved under the election’s governing rules; VoteKit does not silently apply an alphabetical or arbitrary tie-break.');

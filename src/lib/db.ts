@@ -238,7 +238,7 @@ const migrations = [
     ALTER TABLE plebiscites ADD COLUMN privacy_mode TEXT CHECK(privacy_mode IN ('legacy', 'encrypted')) NOT NULL DEFAULT 'legacy';
   `,
   `
-    ALTER TABLE plebiscites ADD COLUMN privacy_threshold INTEGER NOT NULL DEFAULT 5;
+    ALTER TABLE plebiscites ADD COLUMN privacy_threshold INTEGER NOT NULL DEFAULT 20;
   `,
   `
     ALTER TABLE plebiscites ADD COLUMN manifest_hash TEXT;
@@ -343,6 +343,7 @@ function runMigrations() {
   runElectionWorkflowMigrations(database);
   runResultsAccessMigration(database);
   runEmailDeliveryMigrations(database);
+  runGitHubFeedbackMigrations(database);
 }
 
 function tableInfo(database: Database.Database, tableName: string): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {
@@ -457,6 +458,44 @@ function runEmailDeliveryMigrations(database: Database.Database): void {
       received_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+}
+
+function runGitHubFeedbackMigrations(database: Database.Database): void {
+  const migrateFeedback = database.transaction(() => {
+    if (!hasColumn(database, 'plebiscites', 'ballot_publication_mode')) {
+      database.exec(`ALTER TABLE plebiscites ADD COLUMN ballot_publication_mode TEXT
+        CHECK(ballot_publication_mode IN ('threshold', 'always')) NOT NULL DEFAULT 'threshold'`);
+    }
+
+    // No earlier UI allowed an Owner to deliberately select a lower value, so
+    // migrate the former system default to the new safer default.
+    database.exec(`UPDATE plebiscites SET privacy_threshold = 20
+      WHERE ballot_publication_mode = 'threshold' AND privacy_threshold < 20`);
+
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS result_count_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        plebiscite_id INTEGER NOT NULL,
+        question_id INTEGER NOT NULL,
+        method TEXT CHECK(method IN ('irv', 'condorcet')) NOT NULL,
+        status TEXT CHECK(status IN ('complete', 'pending_tie')) NOT NULL,
+        result_json TEXT NOT NULL,
+        settings_json TEXT NOT NULL,
+        source_ballot_hash TEXT NOT NULL,
+        result_hash TEXT NOT NULL,
+        created_by_admin_user_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (plebiscite_id) REFERENCES plebiscites(id) ON DELETE CASCADE,
+        FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE,
+        FOREIGN KEY (created_by_admin_user_id) REFERENCES admin_users(id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_result_count_runs_election
+        ON result_count_runs(plebiscite_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_result_count_runs_question
+        ON result_count_runs(question_id, created_at);
+    `);
+  });
+  migrateFeedback();
 }
 
 function runPrivacyMigrations(database: Database.Database): void {

@@ -32,7 +32,8 @@ const fixture: PlebisciteResultsData = {
     status: 'closed',
     accessMode: 'anonymous_codes',
     privacyMode: 'encrypted',
-    privacyThreshold: 5
+    privacyThreshold: 20,
+    ballotPublicationMode: 'threshold'
   },
   participation: {
     totalVotes: 75,
@@ -52,6 +53,7 @@ const fixture: PlebisciteResultsData = {
     inputHash: 'b'.repeat(64),
     outputHash: 'c'.repeat(64)
   },
+  countRuns: [],
   questions: [
     {
       id: 1,

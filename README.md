@@ -8,6 +8,8 @@ A privacy-conscious, auditable online election platform for member organisations
 - **Flexible Voter Access**: email OTP, Firebase SMS, private one-click voter links, or anonymous single-use code pools
 - **Anonymous Voting**: Votes are stored separately from voter identity
 - **Receipt Codes**: Verify recorded choices without linking a ballot to voter identity
+- **Privacy-aware publication**: Aggregate results remain available while individual anonymous ballots default to a minimum publication threshold of 20
+- **Audited alternative counts**: Run IRV or Condorcet against the same frozen ranked ballots without replacing the declared result
 - **One Vote Per Member**: Enforced at database level with participation tracking
 
 ### 📊 **Multiple Question Types**

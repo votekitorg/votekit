@@ -50,6 +50,8 @@ export default function VotingPage({ params }: VotingPageProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [preOpeningPreview, setPreOpeningPreview] = useState(false);
+  const [previewOpeningMode, setPreviewOpeningMode] = useState<'immediate' | 'scheduled'>('scheduled');
   
   // Email verification
   const [email, setEmail] = useState('');
@@ -117,6 +119,38 @@ export default function VotingPage({ params }: VotingPageProps) {
             preferentialType: q.preferentialType
           })));
         } else {
+          const codeMatch = window.location.hash.match(/^#code=(.+)$/u);
+          const voterMatch = window.location.hash.match(/^#voter=(.+)$/u);
+          const previewCredential = codeMatch
+            ? { kind: 'anonymous_code', credential: decodeURIComponent(codeMatch[1]) }
+            : voterMatch
+              ? { kind: 'voter_link', credential: decodeURIComponent(voterMatch[1]) }
+              : null;
+          if (previewCredential) {
+            const previewResponse = await csrfFetch(`/api/elections/${slug}/preview`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(previewCredential)
+            });
+            const preview = await previewResponse.json();
+            if (previewResponse.ok) {
+              setPlebiscite({
+                id: 0,
+                slug: preview.election.slug,
+                title: preview.election.title,
+                description: '',
+                open_date: preview.election.opensAt,
+                close_date: '',
+                status: 'draft',
+                voting_available: false,
+                privacy_mode: 'encrypted',
+                access_mode: previewCredential.kind === 'anonymous_code' ? 'anonymous_codes' : 'voter_roll',
+                sms_enabled: false
+              });
+              setPreOpeningPreview(true);
+              setPreviewOpeningMode(preview.election.openingMode);
+              return;
+            }
+          }
           setError('Election not found or not available');
         }
       } catch (error) {
@@ -450,6 +484,24 @@ export default function VotingPage({ params }: VotingPageProps) {
   }
 
   if (!plebiscite) return null;
+
+  if (preOpeningPreview) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="card w-full max-w-xl text-center">
+          <div className="card-body py-10">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-2xl" aria-hidden="true">🗳️</div>
+            <h1 className="text-2xl font-bold text-gray-900">{plebiscite.title}</h1>
+            <h2 className="mt-4 text-lg font-semibold text-blue-900">Voting has not opened yet</h2>
+            <p className="mt-2 text-gray-700">{previewOpeningMode === 'scheduled'
+              ? <>Voting is scheduled to open on {formatDate(plebiscite.open_date)} (Australia/Brisbane).</>
+              : 'The election team is still completing setup and will open voting when it is ready.'}</p>
+            <p className="mt-4 text-sm text-gray-500">Your private voting link is valid. Return to this same link after voting opens.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

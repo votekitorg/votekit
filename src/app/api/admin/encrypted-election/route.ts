@@ -4,7 +4,6 @@ import { canManageElection, getAdminSessionFromRequest, recordAdminAuditLog, val
 import {
   canonicalStringify,
   DEFAULT_ENVELOPE_PLAINTEXT_BYTES,
-  DEFAULT_PRIVACY_THRESHOLD,
   ENCRYPTED_BALLOT_PROTOCOL,
   PublishedEncryptedBallot,
   sha256Base64Url,
@@ -64,10 +63,10 @@ export async function POST(request: NextRequest) {
             created_at = CURRENT_TIMESTAMP
         `).run(id, JSON.stringify(publicKeyJwk), encryptedPrivateKey, keyIv, ENCRYPTED_BALLOT_PROTOCOL, manifestHash);
         db.prepare(`
-          UPDATE plebiscites SET privacy_mode = 'encrypted', privacy_threshold = ?,
+          UPDATE plebiscites SET privacy_mode = 'encrypted',
             manifest_hash = ?, envelope_plaintext_bytes = ?, close_state = 'none', recovery_confirmed_at = NULL
           WHERE id = ? AND status = 'draft'
-        `).run(DEFAULT_PRIVACY_THRESHOLD, manifestHash, DEFAULT_ENVELOPE_PLAINTEXT_BYTES, id);
+        `).run(manifestHash, DEFAULT_ENVELOPE_PLAINTEXT_BYTES, id);
       });
       prepare.immediate();
       recordAdminAuditLog({

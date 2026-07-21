@@ -38,6 +38,11 @@ const voterAccess = read('src/lib/voter-access.ts');
 const accessCodeRoute = read('src/app/api/admin/access-codes/route.ts');
 const accessCodeAuthRoute = read('src/app/api/auth/access-code/route.ts');
 const firebaseToken = read('src/lib/firebase-token.ts');
+const previewRoute = read('src/app/api/elections/[slug]/preview/route.ts');
+const createElectionForm = read('src/app/admin/plebiscites/new/CreatePlebisciteForm.tsx');
+const globalCss = read('src/app/globals.css');
+const countRuns = read('src/lib/result-count-runs.ts');
+const countRunsRoute = read('src/app/api/admin/result-count-runs/route.ts');
 
 const participationCreate = db.match(/CREATE TABLE IF NOT EXISTS participation \([\s\S]*?\);/);
 assert(Boolean(participationCreate), 'participation table definition exists');
@@ -62,7 +67,14 @@ assert(!/INSERT INTO participation \([^)]*receipt_codes/.test(voteRoute), 'vote 
 assert(voteRoute.includes('validatePreferentialLength'), 'vote submission validates optional/compulsory preferential length explicitly');
 assert(voteRoute.includes('preferential_type'), 'vote submission reads preferential_type');
 assert(resultsLib.includes('receipt_code, vote_data'), 'results helper reads receipt codes from anonymous ballot records');
-assert(resultsLib.includes('publicBallots'), 'results helper publishes anonymous ballots for verification after close');
+assert(resultsLib.includes('ballot_publication_mode') && resultsLib.includes('privacy_threshold'), 'results helper enforces the configured anonymous-ballot publication rule');
+assert(db.includes('privacy_threshold = 20') && db.includes("ballot_publication_mode IN ('threshold', 'always')"), 'anonymous-ballot publication defaults to a threshold of 20 with an explicit always-publish mode');
+assert(resultsRoute.includes("^[a-f0-9]{32}$") && resultsRoute.includes('published_ballots'), 'private receipt lookup supports legacy and encrypted ballots below the public threshold');
+assert(previewRoute.includes('hashAccessToken') && previewRoute.includes('hashLinkToken') && !previewRoute.includes('createVoterSession'), 'pre-opening previews require hashed private credentials without consuming them or creating sessions');
+assert(createElectionForm.includes("close_date: ''") && !createElectionForm.includes('Defaults to seven days from now'), 'election creation requires a deliberate fixed closing time');
+assert(globalCss.includes('color-scheme: light') && globalCss.includes('bg-white text-gray-900'), 'form controls remain readable when the device prefers dark mode');
+assert(countRuns.includes('sourceBallotHash') && countRuns.includes('resultHash') && countRuns.includes('settings_json'), 'alternative count runs retain method settings and source/result fingerprints');
+assert(countRunsRoute.includes('canManageElection') && countRunsRoute.includes("['owner', 'returning_officer']"), 'alternative count creation is restricted to authorised election officials');
 assert(irv.includes('tiedCandidates'), 'IRV reports tied candidates instead of silently choosing a winner');
 assert(!irv.includes('remainingCandidates.sort()[0]'), 'IRV no longer selects alphabetical winner for full tie');
 assert(irv.includes('roundData.eliminated = [eliminatedCandidate]'), 'IRV excludes exactly one lowest candidate per round');
