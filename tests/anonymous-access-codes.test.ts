@@ -44,6 +44,24 @@ afterAll(() => {
 });
 
 describe('anonymous access-code elections', () => {
+  it('supports repeated 10,000-code batches without a per-election ceiling', async () => {
+    const largeElectionId = Number(db.prepare(`INSERT INTO plebiscites
+      (slug, title, description, open_date, close_date, status, privacy_mode, access_mode)
+      VALUES ('large-anonymous-election', 'Large anonymous election', 'Test', ?, ?, 'draft', 'legacy', 'anonymous_codes')`)
+      .run(new Date().toISOString(), new Date(Date.now() + 86_400_000).toISOString()).lastInsertRowid);
+    const codesRoute = await import('@/app/api/admin/access-codes/route');
+    for (let batch = 0; batch < 2; batch++) {
+      const response = await codesRoute.POST(request('http://localhost/api/admin/access-codes', 'POST', {
+        plebiscite_id: largeElectionId, count: 10_000
+      }, `admin-session=${adminSessionId}`));
+      expect(response.status).toBe(200);
+      expect((await response.json()).codes).toHaveLength(10_000);
+    }
+    const stats = db.prepare(`SELECT COUNT(*) AS total, COUNT(DISTINCT token_hash) AS unique_codes
+      FROM anonymous_access_codes WHERE plebiscite_id = ?`).get(largeElectionId);
+    expect(stats).toEqual({ total: 20_000, unique_codes: 20_000 });
+  }, 30_000);
+
   it('generates plaintext once while storing hashes only and permits opening without a voter roll', async () => {
     const codesRoute = await import('@/app/api/admin/access-codes/route');
     const response = await codesRoute.POST(request('http://localhost/api/admin/access-codes', 'POST', {

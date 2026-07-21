@@ -72,6 +72,9 @@ printf 'VOTEKIT_RELEASE=%s\n' "$RELEASE_SHA" > "$RELEASE_ENV"
 chmod 0644 "$RELEASE_ENV"
 
 systemctl restart votekit.service
+if systemctl cat votekit-email-worker.service >/dev/null 2>&1; then
+  systemctl restart votekit-email-worker.service
+fi
 
 if ! HEALTH="$(curl --fail --silent --show-error --retry 10 --retry-delay 2 "$HEALTH_URL")" ||
    [[ "$HEALTH" != *"\"release\":\"$RELEASE_SHA\""* ]]; then
@@ -81,9 +84,27 @@ if ! HEALTH="$(curl --fail --silent --show-error --retry 10 --retry-delay 2 "$HE
     mv -Tf "$CURRENT_LINK.next" "$CURRENT_LINK"
     printf 'VOTEKIT_RELEASE=%s\n' "$(basename "$PREVIOUS_RELEASE")" > "$RELEASE_ENV"
     systemctl restart votekit.service
+    if systemctl cat votekit-email-worker.service >/dev/null 2>&1; then
+      systemctl restart votekit-email-worker.service
+    fi
   fi
   exit 1
 fi
+
+# Retain the active release and the two newest rollback candidates. Only
+# immutable 40-character Git SHA directories under RELEASE_ROOT are eligible.
+OTHER_RELEASES_KEPT=0
+while IFS= read -r CANDIDATE; do
+  [[ "$CANDIDATE" == "$RELEASE_DIR" ]] && continue
+  if (( OTHER_RELEASES_KEPT < 2 )); then
+    OTHER_RELEASES_KEPT=$((OTHER_RELEASES_KEPT + 1))
+    continue
+  fi
+  CANDIDATE_NAME="$(basename "$CANDIDATE")"
+  if [[ "$CANDIDATE" == "$RELEASE_ROOT/$CANDIDATE_NAME" && "$CANDIDATE_NAME" =~ ^[0-9a-f]{40}$ ]]; then
+    rm -rf -- "$CANDIDATE"
+  fi
+done < <(find "$RELEASE_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -nr | cut -d' ' -f2-)
 
 trap - EXIT
 printf 'Deployed VoteKit release %s\n' "$RELEASE_SHA"

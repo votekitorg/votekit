@@ -31,11 +31,16 @@ Vercel, and other serverless deployments are unsupported for real elections.
    `DATABASE_PATH`, verified email sender, strong bootstrap credentials, and
    `TRUST_PROXY_HEADERS=true` only with the supplied localhost nginx topology.
 4. Install `deploy/votekit.service` as `/etc/systemd/system/votekit.service`.
+   Install `deploy/votekit-email-worker.service` alongside it and enable both.
+   Install `deploy/votekit-journald.conf` under `/etc/systemd/journald.conf.d/`
+   so logs cannot consume the election database's free space.
 5. Install `deploy/nginx-votekit.conf` as the nginx site after certificates exist.
 6. Install `deploy/backup.sh` as `/usr/local/sbin/votekit-backup`.
 7. Schedule local hot backups and arrange encrypted off-server replication.
 8. Set `VOTEKIT_PUBLIC_URL` to the canonical HTTPS origin used in administrator
    invitation links. Do not derive invitation origins from request Host headers.
+   Generate a 32-byte `EMAIL_QUEUE_ENCRYPTION_KEY`, configure the signed Resend
+   webhook secret, and never rotate the queue key while pending jobs exist.
 9. Enable the service only after the first tagged release has been deployed.
 
 ## Release procedure

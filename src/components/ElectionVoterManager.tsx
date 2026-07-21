@@ -36,6 +36,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, st
     invalid: number;
   } | null>(null);
   const [sendingLinks, setSendingLinks] = useState(false);
+  const [delivery, setDelivery] = useState({ queued: 0, processing: 0, sent: 0, failed: 0, suppressed: 0 });
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +61,21 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, st
   useEffect(() => {
     fetchVoters();
   }, [fetchVoters]);
+
+  const fetchDelivery = useCallback(async () => {
+    try {
+      const response = await csrfFetch(`/api/admin/voter-links?plebiscite_id=${plebisciteId}`);
+      if (response.ok) setDelivery((await response.json()).delivery);
+    } catch {
+      // Delivery is supplementary status; voter management remains usable.
+    }
+  }, [plebisciteId]);
+
+  useEffect(() => {
+    void fetchDelivery();
+    const timer = window.setInterval(() => { void fetchDelivery(); }, 5000);
+    return () => window.clearInterval(timer);
+  }, [fetchDelivery]);
 
   const addSingleVoter = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -238,8 +254,9 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, st
     try {
       const response = await csrfFetch('/api/admin/voter-links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plebiscite_id: plebisciteId, action }) });
       const result = await response.json();
-      if (!response.ok && !result.sent) throw new Error(result.error || 'Could not send ballot links');
-      setSuccess(`${result.sent} link${result.sent === 1 ? '' : 's'} sent${result.failed ? `, ${result.failed} failed` : ''}.`);
+      if (!response.ok) throw new Error(result.error || 'Could not queue ballot links');
+      setDelivery(result.delivery);
+      setSuccess(`${result.queued} link${result.queued === 1 ? '' : 's'} queued for delivery${result.suppressed ? `, ${result.suppressed} suppressed` : ''}. VoteKit will send them in reliable batches in the background.`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not send ballot links'); }
     finally { setSendingLinks(false); }
   };
@@ -268,7 +285,7 @@ export default function ElectionVoterManager({ plebisciteId, plebisciteTitle, st
       </div>
       {voters.some(voter => voter.email) && (
         <div className="flex flex-wrap gap-3 rounded-lg border border-green-200 bg-green-50 p-4">
-          <div className="mr-auto"><strong className="block text-sm text-green-900">Private one-click ballot links</strong><span className="text-sm text-green-800">Available after the election opens.</span></div>
+          <div className="mr-auto"><strong className="block text-sm text-green-900">Private one-click ballot links</strong><span className="text-sm text-green-800">Available after the election opens.</span><span className="mt-1 block text-xs text-green-900">Delivery: {delivery.queued + delivery.processing} pending, {delivery.sent} sent, {delivery.failed} failed, {delivery.suppressed} suppressed</span></div>
           <button type="button" className="btn-secondary" disabled={sendingLinks || status !== 'open'} onClick={() => sendLinks('send')}>Send ballot links</button>
           <button type="button" className="btn-secondary" disabled={sendingLinks || status !== 'open'} onClick={() => sendLinks('remind')}>Remind non-voters</button>
         </div>

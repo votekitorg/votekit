@@ -342,6 +342,7 @@ function runMigrations() {
   runElectionArchiveMigration(database);
   runElectionWorkflowMigrations(database);
   runResultsAccessMigration(database);
+  runEmailDeliveryMigrations(database);
 }
 
 function tableInfo(database: Database.Database, tableName: string): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {
@@ -407,6 +408,55 @@ function runResultsAccessMigration(database: Database.Database): void {
     database.exec(`ALTER TABLE plebiscites ADD COLUMN results_visibility TEXT
       CHECK(results_visibility IN ('eligible', 'public')) NOT NULL DEFAULT 'eligible'`);
   }
+}
+
+function runEmailDeliveryMigrations(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS email_jobs (
+      id TEXT PRIMARY KEY,
+      campaign_id TEXT NOT NULL,
+      plebiscite_id INTEGER,
+      kind TEXT CHECK(kind IN ('voter_link', 'voter_reminder')) NOT NULL,
+      recipient TEXT NOT NULL,
+      encrypted_payload TEXT NOT NULL,
+      priority INTEGER NOT NULL DEFAULT 10,
+      status TEXT CHECK(status IN ('queued', 'processing', 'sent', 'failed', 'suppressed')) NOT NULL DEFAULT 'queued',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 5,
+      delivery_batch_id TEXT,
+      next_attempt_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      locked_at DATETIME,
+      provider_message_id TEXT,
+      last_error TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      sent_at DATETIME,
+      FOREIGN KEY (plebiscite_id) REFERENCES plebiscites(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_email_jobs_ready
+      ON email_jobs(status, priority DESC, next_attempt_at, created_at);
+    CREATE INDEX IF NOT EXISTS idx_email_jobs_election
+      ON email_jobs(plebiscite_id, status);
+    CREATE INDEX IF NOT EXISTS idx_email_jobs_campaign
+      ON email_jobs(campaign_id, status);
+    CREATE INDEX IF NOT EXISTS idx_email_jobs_delivery_batch
+      ON email_jobs(delivery_batch_id, status);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_email_jobs_provider_message
+      ON email_jobs(provider_message_id) WHERE provider_message_id IS NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS email_suppressions (
+      email TEXT PRIMARY KEY,
+      reason TEXT CHECK(reason IN ('bounce', 'complaint', 'manual')) NOT NULL,
+      provider_message_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS email_webhook_events (
+      id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      received_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 }
 
 function runPrivacyMigrations(database: Database.Database): void {

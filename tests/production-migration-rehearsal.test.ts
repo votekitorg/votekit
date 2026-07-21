@@ -24,6 +24,9 @@ describe.skipIf(!rehearsalDatabase)('production database migration rehearsal', (
       'access_mode', 'sms_enabled', 'opening_mode', 'actual_opened_at', 'scheduled_open_attempted_at', 'scheduled_open_error'
     ]));
     expect(sessionColumns.map((column) => column.name)).toEqual(expect.arrayContaining(['voter_roll_id', 'anonymous_code_id', 'credential_type']));
-    expect(tables.map((table) => table.name)).toEqual(expect.arrayContaining(['anonymous_access_codes', 'voter_link_tokens', 'irv_tie_resolutions']));
+    expect(tables.map((table) => table.name)).toEqual(expect.arrayContaining([
+      'anonymous_access_codes', 'voter_link_tokens', 'irv_tie_resolutions',
+      'email_jobs', 'email_suppressions', 'email_webhook_events'
+    ]));
   });
 });

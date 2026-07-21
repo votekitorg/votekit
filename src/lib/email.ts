@@ -32,11 +32,16 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
+function isRecipientSuppressed(email: string): boolean {
+  return Boolean(db.prepare('SELECT 1 FROM email_suppressions WHERE email = ?').get(email.toLowerCase()));
+}
+
 export async function sendVerificationEmail(
   email: string,
   code: string,
   plebisciteTitle: string
 ): Promise<EmailResult> {
+  if (isRecipientSuppressed(email)) return { success: false, error: 'Recipient is suppressed' };
   const safeTitle = escapeHtml(plebisciteTitle);
   const subjectTitle = plebisciteTitle.replace(/[\r\n]+/g, ' ').trim();
   
@@ -90,6 +95,7 @@ export async function sendVerificationEmail(
         This is an automated message from the VoteKit Election Platform.
       `
     });
+    if (result.error) throw new Error(result.error.message);
 
     return {
       success: true,
@@ -109,6 +115,7 @@ export async function sendResultsVerificationEmail(
   code: string,
   electionTitle: string
 ): Promise<EmailResult> {
+  if (isRecipientSuppressed(email)) return { success: false, error: 'Recipient is suppressed' };
   const safeTitle = escapeHtml(electionTitle);
   const subjectTitle = electionTitle.replace(/[\r\n]+/g, ' ').trim();
   try {
@@ -119,6 +126,7 @@ export async function sendResultsVerificationEmail(
       html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px"><h1 style="color:#00843D">VoteKit</h1><div style="background:#f8f9fa;border-radius:10px;padding:28px"><h2 style="color:#1B5E20;margin-top:0">View election results</h2><p>Use this code to view the final results for <strong>${safeTitle}</strong>.</p><div style="text-align:center;margin:25px 0"><span style="background:#00843D;color:white;font-size:24px;font-weight:bold;padding:15px 25px;border-radius:5px;letter-spacing:3px;font-family:monospace">${code}</span></div><p style="color:#666;font-size:14px">This code expires in 10 minutes. It confirms that you were eligible for this election, but it is not connected to your ballot.</p></div></div>`,
       text: `VoteKit\n\nView election results\n\nUse this code to view the final results for ${electionTitle}: ${code}\n\nThe code expires in 10 minutes. It confirms eligibility but is not connected to your ballot.`
     });
+    if (result.error) throw new Error(result.error.message);
     return { success: true, messageId: result.data?.id };
   } catch (error) {
     console.error('Failed to send results verification email:', error);
@@ -133,6 +141,7 @@ export async function sendAdminInvitationEmail(input: {
   invitationUrl: string;
   inviterName: string;
 }): Promise<EmailResult> {
+  if (isRecipientSuppressed(input.email)) return { success: false, error: 'Recipient is suppressed' };
   const safeName = escapeHtml(input.name?.trim() || 'there');
   const safeRole = escapeHtml(input.roleLabel);
   const safeInviter = escapeHtml(input.inviterName);
@@ -159,6 +168,7 @@ export async function sendAdminInvitationEmail(input: {
       `,
       text: `VoteKit Election Platform\n\nHello ${input.name?.trim() || 'there'},\n\n${input.inviterName} has invited you to join VoteKit as ${input.roleLabel}.\n\nAccept your invitation: ${input.invitationUrl}\n\nThis private, single-use invitation expires in 48 hours.`
     });
+    if (result.error) throw new Error(result.error.message);
     return { success: true, messageId: result.data?.id };
   } catch (error) {
     console.error('Failed to send admin invitation email:', error);
@@ -166,17 +176,41 @@ export async function sendAdminInvitationEmail(input: {
   }
 }
 
-export async function sendVoterLinkEmail(input: { email: string; electionTitle: string; electionDescription: string; ballotUrl: string; reminder?: boolean; closeDate?: string }): Promise<EmailResult> {
+export interface VoterLinkEmailInput {
+  email: string;
+  electionTitle: string;
+  electionDescription: string;
+  ballotUrl: string;
+  reminder?: boolean;
+  closeDate?: string;
+}
+
+export interface EmailPayload {
+  from: string;
+  replyTo: string;
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}
+
+export function buildVoterLinkEmail(input: VoterLinkEmailInput): EmailPayload {
   const safeTitle = escapeHtml(input.electionTitle);
   const safeDescription = escapeHtml(input.electionDescription.slice(0, 500));
   const safeUrl = escapeHtml(input.ballotUrl);
   const subject = `${input.reminder ? 'Reminder: ' : ''}Your VoteKit ballot - ${input.electionTitle.replace(/[\r\n]+/g, ' ')}`;
+  return {
+    ...senderOptions(), to: input.email, subject,
+    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px"><h1 style="color:#00843D">VoteKit</h1><h2>${input.reminder ? 'Voting reminder' : 'Your ballot is ready'}</h2><p>You are invited to vote in <strong>${safeTitle}</strong>.</p><p>${safeDescription}</p><p style="margin:28px 0"><a href="${safeUrl}" style="background:#00843D;color:white;text-decoration:none;padding:13px 22px;border-radius:6px;font-weight:bold">Open your ballot</a></p><p style="color:#666;font-size:14px">This private link is tied to your voter registration. VoteKit separates your identity from your ballot when it is submitted.</p></div>`,
+    text: `VoteKit\n\n${input.reminder ? 'Voting reminder' : 'Your ballot is ready'}\n\n${input.electionTitle}\n\n${input.electionDescription.slice(0, 500)}\n\nOpen your ballot: ${input.ballotUrl}`
+  };
+}
+
+export async function sendVoterLinkEmail(input: VoterLinkEmailInput): Promise<EmailResult> {
+  if (isRecipientSuppressed(input.email)) return { success: false, error: 'Recipient is suppressed' };
   try {
-    const result = await getResend().emails.send({
-      ...senderOptions(), to: input.email, subject,
-      html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px"><h1 style="color:#00843D">VoteKit</h1><h2>${input.reminder ? 'Voting reminder' : 'Your ballot is ready'}</h2><p>You are invited to vote in <strong>${safeTitle}</strong>.</p><p>${safeDescription}</p><p style="margin:28px 0"><a href="${safeUrl}" style="background:#00843D;color:white;text-decoration:none;padding:13px 22px;border-radius:6px;font-weight:bold">Open your ballot</a></p><p style="color:#666;font-size:14px">This private link is tied to your voter registration. VoteKit separates your identity from your ballot when it is submitted.</p></div>`,
-      text: `VoteKit\n\n${input.reminder ? 'Voting reminder' : 'Your ballot is ready'}\n\n${input.electionTitle}\n\n${input.electionDescription.slice(0, 500)}\n\nOpen your ballot: ${input.ballotUrl}`
-    });
+    const result = await getResend().emails.send(buildVoterLinkEmail(input));
+    if (result.error) throw new Error(result.error.message);
     return { success: true, messageId: result.data?.id };
   } catch (error) {
     console.error('Failed to send voter link email:', error);
