@@ -1,6 +1,6 @@
 # VoteKit Product Requirements Document
 
-Last updated: 2026-07-14
+Last updated: 2026-07-21
 
 ## Product Goal
 
@@ -11,7 +11,7 @@ VoteKit is an open-source election and plebiscite platform for member organisati
 1. Eligible voters can vote exactly once.
 2. Ballots are anonymous.
 3. Voters can verify their own ballot was included and recorded correctly.
-4. Observers can independently re-tally the published ballots.
+4. Where the election's anonymous-ballot publication rule permits, observers can independently re-tally the published ballots.
 5. The system must not require voters to trust administrators with their vote choices.
 6. Security/privacy guarantees must hold against anyone with ordinary database access, not just against the public results page.
 
@@ -27,9 +27,9 @@ VoteKit must allow voters to verify that their own ballot was counted correctly 
 2. The voter submits their ballot.
 3. The system returns a random receipt code visible only to that voter.
 4. The voter is told to save the receipt code.
-5. After voting closes, the public results page publishes every accepted ballot with its receipt code.
-6. The voter can find their receipt code and confirm that the published ballot matches how they voted.
-7. Any observer can download or inspect all published ballots and independently re-tally the election.
+5. After voting closes, the voter can enter the private receipt to retrieve the matching anonymous recorded ballot.
+6. The voter confirms that the recorded ballot matches how they voted and was included.
+7. VoteKit publishes the complete anonymous ballot list only when the election's configured privacy threshold is met or the Owner explicitly selected always-publish before opening.
 
 ### Privacy Guarantee
 
@@ -48,7 +48,7 @@ The system should separate the following concepts:
 
 - Eligibility: who is allowed to vote.
 - Participation: whether an eligible voter has already voted.
-- Ballot: the anonymous vote contents and public receipt code.
+- Ballot: the anonymous vote contents and private receipt code, which may also be published when the election's ballot-publication rule permits.
 
 There must be no persistent direct foreign key, receipt-code field, token field, timestamp pair, or equivalent value that links participation records to ballot records.
 
@@ -124,10 +124,20 @@ The front end, API validation, database schema, and tabulation logic must agree 
 After voting closes, results should include:
 
 - Final tallies.
-- Full published anonymous ballots with receipt codes.
+- Aggregate results and method-specific tabulation details regardless of whether individual ballots are published.
+- Private receipt lookup after close regardless of the public ballot threshold.
+- Full anonymous ballots with receipt codes only when at least 20 ballots were accepted by default, a higher Owner-selected threshold was met, or the Owner explicitly selected always-publish before opening.
 - Method-specific tabulation details, including IRV rounds or Condorcet pairwise comparisons.
 - Participation count.
-- Enough downloadable data for independent re-tallying.
+- Enough downloadable data for independent re-tallying where anonymous-ballot publication is enabled.
+- Immutable alternative IRV and Condorcet count runs for compatible ranked ballots, including the method, result snapshot, applicable tie decisions, administrator, timestamp and source/result fingerprints. Alternative runs never replace the declared result.
+
+## Election Timing Requirements
+
+- All election times are entered and displayed as Australia/Brisbane time.
+- The creation form must not silently derive a closing time from when setup began.
+- The organiser must deliberately select the fixed closing date and time.
+- The selected close remains a hard cutoff and is bound into the encrypted election manifest.
 
 ## Tie Policy Requirement
 

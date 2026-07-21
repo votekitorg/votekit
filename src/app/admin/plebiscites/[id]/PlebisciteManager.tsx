@@ -27,6 +27,8 @@ interface Plebiscite {
   close_state?: 'none' | 'closing' | 'failed';
   archived_at?: string | null;
   results_visibility?: 'eligible' | 'public';
+  ballot_publication_mode?: 'threshold' | 'always';
+  privacy_threshold?: number;
 }
 
 interface StatusInfo {
@@ -56,6 +58,8 @@ export default function PlebisciteManager({
   const [copied, setCopied] = useState(false);
   const [encryptionPrepared, setEncryptionPrepared] = useState(Boolean(plebiscite.manifest_hash));
   const [recoveryConfirmed, setRecoveryConfirmed] = useState(Boolean(plebiscite.recovery_confirmed_at));
+  const [publicationMode, setPublicationMode] = useState<'threshold' | 'always'>(plebiscite.ballot_publication_mode || 'threshold');
+  const [publicationThreshold, setPublicationThreshold] = useState(String(plebiscite.privacy_threshold || 20));
   const recoveryFileRef = useRef<HTMLInputElement>(null);
 
   function downloadJson(filename: string, value: unknown) {
@@ -261,6 +265,30 @@ export default function PlebisciteManager({
     }
   }
 
+  async function handleBallotPublication() {
+    if (publicationMode === 'always' && !confirm('Always publish every anonymous ballot after close, even in a very small election?')) return;
+    setLoading(true);
+    setError('');
+    try {
+      const response = await csrfFetch('/api/admin/plebiscites', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: plebiscite.id,
+          action: 'set_ballot_publication',
+          mode: publicationMode,
+          threshold: Number(publicationThreshold)
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not update ballot publication');
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not update ballot publication');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function copyUrl() {
     const url = `${window.location.origin}/vote/${plebiscite.slug}`;
     navigator.clipboard.writeText(url);
@@ -280,6 +308,28 @@ export default function PlebisciteManager({
         <p className="text-sm text-gray-500 text-center">
           Observer access is read-only.
         </p>
+      )}
+
+      {isOwner && !plebiscite.archived_at && plebiscite.status === 'draft' && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div className="text-sm font-semibold text-gray-900">Anonymous ballot publication</div>
+          <p className="mt-1 text-sm text-gray-600">Aggregate results are always shown. This setting controls whether the individual anonymous ballot list is published and locks when voting opens.</p>
+          <label className="mt-3 block text-sm font-medium text-gray-700">
+            Publication rule
+            <select className="select-field mt-1" value={publicationMode} onChange={event => setPublicationMode(event.target.value as 'threshold' | 'always')}>
+              <option value="threshold">Publish only when the minimum ballot count is reached</option>
+              <option value="always">Always publish individual anonymous ballots</option>
+            </select>
+          </label>
+          {publicationMode === 'threshold' && (
+            <label className="mt-3 block text-sm font-medium text-gray-700">
+              Minimum accepted ballots
+              <input className="input-field mt-1" type="number" min={20} max={10_000_000} step={1} value={publicationThreshold} onChange={event => setPublicationThreshold(event.target.value)} />
+            </label>
+          )}
+          <p className="mt-2 text-xs text-gray-500">Private receipt lookup remains available even when the public ballot list is suppressed.</p>
+          <button type="button" className="btn-secondary mt-3 w-full" disabled={loading} onClick={handleBallotPublication}>Save Publication Rule</button>
+        </div>
       )}
 
       {isOwner && !plebiscite.archived_at && (

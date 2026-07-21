@@ -18,7 +18,7 @@ The default is **Open immediately when ready**. The election is created as a dra
 
 The alternative is **Schedule opening for later**. VoteKit opens at the selected time only when questions, credentials and any encrypted recovery kit are ready. A scheduled election can always be opened early. If readiness fails at the scheduled time, VoteKit remains closed, records the reason and requires a deliberate manual opening after the issue is corrected.
 
-The closing date defaults to seven days from creation and is always a hard voting cutoff.
+The organiser must deliberately set a fixed closing date and time. VoteKit does not pre-fill a seven-day deadline because time spent configuring a draft would silently reduce the real voting period. The selected close is always a hard voting cutoff.
 
 ## Ranked-choice tie rules
 

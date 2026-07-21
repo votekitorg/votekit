@@ -3,6 +3,7 @@ import { tabulateIRV, exportIRVResultsCSV, type IRVTieResolution } from '@/lib/i
 import { tabulateCondorcet, exportCondorcetResultsCSV } from '@/lib/condorcet';
 import { buildEncryptedManifest } from '@/lib/encrypted-election-server';
 import type { EncryptedElectionManifest } from '@/lib/encrypted-ballots';
+import { listResultCountRuns, type ResultCountRun } from '@/lib/result-count-runs';
 
 export interface PlebisciteResultsData {
   plebiscite: {
@@ -17,6 +18,7 @@ export interface PlebisciteResultsData {
     accessMode: 'voter_roll' | 'anonymous_codes';
     privacyMode: 'legacy' | 'encrypted';
     privacyThreshold: number;
+    ballotPublicationMode: 'threshold' | 'always';
   };
   participation: {
     totalVotes: number;
@@ -29,6 +31,7 @@ export interface PlebisciteResultsData {
     inputHash: string;
     outputHash: string;
   };
+  countRuns: ResultCountRun[];
   questions: Array<{
     id: number;
     publicId: string;
@@ -114,7 +117,8 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
           SELECT receipt_code, vote_data FROM votes WHERE question_id = ? ORDER BY receipt_code
         `).all(question.id) as any[];
 
-    const publicBallots = (plebiscite.privacy_mode !== 'encrypted' || votes.length >= Number(plebiscite.privacy_threshold || 5))
+    const publicBallots = (plebiscite.ballot_publication_mode === 'always' ||
+      participationCount.count >= Number(plebiscite.privacy_threshold || 20))
       ? votes.map((vote: any) => ({
           receiptCode: vote.receipt_code,
           ballot: JSON.parse(vote.vote_data)
@@ -229,7 +233,8 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
       status: plebiscite.status,
       accessMode: plebiscite.access_mode || 'voter_roll',
       privacyMode: plebiscite.privacy_mode || 'legacy',
-      privacyThreshold: Number(plebiscite.privacy_threshold || 5)
+      privacyThreshold: Number(plebiscite.privacy_threshold || 20),
+      ballotPublicationMode: plebiscite.ballot_publication_mode || 'threshold'
     },
     participation: {
       totalVotes: participationCount.count,
@@ -244,6 +249,7 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
         outputHash: encryptedArtifact.output_hash
       }
     } : {}),
+    countRuns: listResultCountRuns(plebiscite.id),
     questions: results
   };
 }
@@ -313,6 +319,22 @@ export function buildResultsCsv(slug: string, data: PlebisciteResultsData): stri
       question.publicBallots.forEach(({ receiptCode, ballot }) => {
         csvData += `${csvCell(receiptCode)},${csvCell((ballot.preferences || []).join(' > '))}\n`;
       });
+      csvData += '\n';
+    }
+  }
+
+  if (data.countRuns.length > 0) {
+    csvData += `${csvCell('Alternative Count Runs')}\n`;
+    for (const run of data.countRuns) {
+      csvData += `${csvCell(`Count run #${run.id}: ${run.questionTitle}`)}\n`;
+      csvData += `${csvCell('Method')},${csvCell(run.method.toUpperCase())}\n`;
+      csvData += `${csvCell('Status')},${csvCell(run.status)}\n`;
+      csvData += `${csvCell('Created')},${csvCell(run.createdAt)}\n`;
+      csvData += `${csvCell('Created by')},${csvCell(run.createdByName || 'Election official')}\n`;
+      csvData += `${csvCell('Algorithm')},${csvCell(run.settings.algorithm)}\n`;
+      csvData += `${csvCell('Source ballot fingerprint')},${csvCell(run.sourceBallotHash)}\n`;
+      csvData += `${csvCell('Result fingerprint')},${csvCell(run.resultHash)}\n`;
+      csvData += run.method === 'irv' ? exportIRVResultsCSV(run.result) : exportCondorcetResultsCSV(run.result);
       csvData += '\n';
     }
   }

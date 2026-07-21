@@ -37,6 +37,11 @@ function formatDate(dateString: string): string {
   });
 }
 
+function formatAuditDate(dateString: string): string {
+  const utc = /Z$|[+-]\d{2}:?\d{2}$/u.test(dateString) ? dateString : `${dateString.replace(' ', 'T')}Z`;
+  return new Date(utc).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane' });
+}
+
 function methodLabel(type: string): string {
   if (type === 'yes_no') return 'Yes / No';
   if (type === 'multiple_choice') return 'Multiple choice';
@@ -194,8 +199,20 @@ function formatBallot(ballot: QuestionResult['publicBallots'][number]['ballot'])
   return 'No recorded selection';
 }
 
-function PublicBallotsDisplay({ ballots }: { ballots: QuestionResult['publicBallots'] }) {
-  if (!ballots || ballots.length === 0) return null;
+function PublicBallotsDisplay({ ballots, suppressed, threshold }: {
+  ballots: QuestionResult['publicBallots'];
+  suppressed: boolean;
+  threshold: number;
+}) {
+  if ((!ballots || ballots.length === 0) && !suppressed) return null;
+
+  if (suppressed) {
+    return (
+      <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+        Individual anonymous ballots are not publicly listed because this election received fewer than the configured minimum of {threshold} ballots. Voters can still use the private receipt lookup above.
+      </div>
+    );
+  }
 
   return (
     <div className="mt-6 border-t border-gray-200 pt-6">
@@ -266,7 +283,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
     );
   }
 
-  const { plebiscite, participation, questions } = data;
+  const { plebiscite, participation, questions, countRuns } = data;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -348,7 +365,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
         </div>
 
         {/* Results */}
-        {plebiscite.privacyMode === 'encrypted' && <ReceiptLookup slug={slug} />}
+        <ReceiptLookup slug={slug} />
 
         <div className="space-y-12">
           {questions.length === 0 ? (
@@ -382,7 +399,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
                     </div>
                     <div className="card-body">
                       <IRVResultsDisplay results={question.results} />
-                      <PublicBallotsDisplay ballots={question.publicBallots} />
+                      <PublicBallotsDisplay ballots={question.publicBallots} suppressed={plebiscite.ballotPublicationMode === 'threshold' && participation.totalVotes < plebiscite.privacyThreshold} threshold={plebiscite.privacyThreshold} />
                     </div>
                   </div>
                 ) : question.type === 'condorcet' ? (
@@ -394,7 +411,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
                     />
                     <div className="card mt-4">
                       <div className="card-body">
-                        <PublicBallotsDisplay ballots={question.publicBallots} />
+                        <PublicBallotsDisplay ballots={question.publicBallots} suppressed={plebiscite.ballotPublicationMode === 'threshold' && participation.totalVotes < plebiscite.privacyThreshold} threshold={plebiscite.privacyThreshold} />
                       </div>
                     </div>
                   </div>
@@ -408,7 +425,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
                     />
                     <div className="card mt-4">
                       <div className="card-body">
-                      <PublicBallotsDisplay ballots={question.publicBallots} />
+                      <PublicBallotsDisplay ballots={question.publicBallots} suppressed={plebiscite.ballotPublicationMode === 'threshold' && participation.totalVotes < plebiscite.privacyThreshold} threshold={plebiscite.privacyThreshold} />
                       </div>
                     </div>
                   </>
@@ -417,6 +434,40 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
             ))
           )}
         </div>
+
+        {countRuns.length > 0 && (
+          <section className="mt-14 space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Alternative count runs</h2>
+              <p className="mt-2 text-gray-600">These audited counts use the same frozen ballots and do not replace the declared result above.</p>
+            </div>
+            {countRuns.map(run => {
+              const question = questions.find(item => item.id === run.questionId);
+              return (
+                <div key={run.id} className="card">
+                  <div className="card-header">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">Count run #{run.id}: {run.questionTitle}</h3>
+                        <p className="mt-1 text-sm text-gray-600">{run.method.toUpperCase()} · {run.status === 'pending_tie' ? 'Paused for an audited tie decision' : 'Complete'} · {formatAuditDate(run.createdAt)} · {run.createdByName || 'Election official'}</p>
+                      </div>
+                      <span className="badge badge-gray">Alternative count</span>
+                    </div>
+                  </div>
+                  <div className="card-body">
+                    {run.method === 'irv'
+                      ? <IRVResultsDisplay results={run.result} />
+                      : <CondorcetResults title="Condorcet count details" results={run.result} options={question?.options || []} />}
+                    <div className="mt-5 grid gap-2 border-t border-gray-200 pt-4 font-mono text-xs text-gray-500">
+                      <div className="break-all">Source ballots: {run.sourceBallotHash}</div>
+                      <div className="break-all">Result: {run.resultHash}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        )}
 
         {/* Footer Information */}
         <div className="mt-16 overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50">

@@ -13,6 +13,8 @@ let post: (request: NextRequest) => Promise<Response>;
 let getResults: typeof import('@/lib/results').getPlebisciteResults;
 let sessionId: string;
 let questionId: number;
+let ownerId: number;
+let createResultCountRun: typeof import('@/lib/result-count-runs').createResultCountRun;
 
 function request(body: Record<string, unknown>): NextRequest {
   return new NextRequest('http://localhost/api/admin/irv-ties', {
@@ -30,8 +32,9 @@ beforeAll(async () => {
   db = (await import('@/lib/db')).default;
   post = (await import('@/app/api/admin/irv-ties/route')).POST;
   getResults = (await import('@/lib/results')).getPlebisciteResults;
+  createResultCountRun = (await import('@/lib/result-count-runs')).createResultCountRun;
 
-  const ownerId = Number(db.prepare(`
+  ownerId = Number(db.prepare(`
     INSERT INTO admin_users (email, name, password_hash, role, authority_role, active)
     VALUES ('owner@example.com', 'Owner', 'hash', 'admin', 'owner', 1)
   `).run().lastInsertRowid);
@@ -67,8 +70,12 @@ describe('POST /api/admin/irv-ties', () => {
       round: 1, type: 'exclusion', tiedCandidates: ['Saturday', 'Thursday', 'Tuesday', 'Wednesday']
     });
 
+    const countRun = createResultCountRun({ questionId, method: 'irv', adminUserId: ownerId });
+    expect(countRun.status).toBe('pending_tie');
+
     const response = await post(request({
       questionId,
+      countRunId: countRun.id,
       round: 1,
       type: 'exclusion',
       selectedCandidate: 'Tuesday',
@@ -83,6 +90,8 @@ describe('POST /api/admin/irv-ties', () => {
       selected_candidate: 'Tuesday', method: 'drawing_lots', note: 'Draw observed by the Returning Officer.'
     });
     expect(db.prepare("SELECT COUNT(*) AS count FROM admin_audit_log WHERE action = 'irv.tie.resolve' AND target_id = ?").get(String(questionId)).count).toBe(1);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM admin_audit_log WHERE action = 'result_count_run.create'").get().count).toBe(1);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM result_count_runs WHERE question_id = ?').get(questionId).count).toBe(2);
     expect(getResults('irv-tie-election').questions[0].results.rounds[0].eliminated).toEqual(['Tuesday']);
   });
 
