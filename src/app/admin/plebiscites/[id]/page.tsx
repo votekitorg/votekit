@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { canAccessElection, canManageElection, canManageElectionTeam, getAdminSessionFromCookies, listAdminUsers, listElectionTeam, listPendingAdminInvitations } from '@/lib/auth';
 import AdminLayout from '@/components/AdminLayout';
+import LinkifiedText from '@/components/LinkifiedText';
 import db from '@/lib/db';
 import Link from 'next/link';
 import PlebisciteManager from './PlebisciteManager';
@@ -340,7 +341,9 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
               
               <div>
                 <dt className="text-sm font-medium text-gray-500">Description</dt>
-                <dd className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">{plebiscite.description}</dd>
+                <dd className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">
+                  <LinkifiedText text={plebiscite.description} />
+                </dd>
               </div>
 
               {plebiscite.info_url && (

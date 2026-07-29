@@ -3,6 +3,7 @@
 import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import VoteForm from '@/components/VoteForm';
+import LinkifiedText from '@/components/LinkifiedText';
 import { csrfFetch } from '@/lib/csrf-client';
 import { parseElectionCloseDate } from '@/lib/election-window';
 import { encryptBallot } from '@/lib/browser-ballot-crypto';
@@ -543,7 +544,7 @@ export default function VotingPage({ params }: VotingPageProps) {
               <div className="card-body">
                 <div className="prose prose-gray max-w-none">
                   <div className="whitespace-pre-wrap text-gray-700 leading-relaxed">
-                    {plebiscite.description}
+                    <LinkifiedText text={plebiscite.description} />
                   </div>
                 </div>
 
@@ -599,7 +600,7 @@ export default function VotingPage({ params }: VotingPageProps) {
                 <div className="card mt-6 text-left">
                   <div className="card-body">
                     <div className="whitespace-pre-wrap text-gray-700 leading-relaxed">
-                      {plebiscite.description}
+                      <LinkifiedText text={plebiscite.description} />
                     </div>
                   </div>
                 </div>
