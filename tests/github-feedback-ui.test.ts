@@ -33,4 +33,13 @@ describe('GitHub feedback UI guardrails', () => {
     expect(dashboard).toContain('card min-w-0 overflow-hidden');
     expect(dashboard).toContain('w-full max-w-full overflow-x-auto overscroll-x-contain');
   });
+
+  it('shows each ballot-preview rank once and separates it from numbered option text', () => {
+    const voteForm = fs.readFileSync(path.join(root, 'src/components/VoteForm.tsx'), 'utf8');
+
+    expect(voteForm).toContain('aria-label={`Rank ${index + 1}`}');
+    expect(voteForm).toContain('rounded-full bg-primary');
+    expect(voteForm).not.toContain('<span className="font-medium">#{index + 1}:</span>');
+    expect(voteForm).not.toContain('list-decimal list-inside');
+  });
 });
