@@ -36,6 +36,7 @@ function payload(title = 'Draft board election') {
       description: 'Choose the board representative.',
       info_url: '',
       access_mode: 'anonymous_codes',
+      results_visibility: 'public',
       sms_enabled: false,
       opening_mode: 'immediate',
       open_date: '2030-01-01T09:00',
@@ -122,8 +123,8 @@ describe('autosaved election setup drafts', () => {
     }));
     expect(published.status).toBe(200);
     expect(db.prepare('SELECT id FROM election_setup_drafts WHERE id = ?').get(validDraft.id)).toBeUndefined();
-    expect(db.prepare('SELECT status FROM plebiscites WHERE title = ?').get('Published from draft'))
-      .toEqual({ status: 'draft' });
+    expect(db.prepare('SELECT status, results_visibility FROM plebiscites WHERE title = ?').get('Published from draft'))
+      .toEqual({ status: 'draft', results_visibility: 'public' });
     const publishedBody = await published.json();
     const locked = await electionPut(request('http://localhost/api/admin/plebiscites', 'PUT', 'draft-owner-session', {
       id: publishedBody.plebiscite.id,
@@ -154,8 +155,12 @@ describe('autosaved election setup drafts', () => {
     expect(dashboard).toContain('Continue editing');
     expect(form).toContain('Draft autosaved');
     expect(form).toContain('Copy proofing link');
+    expect(form).toContain('Who can view the final results?');
+    expect(form).toContain('Anyone with the results link');
+    expect(form).toContain('Eligible voters only');
     expect(form).toContain("'Publish Election'");
     expect(proof).toContain('Private proofing copy');
     expect(proof).toContain('Voting is disabled');
+    expect(proof).toContain('Final results');
   });
 });
