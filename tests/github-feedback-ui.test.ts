@@ -42,4 +42,17 @@ describe('GitHub feedback UI guardrails', () => {
     expect(voteForm).not.toContain('<span className="font-medium">#{index + 1}:</span>');
     expect(voteForm).not.toContain('list-decimal list-inside');
   });
+
+  it('shows election context and explains codes prefilled by direct personal links', () => {
+    const votingPage = fs.readFileSync(path.join(root, 'src/app/vote/[slug]/page.tsx'), 'utf8');
+
+    expect(votingPage).toContain("{plebiscite.title}");
+    expect(votingPage).toContain("{plebiscite.description}");
+    expect(votingPage).toContain("'Your voting code is ready'");
+    expect(votingPage).toContain("'Enter your voting code'");
+    expect(votingPage).toContain(
+      "'Your voting code has been entered automatically from your personal link. Click “Continue to ballot” below.'"
+    );
+    expect(votingPage).toContain("setIsPrefilledAccessCode(true)");
+  });
 });

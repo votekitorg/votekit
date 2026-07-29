@@ -57,6 +57,7 @@ export default function VotingPage({ params }: VotingPageProps) {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [accessCode, setAccessCode] = useState('');
+  const [isPrefilledAccessCode, setIsPrefilledAccessCode] = useState(false);
   const [resultAccessCode, setResultAccessCode] = useState('');
   const [phone, setPhone] = useState('');
   const [smsCode, setSmsCode] = useState('');
@@ -168,6 +169,7 @@ export default function VotingPage({ params }: VotingPageProps) {
     const codeMatch = window.location.hash.match(/^#code=(.+)$/u);
     if (plebiscite.access_mode === 'anonymous_codes' && codeMatch) {
       setAccessCode(decodeURIComponent(codeMatch[1]));
+      setIsPrefilledAccessCode(true);
       setStep('accessCode');
       return;
     }
@@ -590,20 +592,40 @@ export default function VotingPage({ params }: VotingPageProps) {
         )}
 
         {step === 'accessCode' && (
-          <div className="max-w-md mx-auto">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Enter your voting code</h2>
-              <p className="text-gray-600">Each code unlocks one anonymous ballot.</p>
+          <div className="space-y-8">
+            <div className="max-w-3xl mx-auto text-center">
+              <h2 className="text-3xl font-bold text-gray-900">{plebiscite.title}</h2>
+              {plebiscite.description && (
+                <div className="card mt-6 text-left">
+                  <div className="card-body">
+                    <div className="whitespace-pre-wrap text-gray-700 leading-relaxed">
+                      {plebiscite.description}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="card"><div className="card-body">
-              <form onSubmit={handleAccessCodeSubmit} className="space-y-4">
-                <input aria-label="Voting code" value={accessCode} onChange={event => setAccessCode(event.target.value.toUpperCase())}
-                  className="input-field text-center font-mono tracking-wider" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" autoComplete="one-time-code" required />
-                {error && <div className="alert-error">{error}</div>}
-                <button className="btn-primary w-full" disabled={isVerifying}>{isVerifying ? 'Checking code…' : 'Continue to ballot'}</button>
-              </form>
-            </div></div>
-            <div className="text-center mt-4"><button onClick={() => setStep('info')} className="text-sm text-gray-600 hover:text-primary">← Back to Information</button></div>
+            <div className="max-w-md mx-auto">
+              <div className="text-center mb-8">
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                  {isPrefilledAccessCode ? 'Your voting code is ready' : 'Enter your voting code'}
+                </h3>
+                <p className="text-gray-600">
+                  {isPrefilledAccessCode
+                    ? 'Your voting code has been entered automatically from your personal link. Click “Continue to ballot” below.'
+                    : 'Each code unlocks one anonymous ballot.'}
+                </p>
+              </div>
+              <div className="card"><div className="card-body">
+                <form onSubmit={handleAccessCodeSubmit} className="space-y-4">
+                  <input aria-label="Voting code" value={accessCode} onChange={event => setAccessCode(event.target.value.toUpperCase())}
+                    className="input-field text-center font-mono tracking-wider" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" autoComplete="one-time-code" required />
+                  {error && <div className="alert-error">{error}</div>}
+                  <button className="btn-primary w-full" disabled={isVerifying}>{isVerifying ? 'Checking code…' : 'Continue to ballot'}</button>
+                </form>
+              </div></div>
+              <div className="text-center mt-4"><button onClick={() => setStep('info')} className="text-sm text-gray-600 hover:text-primary">← Back to Information</button></div>
+            </div>
           </div>
         )}
 
