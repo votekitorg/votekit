@@ -14,7 +14,7 @@ describe('GitHub feedback UI guardrails', () => {
 
   it('requires an explicit fixed closing time instead of silently pre-filling seven days', () => {
     const form = fs.readFileSync(path.join(root, 'src/app/admin/plebiscites/new/CreatePlebisciteForm.tsx'), 'utf8');
-    expect(form).toContain("close_date: ''");
+    expect(form).toContain("close_date: typeof savedForm.close_date === 'string' ? savedForm.close_date : ''");
     expect(form).not.toContain('Defaults to seven days from now');
     expect(form).toContain('Choose this deliberately');
   });

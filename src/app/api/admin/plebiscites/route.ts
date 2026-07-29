@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title, description, info_url, open_date, close_date, opening_mode = 'immediate', questions = [], access_mode = 'voter_roll', sms_enabled = false } = body;
+    const { title, description, info_url, open_date, close_date, opening_mode = 'immediate', questions = [], access_mode = 'voter_roll', sms_enabled = false, setup_draft_id } = body;
 
     // Validation
     if (typeof title !== 'string' || !title.trim() || typeof description !== 'string' || !description.trim()) {
@@ -126,6 +126,17 @@ export async function POST(request: NextRequest) {
     }
     if (!['voter_roll', 'anonymous_codes'].includes(access_mode)) {
       return NextResponse.json({ error: 'Invalid voter access mode' }, { status: 400 });
+    }
+    const setupDraftId = setup_draft_id === null || setup_draft_id === undefined ? null : Number(setup_draft_id);
+    if (setupDraftId !== null) {
+      if (!Number.isInteger(setupDraftId) || setupDraftId < 1) {
+        return NextResponse.json({ error: 'Invalid setup draft' }, { status: 400 });
+      }
+      const ownedDraft = db.prepare(`
+        SELECT id FROM election_setup_drafts
+        WHERE id = ? AND created_by_admin_user_id = ?
+      `).get(setupDraftId, adminSession.adminUserId);
+      if (!ownedDraft) return NextResponse.json({ error: 'Setup draft not found' }, { status: 404 });
     }
 
     if (!Array.isArray(questions) || questions.length === 0 || questions.length > MAX_QUESTIONS) {
@@ -179,8 +190,8 @@ export async function POST(request: NextRequest) {
     const createElection = db.transaction(() => {
       const privacyMode = encryptedBallotsEnabled && access_mode === 'voter_roll' ? 'encrypted' : 'legacy';
       const result = db.prepare(`
-        INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, opening_mode, status, privacy_mode, created_by_admin_user_id, access_mode, sms_enabled)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)
+        INSERT INTO plebiscites (slug, title, description, info_url, open_date, close_date, opening_mode, status, privacy_mode, created_by_admin_user_id, access_mode, sms_enabled, configuration_published_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `).run(slug, normalizedTitle, normalizedDescription, normalizedInfoUrl, effectiveOpenDate, close_date, opening_mode, privacyMode, adminSession.adminUserId, access_mode, sms_enabled ? 1 : 0);
       const plebisciteId = Number(result.lastInsertRowid);
       if (adminSession.role === 'returning_officer') {
@@ -206,12 +217,19 @@ export async function POST(request: NextRequest) {
         );
       });
 
+      if (setupDraftId !== null) {
+        db.prepare(`
+          DELETE FROM election_setup_drafts
+          WHERE id = ? AND created_by_admin_user_id = ?
+        `).run(setupDraftId, adminSession.adminUserId);
+      }
+
       recordAdminAuditLog({
         adminUserId: adminSession.adminUserId,
         action: 'plebiscite.create',
         targetType: 'plebiscite',
         targetId: plebisciteId,
-        details: { slug, title: normalizedTitle, questionCount: questions.length, privacyMode, accessMode: access_mode, openingMode: opening_mode, scheduledOpenDate: opening_mode === 'scheduled' ? effectiveOpenDate : null }
+        details: { slug, title: normalizedTitle, questionCount: questions.length, privacyMode, accessMode: access_mode, openingMode: opening_mode, scheduledOpenDate: opening_mode === 'scheduled' ? effectiveOpenDate : null, setupDraftId }
       });
       return plebisciteId;
     });
@@ -414,6 +432,12 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(
         { error: 'Can only edit draft elections' },
         { status: 400 }
+      );
+    }
+    if (plebiscite.configuration_published_at && [title, description, info_url, open_date, close_date, opening_mode, access_mode, sms_enabled].some(value => value !== undefined)) {
+      return NextResponse.json(
+        { error: 'Published election wording, questions, access method and voting dates are locked' },
+        { status: 409 }
       );
     }
 

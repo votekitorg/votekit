@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
 import LinkifiedText from '@/components/LinkifiedText';
@@ -15,26 +15,41 @@ interface Question {
   preferentialType?: 'compulsory' | 'optional'; // Only applies to ranked_choice and condorcet
 }
 
-export default function CreatePlebisciteForm({ currentUser }: { currentUser: { email: string; name: string | null; role: 'owner' | 'returning_officer' | 'admin' | 'observer' } }) {
+interface SetupDraft {
+  id: number;
+  payload: { formData?: Record<string, unknown>; questions?: Question[] };
+  currentStep: number;
+  proofToken: string;
+}
+
+export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
+  currentUser: { email: string; name: string | null; role: 'owner' | 'returning_officer' | 'admin' | 'observer' };
+  initialDraft: SetupDraft | null;
+}) {
   const now = new Date();
   const toBrisbaneInput = (date: Date) => new Date(date.getTime() + 10 * 60 * 60 * 1000).toISOString().slice(0, 16);
   const defaultOpenDate = toBrisbaneInput(new Date(now.getTime() + 60 * 60 * 1000));
+  const savedForm = initialDraft?.payload?.formData || {};
 
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(initialDraft?.currentStep || 1);
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    info_url: '',
-    access_mode: 'voter_roll' as 'voter_roll' | 'anonymous_codes',
-    sms_enabled: false,
-    opening_mode: 'immediate' as 'immediate' | 'scheduled',
-    open_date: defaultOpenDate,
-    close_date: ''
+    title: typeof savedForm.title === 'string' ? savedForm.title : '',
+    description: typeof savedForm.description === 'string' ? savedForm.description : '',
+    info_url: typeof savedForm.info_url === 'string' ? savedForm.info_url : '',
+    access_mode: (savedForm.access_mode === 'anonymous_codes' ? 'anonymous_codes' : 'voter_roll') as 'voter_roll' | 'anonymous_codes',
+    sms_enabled: savedForm.sms_enabled === true,
+    opening_mode: (savedForm.opening_mode === 'scheduled' ? 'scheduled' : 'immediate') as 'immediate' | 'scheduled',
+    open_date: typeof savedForm.open_date === 'string' ? savedForm.open_date : defaultOpenDate,
+    close_date: typeof savedForm.close_date === 'string' ? savedForm.close_date : ''
   });
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questions, setQuestions] = useState<Question[]>(Array.isArray(initialDraft?.payload?.questions) ? initialDraft.payload.questions : []);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [draftId, setDraftId] = useState<number | null>(initialDraft?.id || null);
+  const [proofToken, setProofToken] = useState(initialDraft?.proofToken || '');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>(initialDraft ? 'saved' : 'idle');
+  const inFlightSave = useRef<Promise<number | null> | null>(null);
   
   const router = useRouter();
 
@@ -44,6 +59,56 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
     { id: 3, name: 'Voting Timing', description: 'Open and close settings' },
     { id: 4, name: 'Review', description: 'Confirm and create' }
   ];
+
+  const persistDraft = useCallback(async (step = currentStep) => {
+    let targetDraftId = draftId;
+    if (inFlightSave.current) {
+      targetDraftId = await inFlightSave.current;
+    }
+    const payload = { formData, questions };
+    const hasContent = Boolean(formData.title.trim() || formData.description.trim() || formData.close_date || questions.length);
+    if (!targetDraftId && !hasContent) return null;
+    setSaveStatus('saving');
+    const save = (async (): Promise<number | null> => {
+      if (targetDraftId) {
+        const response = await csrfFetch('/api/admin/election-drafts', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: targetDraftId, payload, currentStep: step })
+        });
+        if (!response.ok) throw new Error('Could not save draft');
+        return targetDraftId;
+      } else {
+        const response = await csrfFetch('/api/admin/election-drafts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payload, currentStep: step })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Could not save draft');
+        setDraftId(result.draft.id);
+        setProofToken(result.draft.proofToken);
+        router.replace(`/admin/plebiscites/new?draft=${result.draft.id}`);
+        return result.draft.id;
+      }
+    })();
+    inFlightSave.current = save;
+    try {
+      const savedId = await save;
+      setSaveStatus('saved');
+      return savedId;
+    } catch {
+      setSaveStatus('error');
+      return null;
+    } finally {
+      inFlightSave.current = null;
+    }
+  }, [currentStep, draftId, formData, questions, router]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void persistDraft(); }, 700);
+    return () => window.clearTimeout(timer);
+  }, [persistDraft]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -213,6 +278,7 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
     setSuccess('');
 
     try {
+      const savedDraftId = await persistDraft(4);
       const response = await csrfFetch('/api/admin/plebiscites', {
         method: 'POST',
         headers: {
@@ -220,7 +286,8 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
         },
         body: JSON.stringify({
           ...formData,
-          questions
+          questions,
+          setup_draft_id: savedDraftId || draftId
         }),
       });
 
@@ -229,7 +296,7 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
       if (response.ok && result.success) {
         router.push(`/admin/plebiscites/${result.plebiscite.id}`);
       } else {
-        setError(result.error || 'Failed to create election');
+        setError(result.error || 'Failed to publish election');
       }
     } catch (error) {
       setError('An error occurred. Please try again.');
@@ -238,12 +305,40 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
     }
   };
 
+  const saveAndExit = async () => {
+    await persistDraft();
+    router.push('/admin');
+  };
+
+  const copyProofLink = async () => {
+    if (!proofToken) return;
+    await navigator.clipboard.writeText(`${window.location.origin}/proof/${proofToken}`);
+    setSuccess('Proofing link copied');
+    window.setTimeout(() => setSuccess(''), 2500);
+  };
+
   return (
     <AdminLayout currentUser={currentUser}>
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Create New Election</h1>
-          <p className="text-gray-600">Follow these steps to set up your election. You will lead its election team and can invite Admins and Observers after creation.</p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">{draftId ? 'Edit Election Draft' : 'Create New Election'}</h1>
+              <p className="text-gray-600">Your setup is saved as a draft until you deliberately publish it.</p>
+            </div>
+            <div className="text-right text-sm">
+              <div className={saveStatus === 'error' ? 'font-medium text-red-700' : 'text-gray-500'}>
+                {saveStatus === 'saving' && 'Saving draft…'}
+                {saveStatus === 'saved' && 'Draft autosaved'}
+                {saveStatus === 'error' && 'Draft could not be saved'}
+              </div>
+              {proofToken && (
+                <button type="button" onClick={copyProofLink} className="mt-1 font-medium text-primary hover:underline">
+                  Copy proofing link
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Progress Steps */}
@@ -640,8 +735,8 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
             <div className="space-y-6">
               <div className="card">
                 <div className="card-header">
-                  <h2 className="text-lg font-semibold text-gray-900">Review & Create</h2>
-                  <p className="text-sm text-gray-600 mt-1">Review your election before publishing</p>
+                  <h2 className="text-lg font-semibold text-gray-900">Review & Publish</h2>
+                  <p className="text-sm text-gray-600 mt-1">Proof the complete ballot before creating the election</p>
                 </div>
                 <div className="card-body space-y-6">
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -652,7 +747,7 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
                       <div className="ml-3">
                         <h3 className="text-sm font-medium text-yellow-800">Review carefully</h3>
                         <p className="text-sm text-yellow-700 mt-1">
-                          Once created, you'll still be able to manage voter lists and open/close the election, but you cannot edit questions or basic information.
+                          Publishing creates the election and locks its questions and core wording for election integrity. You can keep this as an editable draft, share the private proofing link, and return later.
                         </p>
                       </div>
                     </div>
@@ -740,16 +835,19 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
               )}
               <button
                 type="button"
-                onClick={() => router.back()}
+                onClick={saveAndExit}
                 className="btn-secondary"
               >
-                Cancel
+                Save & Exit
               </button>
             </div>
             
             <div className="flex items-center space-x-4">
               {error && (
                 <div className="alert-error max-w-md">{error}</div>
+              )}
+              {success && (
+                <div className="text-sm font-medium text-green-700">{success}</div>
               )}
               
               {currentStep < 4 ? (
@@ -770,10 +868,10 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
                   {isSubmitting ? (
                     <>
                       <div className="spinner mr-2"></div>
-                      Creating Election...
+                      Publishing Election...
                     </>
                   ) : (
-                    'Create Election'
+                    'Publish Election'
                   )}
                 </button>
               )}

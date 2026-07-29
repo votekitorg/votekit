@@ -71,7 +71,7 @@ assert(resultsLib.includes('ballot_publication_mode') && resultsLib.includes('pr
 assert(db.includes('privacy_threshold = 20') && db.includes("ballot_publication_mode IN ('threshold', 'always')"), 'anonymous-ballot publication defaults to a threshold of 20 with an explicit always-publish mode');
 assert(resultsRoute.includes("^[a-f0-9]{32}$") && resultsRoute.includes('published_ballots'), 'private receipt lookup supports legacy and encrypted ballots below the public threshold');
 assert(previewRoute.includes('hashAccessToken') && previewRoute.includes('hashLinkToken') && !previewRoute.includes('createVoterSession'), 'pre-opening previews require hashed private credentials without consuming them or creating sessions');
-assert(createElectionForm.includes("close_date: ''") && !createElectionForm.includes('Defaults to seven days from now'), 'election creation requires a deliberate fixed closing time');
+assert(createElectionForm.includes("close_date: typeof savedForm.close_date === 'string' ? savedForm.close_date : ''") && !createElectionForm.includes('Defaults to seven days from now'), 'election creation requires a deliberate fixed closing time');
 assert(globalCss.includes('color-scheme: light') && globalCss.includes('bg-white text-gray-900'), 'form controls remain readable when the device prefers dark mode');
 assert(countRuns.includes('sourceBallotHash') && countRuns.includes('resultHash') && countRuns.includes('settings_json'), 'alternative count runs retain method settings and source/result fingerprints');
 assert(countRunsRoute.includes('canManageElection') && countRunsRoute.includes("['owner', 'returning_officer']"), 'alternative count creation is restricted to authorised election officials');

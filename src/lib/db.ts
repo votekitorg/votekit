@@ -344,6 +344,7 @@ function runMigrations() {
   runResultsAccessMigration(database);
   runEmailDeliveryMigrations(database);
   runGitHubFeedbackMigrations(database);
+  runElectionSetupDraftMigrations(database);
 }
 
 function tableInfo(database: Database.Database, tableName: string): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {
@@ -496,6 +497,34 @@ function runGitHubFeedbackMigrations(database: Database.Database): void {
     `);
   });
   migrateFeedback();
+}
+
+function runElectionSetupDraftMigrations(database: Database.Database): void {
+  if (!hasColumn(database, 'plebiscites', 'configuration_published_at')) {
+    database.exec('ALTER TABLE plebiscites ADD COLUMN configuration_published_at DATETIME');
+  }
+  database.exec(`
+    UPDATE plebiscites
+    SET configuration_published_at = COALESCE(created_at, CURRENT_TIMESTAMP)
+    WHERE configuration_published_at IS NULL
+  `);
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS election_setup_drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_by_admin_user_id INTEGER NOT NULL,
+      title TEXT NOT NULL DEFAULT 'Untitled election',
+      payload_json TEXT NOT NULL,
+      current_step INTEGER NOT NULL DEFAULT 1 CHECK(current_step BETWEEN 1 AND 4),
+      proof_token TEXT UNIQUE NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by_admin_user_id) REFERENCES admin_users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_election_setup_drafts_owner
+      ON election_setup_drafts(created_by_admin_user_id, updated_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_election_setup_drafts_proof
+      ON election_setup_drafts(proof_token);
+  `);
 }
 
 function runPrivacyMigrations(database: Database.Database): void {

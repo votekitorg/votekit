@@ -20,11 +20,25 @@ interface Plebiscite {
   archived_at?: string | null;
 }
 
+interface SetupDraft {
+  id: number;
+  title: string;
+  current_step: number;
+  proof_token: string;
+  updated_at: string;
+}
+
 export const dynamic = 'force-dynamic';
 
 async function getDashboardData(session: AdminSession) {
   const accessibleIds = listAccessibleElectionIds(session);
-  if (accessibleIds?.length === 0) return { plebiscites: [], archivedPlebiscites: [], stats: { totalPlebiscites: 0, totalVoters: 0, totalVotes: 0, activePlebiscites: 0 } };
+  const setupDrafts = canManageElections(session.role) ? db.prepare(`
+    SELECT id, title, current_step, proof_token, updated_at
+    FROM election_setup_drafts
+    WHERE created_by_admin_user_id = ?
+    ORDER BY updated_at DESC
+  `).all(session.adminUserId) as SetupDraft[] : [];
+  if (accessibleIds?.length === 0) return { plebiscites: [], archivedPlebiscites: [], setupDrafts, stats: { totalPlebiscites: 0, totalVoters: 0, totalVotes: 0, activePlebiscites: 0 } };
   const scope = accessibleIds
     ? `WHERE p.archived_at IS NULL AND p.id IN (${accessibleIds.map(() => '?').join(',')})`
     : 'WHERE p.archived_at IS NULL';
@@ -66,6 +80,7 @@ async function getDashboardData(session: AdminSession) {
   return {
     plebiscites,
     archivedPlebiscites,
+    setupDrafts,
     stats: {
       totalPlebiscites: totalPlebiscites.count,
       totalVoters: totalVoters.count,
@@ -89,7 +104,7 @@ function formatDate(dateString: string): string {
 function getStatusBadge(status: string) {
   switch (status) {
     case 'draft':
-      return <span className="badge badge-gray">Draft</span>;
+      return <span className="badge badge-gray">Published · not open</span>;
     case 'open':
       return <span className="badge badge-green">Open</span>;
     case 'closed':
@@ -108,7 +123,7 @@ export default async function AdminDashboard() {
 
   await reconcileScheduledElections();
 
-  const { plebiscites, archivedPlebiscites, stats } = await getDashboardData(adminSession);
+  const { plebiscites, archivedPlebiscites, setupDrafts, stats } = await getDashboardData(adminSession);
   const canManage = canManageElections(adminSession.role);
 
   return (
@@ -215,6 +230,35 @@ export default async function AdminDashboard() {
             </div>
           </div>
         </div>
+
+        {setupDrafts.length > 0 && (
+          <div className="card">
+            <div className="card-header">
+              <h2 className="text-lg font-semibold text-gray-900">Election Setup Drafts</h2>
+              <p className="mt-1 text-sm text-gray-600">Autosaved and still fully editable. These are not published elections.</p>
+            </div>
+            <div className="divide-y divide-gray-200">
+              {setupDrafts.map(draft => (
+                <div key={draft.id} className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="font-medium text-gray-900">{draft.title}</div>
+                    <div className="text-sm text-gray-500">
+                      Step {draft.current_step} of 4 · saved {formatDate(draft.updated_at)}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-4 text-sm font-medium">
+                    <Link href={`/proof/${draft.proof_token}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
+                      View proof
+                    </Link>
+                    <Link href={`/admin/plebiscites/new?draft=${draft.id}`} className="text-primary hover:text-primary-dark">
+                      Continue editing
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Recent Elections */}
         <div className="card min-w-0 overflow-hidden">
