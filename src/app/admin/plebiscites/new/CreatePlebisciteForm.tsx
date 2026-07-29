@@ -37,6 +37,7 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
     description: typeof savedForm.description === 'string' ? savedForm.description : '',
     info_url: typeof savedForm.info_url === 'string' ? savedForm.info_url : '',
     access_mode: (savedForm.access_mode === 'anonymous_codes' ? 'anonymous_codes' : 'voter_roll') as 'voter_roll' | 'anonymous_codes',
+    results_visibility: (savedForm.results_visibility === 'public' ? 'public' : 'eligible') as 'eligible' | 'public',
     sms_enabled: savedForm.sms_enabled === true,
     opening_mode: (savedForm.opening_mode === 'scheduled' ? 'scheduled' : 'immediate') as 'immediate' | 'scheduled',
     open_date: typeof savedForm.open_date === 'string' ? savedForm.open_date : defaultOpenDate,
@@ -407,6 +408,21 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
                     <span><strong className="block text-sm text-gray-900">Allow text-message verification</strong><span className="text-sm text-gray-600">Phone-only voters can verify through Firebase SMS instead of email.</span></span>
                   </label>
                 )}
+                <fieldset>
+                  <legend className="text-sm font-medium text-gray-700">Who can view the final results? *</legend>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <label className={`cursor-pointer rounded-xl border-2 p-4 ${formData.results_visibility === 'public' ? 'border-primary bg-green-50' : 'border-gray-200 bg-white'}`}>
+                      <input type="radio" name="results_visibility" value="public" checked={formData.results_visibility === 'public'} onChange={handleInputChange} className="mr-2" />
+                      <strong className="text-gray-900">Anyone with the results link</strong>
+                      <span className="mt-1 block text-sm text-gray-600">Simplest for broad member polls. Voters will not need to save or re-enter a voting code to see the results.</span>
+                    </label>
+                    <label className={`cursor-pointer rounded-xl border-2 p-4 ${formData.results_visibility === 'eligible' ? 'border-primary bg-green-50' : 'border-gray-200 bg-white'}`}>
+                      <input type="radio" name="results_visibility" value="eligible" checked={formData.results_visibility === 'eligible'} onChange={handleInputChange} className="mr-2" />
+                      <strong className="text-gray-900">Eligible voters only</strong>
+                      <span className="mt-1 block text-sm text-gray-600">Viewers must verify eligibility again after voting closes.</span>
+                    </label>
+                  </div>
+                </fieldset>
                 <div>
                   <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
                     Election Title *
@@ -771,6 +787,10 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
                       <div>
                         <dt className="text-sm font-medium text-gray-500">Closing</dt>
                         <dd className="text-sm text-gray-900">{parseElectionCloseDate(formData.close_date).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane' })}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Final results access</dt>
+                        <dd className="text-sm text-gray-900">{formData.results_visibility === 'public' ? 'Anyone with the results link' : 'Eligible voters only (verification required)'}</dd>
                       </div>
                       <div className="sm:col-span-2">
                         <dt className="text-sm font-medium text-gray-500">Description</dt>

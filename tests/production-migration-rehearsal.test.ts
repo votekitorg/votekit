@@ -22,7 +22,7 @@ describe.skipIf(!rehearsalDatabase)('production database migration rehearsal', (
 
     expect(electionColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
       'access_mode', 'sms_enabled', 'opening_mode', 'actual_opened_at', 'scheduled_open_attempted_at', 'scheduled_open_error',
-      'ballot_publication_mode', 'privacy_threshold', 'configuration_published_at'
+      'ballot_publication_mode', 'privacy_threshold', 'results_visibility', 'configuration_published_at'
     ]));
     expect(sessionColumns.map((column) => column.name)).toEqual(expect.arrayContaining(['voter_roll_id', 'anonymous_code_id', 'credential_type']));
     expect(tables.map((table) => table.name)).toEqual(expect.arrayContaining([

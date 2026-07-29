@@ -123,12 +123,19 @@ The front end, API validation, database schema, and tabulation logic must agree 
 
 After voting closes, results should include:
 
+- A setup-stage choice between public link access and eligibility-verified
+  access. Public-result elections must not ask voters to retain voting
+  credentials solely to see results.
 - Final tallies.
 - Aggregate results and method-specific tabulation details regardless of whether individual ballots are published.
 - Private receipt lookup after close regardless of the public ballot threshold.
 - Full anonymous ballots with receipt codes only when at least 20 ballots were accepted by default, a higher Owner-selected threshold was met, or the Owner explicitly selected always-publish before opening.
 - Method-specific tabulation details, including IRV rounds or Condorcet pairwise comparisons.
 - Participation count.
+- An optional, collapsed verification-receipt action after voting. The
+  downloaded receipt contains the election name, results link and clearly
+  labelled receipt code or codes without burdening voters who do not want to
+  verify their ballot later.
 - Enough downloadable data for independent re-tallying where anonymous-ballot publication is enabled.
 - Immutable alternative IRV and Condorcet count runs for compatible ranked ballots, including the method, result snapshot, applicable tie decisions, administrator, timestamp and source/result fingerprints. Alternative runs never replace the declared result.
 

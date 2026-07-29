@@ -66,6 +66,7 @@ export default async function ElectionProofPage({ params }: { params: Promise<{ 
             )}
             <dl className="grid gap-3 border-t border-gray-200 pt-4 text-sm sm:grid-cols-2">
               <div><dt className="font-medium text-gray-500">Voter access</dt><dd className="text-gray-900">{formData.access_mode === 'anonymous_codes' ? 'Anonymous codes and links' : 'Registered voters'}</dd></div>
+              <div><dt className="font-medium text-gray-500">Final results</dt><dd className="text-gray-900">{formData.results_visibility === 'public' ? 'Anyone with the results link' : 'Eligible voters only (verification required)'}</dd></div>
               <div><dt className="font-medium text-gray-500">Opening</dt><dd className="text-gray-900">{formData.opening_mode === 'scheduled' ? formatDate(formData.open_date) : 'Manually, when setup is complete'}</dd></div>
               <div><dt className="font-medium text-gray-500">Closing</dt><dd className="text-gray-900">{formatDate(formData.close_date)}</dd></div>
               <div><dt className="font-medium text-gray-500">Questions</dt><dd className="text-gray-900">{questions.length}</dd></div>
