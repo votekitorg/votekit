@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
+import LinkifiedText from '@/components/LinkifiedText';
 import { csrfFetch } from '@/lib/csrf-client';
 import { parseElectionCloseDate } from '@/lib/election-window';
 
@@ -343,7 +344,7 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
                     placeholder="Explain the purpose, background, and importance of this election. This will be the first thing voters see."
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Provide context and explain why member input is needed. You can use line breaks for formatting.
+                    Provide context and explain why member input is needed. You can use line breaks and include multiple http:// or https:// links, which will be clickable for voters.
                   </p>
                 </div>
 
@@ -678,7 +679,9 @@ export default function CreatePlebisciteForm({ currentUser }: { currentUser: { e
                       </div>
                       <div className="sm:col-span-2">
                         <dt className="text-sm font-medium text-gray-500">Description</dt>
-                        <dd className="text-sm text-gray-900 mt-1 whitespace-pre-wrap">{formData.description}</dd>
+                        <dd className="text-sm text-gray-900 mt-1 whitespace-pre-wrap">
+                          <LinkifiedText text={formData.description} />
+                        </dd>
                       </div>
                       {formData.info_url && (
                         <div className="sm:col-span-2">
