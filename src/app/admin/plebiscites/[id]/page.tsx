@@ -124,7 +124,7 @@ function getStatusInfo(plebiscite: Plebiscite) {
   if (plebiscite.status === 'draft') {
     const scheduled = plebiscite.opening_mode === 'scheduled';
     return {
-      status: scheduled ? 'Scheduled' : 'Draft',
+      status: scheduled ? 'Published · Scheduled' : 'Published · Not Open',
       color: scheduled ? 'blue' : 'gray',
       canOpen: true,
       canClose: false,
@@ -132,7 +132,7 @@ function getStatusInfo(plebiscite: Plebiscite) {
         ? `Scheduled opening was paused: ${plebiscite.scheduled_open_error}. Complete setup, then open voting manually.`
         : scheduled
           ? (now < openDate ? `Scheduled to open ${openDate.toLocaleString('en-AU', { timeZone: 'Australia/Brisbane' })}. You can open it early.` : 'Scheduled opening is due and VoteKit is checking readiness.')
-          : 'Add voting credentials, then open voting immediately when ready.'
+          : 'The election wording and questions are published and locked. Add voting credentials, then open voting when ready.'
     };
   } else if (plebiscite.status === 'open') {
     return {

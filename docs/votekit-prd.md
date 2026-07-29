@@ -134,6 +134,13 @@ After voting closes, results should include:
 
 ## Election Timing Requirements
 
+Election setup remains an autosaved, resumable server-side draft until the
+organiser deliberately publishes it. A private bearer-token proofing link
+renders the current draft as a read-only ballot for review. Publishing performs
+complete validation, creates the election atomically and locks its wording,
+questions, access method and voting dates. Voter credentials and opening
+controls remain configurable after publication.
+
 - All election times are entered and displayed as Australia/Brisbane time.
 - The creation form must not silently derive a closing time from when setup began.
 - The organiser must deliberately select the fixed closing date and time.
