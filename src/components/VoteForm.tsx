@@ -202,10 +202,16 @@ export default function VoteForm({ questions, onSubmit, disabled = false }: Vote
                   {(question.type === 'ranked_choice' || question.type === 'condorcet') && (
                     <div>
                       <div className="font-medium text-gray-900 mb-2">Your ranking:</div>
-                      <ol className="list-decimal list-inside text-gray-700 space-y-1">
+                      <ol className="space-y-2 text-gray-700">
                         {Array.isArray(vote) ? vote.map((option: string, index: number) => (
-                          <li key={option}>
-                            <span className="font-medium">#{index + 1}:</span> {option}
+                          <li key={option} className="flex items-center rounded-lg border border-gray-200 bg-white p-3">
+                            <span
+                              className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white"
+                              aria-label={`Rank ${index + 1}`}
+                            >
+                              {index + 1}
+                            </span>
+                            <span className="font-medium text-gray-900">{option}</span>
                           </li>
                         )) : <li>No ranking provided</li>}
                       </ol>
