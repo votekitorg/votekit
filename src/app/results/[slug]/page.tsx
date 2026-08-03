@@ -8,6 +8,7 @@ import ResultsActions from '@/components/ResultsActions';
 import { resultsReportFingerprint } from '@/lib/results-integrity';
 import ResultsAccessGate from '@/components/ResultsAccessGate';
 import { canViewResultsFromCookies, getResultsAccessElection } from '@/lib/results-access';
+import { formatIRVTransferSummary } from '@/lib/irv';
 
 type QuestionResult = PlebisciteResultsData['questions'][number];
 
@@ -128,6 +129,12 @@ function IRVResultsDisplay({ results }: { results: any }) {
                     ? `${round.tieBreak.selectedCandidate} was selected by countback to round ${round.tieBreak.sourceRound}.`
                     : `${round.tieBreak.selectedCandidate} was ${round.tieBreak.type === 'winner' ? 'declared the winner' : 'selected for exclusion'} by ${round.tieBreak.method === 'drawing_lots' ? 'a supervised drawing of lots' : 'the election’s governing rules'}.`}
                   {round.tieBreak.note ? ` ${round.tieBreak.note}` : ''}
+                </div>
+              )}
+              {round.transfer && (
+                <div className="mb-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800">
+                  <span className="font-medium">Preference transfers:</span>{' '}
+                  {formatIRVTransferSummary(round.transfer)}
                 </div>
               )}
               

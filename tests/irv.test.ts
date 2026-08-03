@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tabulateIRV, validateIRVVote } from '@/lib/irv';
+import { exportIRVResultsCSV, formatIRVResults, formatIRVTransferSummary, tabulateIRV, validateIRVVote } from '@/lib/irv';
 
 describe('tabulateIRV', () => {
   it('declares a first-round winner on a majority', () => {
@@ -122,6 +122,35 @@ describe('tabulateIRV', () => {
     );
     // The lone [C] ballot has nowhere to transfer once C is eliminated.
     expect(result.exhaustedBallots).toBe(1);
+  });
+
+  it('reports how every excluded candidate ballot transfers or exhausts', () => {
+    const repeat = (count: number, preferences: string[]) =>
+      Array.from({ length: count }, () => ({ preferences }));
+    const result = tabulateIRV([
+      ...repeat(22, ['2 weeks']),
+      ...repeat(10, ['3 weeks']),
+      ...repeat(6, ['1 week']),
+      ...repeat(4, ['longer than 3 weeks', '3 weeks']),
+      ...repeat(1, ['longer than 3 weeks']),
+      ...repeat(2, ['1 week', '2 weeks'])
+    ], ['2 weeks', '3 weeks', '1 week', 'longer than 3 weeks']);
+
+    expect(result.rounds[0].transfer).toEqual({
+      from: 'longer than 3 weeks',
+      to: { '3 weeks': 4 },
+      exhausted: 1
+    });
+    expect(result.rounds[1].transfer).toEqual({
+      from: '1 week',
+      to: { '2 weeks': 2 },
+      exhausted: 6
+    });
+    expect(result.exhaustedBallots).toBe(7);
+    expect(formatIRVTransferSummary(result.rounds[0].transfer!))
+      .toBe('longer than 3 weeks excluded: 4 to 3 weeks; 1 exhausted.');
+    expect(formatIRVResults(result)).toContain('1 week excluded: 2 to 2 weeks; 6 exhausted.');
+    expect(exportIRVResultsCSV(result)).toContain('longer than 3 weeks excluded: 4 to 3 weeks; 1 exhausted.');
   });
 });
 

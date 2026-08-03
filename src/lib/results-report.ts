@@ -2,6 +2,7 @@ import PDFDocument from 'pdfkit';
 import { parseElectionCloseDate } from '@/lib/election-window';
 import type { PlebisciteResultsData } from '@/lib/results';
 import { resultsReportFingerprint } from '@/lib/results-integrity';
+import { formatIRVTransferSummary } from '@/lib/irv';
 
 const COLOURS = {
   green: '#08783E',
@@ -214,7 +215,7 @@ export async function buildResultsPdf(data: PlebisciteResultsData, now: Date = n
       rounds.forEach((round: any) => {
         const entries = Object.entries(round.votes as Record<string, number>).sort((a, b) => b[1] - a[1]);
         const total = entries.reduce((sum, [, count]) => sum + count, 0);
-        const rowHeight = 36 + entries.length * 14;
+        const rowHeight = 48 + entries.length * 14 + (round.transfer ? 14 : 0);
         ensureSpace(Math.min(rowHeight, 180));
         doc.fillColor(COLOURS.ink).font('Helvetica-Bold').fontSize(10).text(`Round ${round.round}`);
         const notes = [
@@ -228,6 +229,10 @@ export async function buildResultsPdf(data: PlebisciteResultsData, now: Date = n
             ? `${round.tieBreak.selectedCandidate} selected by countback to round ${round.tieBreak.sourceRound}`
             : `${round.tieBreak.selectedCandidate} ${round.tieBreak.type === 'winner' ? 'declared winner' : 'selected for exclusion'} by ${round.tieBreak.method === 'drawing_lots' ? 'supervised drawing of lots' : 'the governing rules'}`;
           doc.fillColor(COLOURS.greenDark).font('Helvetica-Bold').fontSize(8).text(`Tie-break: ${decision}${round.tieBreak.note ? ` · ${round.tieBreak.note}` : ''}`);
+        }
+        if (round.transfer) {
+          doc.fillColor(COLOURS.ink).font('Helvetica-Bold').fontSize(8)
+            .text(`Preference transfers: ${formatIRVTransferSummary(round.transfer)}`);
         }
         entries.forEach(([candidate, count]) => {
           ensureSpace(15);

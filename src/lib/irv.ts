@@ -9,9 +9,16 @@ export interface IRVRound {
   candidates: string[];
   votes: { [candidate: string]: number };
   eliminated: string[];
+  transfer?: IRVTransfer;
   winner?: string;
   tiedCandidates?: string[];
   tieBreak?: IRVTieBreak;
+}
+
+export interface IRVTransfer {
+  from: string;
+  to: { [candidate: string]: number };
+  exhausted: number;
 }
 
 export type IRVTieResolutionType = 'exclusion' | 'winner';
@@ -227,6 +234,27 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[], resolutions:
     }
 
     roundData.eliminated = [eliminatedCandidate];
+
+    const transfer: IRVTransfer = {
+      from: eliminatedCandidate,
+      to: {},
+      exhausted: 0
+    };
+    activeBallots.forEach(ballot => {
+      if (ballot.exhausted) return;
+      const currentChoice = ballot.preferences.find(preference => remainingCandidates.includes(preference));
+      if (currentChoice !== eliminatedCandidate) return;
+
+      const nextChoice = ballot.preferences.find(preference =>
+        preference !== eliminatedCandidate && remainingCandidates.includes(preference)
+      );
+      if (nextChoice) {
+        transfer.to[nextChoice] = (transfer.to[nextChoice] || 0) + 1;
+      } else {
+        transfer.exhausted += 1;
+      }
+    });
+    roundData.transfer = transfer;
     result.rounds.push(roundData);
 
     // Remove eliminated candidates from remaining candidates
@@ -241,6 +269,13 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[], resolutions:
   result.exhaustedBallots = activeBallots.filter(ballot => ballot.exhausted).length;
 
   return result;
+}
+
+export function formatIRVTransferSummary(transfer: IRVTransfer): string {
+  const destinations = Object.entries(transfer.to)
+    .sort(([candidateA, votesA], [candidateB, votesB]) => votesB - votesA || candidateA.localeCompare(candidateB))
+    .map(([candidate, count]) => `${count} to ${candidate}`);
+  return `${transfer.from} excluded: ${[...destinations, `${transfer.exhausted} exhausted`].join('; ')}.`;
 }
 
 // Helper function to validate IRV votes
@@ -280,6 +315,10 @@ export function formatIRVResults(result: IRVResult): string {
 
     if (round.eliminated.length > 0) {
       output += `  Eliminated: ${round.eliminated.join(', ')}\n`;
+    }
+
+    if (round.transfer) {
+      output += `  ${formatIRVTransferSummary(round.transfer)}\n`;
     }
 
     if (round.winner) {
@@ -326,6 +365,9 @@ export function exportIRVResultsCSV(result: IRVResult): string {
         ? `Countback to round ${round.tieBreak.sourceRound}`
         : round.tieBreak.method === 'drawing_lots' ? 'Supervised drawing of lots' : 'Election governing rules';
       csv += `${round.round},${csvCell('Tie resolution')},,,${csvCell(`${action}; ${method}${round.tieBreak.note ? `; ${round.tieBreak.note}` : ''}`)}\n`;
+    }
+    if (round.transfer) {
+      csv += `${round.round},${csvCell('Preference transfers')},,,${csvCell(formatIRVTransferSummary(round.transfer))}\n`;
     }
   });
 
