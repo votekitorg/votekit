@@ -108,6 +108,46 @@ export async function PUT(request: NextRequest) {
   return NextResponse.json({ success: true, revision: revision + 1 });
 }
 
+export async function PATCH(request: NextRequest) {
+  if (!validateCSRFRequest(request)) return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
+  const session = getAdminSessionFromRequest(request);
+  if (!session || session.role !== 'owner') {
+    return NextResponse.json({ error: 'Owner role required' }, { status: 403 });
+  }
+  const body = await request.json();
+  const id = Number(body?.id);
+  if (!Number.isInteger(id) || id < 1 || body?.action !== 'take_over') {
+    return NextResponse.json({ error: 'Invalid takeover request' }, { status: 400 });
+  }
+  const draft = db.prepare(`
+    SELECT d.id, d.title, d.created_by_admin_user_id, u.email AS creator_email
+    FROM election_setup_drafts d
+    JOIN admin_users u ON u.id = d.created_by_admin_user_id
+    WHERE d.id = ?
+  `).get(id) as any;
+  if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 });
+  if (draft.created_by_admin_user_id === session.adminUserId) {
+    return NextResponse.json({ error: 'You already own this draft' }, { status: 409 });
+  }
+
+  const result = db.prepare(`
+    UPDATE election_setup_drafts
+    SET created_by_admin_user_id = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND created_by_admin_user_id = ?
+  `).run(session.adminUserId, id, draft.created_by_admin_user_id);
+  if (result.changes !== 1) {
+    return NextResponse.json({ error: 'Draft ownership changed. Refresh and try again.' }, { status: 409 });
+  }
+  recordAdminAuditLog({
+    adminUserId: session.adminUserId,
+    action: 'election_setup_draft.take_over',
+    targetType: 'election_setup_draft',
+    targetId: id,
+    details: { title: draft.title, previousOwnerId: draft.created_by_admin_user_id }
+  });
+  return NextResponse.json({ success: true });
+}
+
 export async function DELETE(request: NextRequest) {
   if (!validateCSRFRequest(request)) return NextResponse.json({ error: 'Invalid request' }, { status: 403 });
   const session = getAdminSessionFromRequest(request);

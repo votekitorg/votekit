@@ -14,6 +14,7 @@ let otherId: number;
 let draftPost: any;
 let draftGet: any;
 let draftPut: any;
+let draftPatch: any;
 let electionPost: any;
 let electionPut: any;
 
@@ -54,14 +55,14 @@ function payload(title = 'Draft board election') {
 
 beforeAll(async () => {
   db = (await import('@/lib/db')).default;
-  ({ POST: draftPost, GET: draftGet, PUT: draftPut } = await import('@/app/api/admin/election-drafts/route'));
+  ({ POST: draftPost, GET: draftGet, PUT: draftPut, PATCH: draftPatch } = await import('@/app/api/admin/election-drafts/route'));
   ({ POST: electionPost, PUT: electionPut } = await import('@/app/api/admin/plebiscites/route'));
   ownerId = Number(db.prepare(`INSERT INTO admin_users
     (email, name, password_hash, role, authority_role, active)
     VALUES ('draft-owner@example.invalid', 'Draft Owner', 'hash', 'admin', 'owner', 1)`).run().lastInsertRowid);
   otherId = Number(db.prepare(`INSERT INTO admin_users
     (email, name, password_hash, role, authority_role, active)
-    VALUES ('draft-other@example.invalid', 'Other Owner', 'hash', 'admin', 'owner', 1)`).run().lastInsertRowid);
+    VALUES ('draft-other@example.invalid', 'Other Returning Officer', 'hash', 'admin', 'returning_officer', 1)`).run().lastInsertRowid);
   const expires = new Date(Date.now() + 3_600_000).toISOString();
   db.prepare(`INSERT INTO sessions (id, email, plebiscite_id, is_admin, admin_user_id, admin_role, expires_at)
     VALUES ('draft-owner-session', 'draft-owner@example.invalid', -1, 1, ?, 'admin', ?)`).run(ownerId, expires);
@@ -160,12 +161,55 @@ describe('autosaved election setup drafts', () => {
       .toEqual({ id: invalidDraft.id });
   });
 
+  it('lets an Owner explicitly take over another creator draft and audits it', async () => {
+    const created = await draftPost(request('http://localhost/api/admin/election-drafts', 'POST', 'draft-other-session', {
+      payload: payload('Returning Officer recovery draft'),
+      currentStep: 3
+    }));
+    const draft = (await created.json()).draft;
+
+    const forbidden = await draftPatch(request('http://localhost/api/admin/election-drafts', 'PATCH', 'draft-other-session', {
+      id: draft.id,
+      action: 'take_over'
+    }));
+    expect(forbidden.status).toBe(403);
+
+    const taken = await draftPatch(request('http://localhost/api/admin/election-drafts', 'PATCH', 'draft-owner-session', {
+      id: draft.id,
+      action: 'take_over'
+    }));
+    expect(taken.status).toBe(200);
+    expect(db.prepare('SELECT created_by_admin_user_id FROM election_setup_drafts WHERE id = ?').get(draft.id))
+      .toEqual({ created_by_admin_user_id: ownerId });
+    expect(db.prepare(`SELECT action, target_id FROM admin_audit_log
+      WHERE action = 'election_setup_draft.take_over' AND target_id = ?`).get(String(draft.id)))
+      .toEqual({ action: 'election_setup_draft.take_over', target_id: String(draft.id) });
+
+    const previousOwnerCannotEdit = await draftGet(request(
+      `http://localhost/api/admin/election-drafts?id=${draft.id}`,
+      'GET',
+      'draft-other-session'
+    ));
+    expect(previousOwnerCannotEdit.status).toBe(404);
+    const ownerCanEdit = await draftGet(request(
+      `http://localhost/api/admin/election-drafts?id=${draft.id}`,
+      'GET',
+      'draft-owner-session'
+    ));
+    expect(ownerCanEdit.status).toBe(200);
+  });
+
   it('renders the dashboard and proofing affordances in source', () => {
     const dashboard = fs.readFileSync(path.join(process.cwd(), 'src/app/admin/page.tsx'), 'utf8');
     const form = fs.readFileSync(path.join(process.cwd(), 'src/app/admin/plebiscites/new/CreatePlebisciteForm.tsx'), 'utf8');
     const proof = fs.readFileSync(path.join(process.cwd(), 'src/app/proof/[token]/page.tsx'), 'utf8');
     expect(dashboard).toContain('Election Setup Drafts');
     expect(dashboard).toContain('Continue editing');
+    expect(dashboard).toContain('Created by');
+    expect(dashboard).toContain('DraftTakeoverButton');
+    const takeover = fs.readFileSync(path.join(process.cwd(), 'src/app/admin/DraftTakeoverButton.tsx'), 'utf8');
+    expect(takeover).toContain('Take over draft');
+    expect(takeover).toContain('This action is audited.');
     expect(form).toContain('Draft autosaved');
     expect(form).toContain('You are still on this page so nothing is lost.');
     expect(form).toContain('Copy proofing link');

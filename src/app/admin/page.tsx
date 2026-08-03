@@ -5,6 +5,7 @@ import db from '@/lib/db';
 import Link from 'next/link';
 import { parseElectionCloseDate } from '@/lib/election-window';
 import { reconcileScheduledElections } from '@/lib/election-opening';
+import DraftTakeoverButton from './DraftTakeoverButton';
 
 interface Plebiscite {
   id: number;
@@ -26,18 +27,31 @@ interface SetupDraft {
   current_step: number;
   proof_token: string;
   updated_at: string;
+  created_by_admin_user_id: number;
+  creator_name: string | null;
+  creator_email: string;
 }
 
 export const dynamic = 'force-dynamic';
 
 async function getDashboardData(session: AdminSession) {
   const accessibleIds = listAccessibleElectionIds(session);
-  const setupDrafts = canManageElections(session.role) ? db.prepare(`
-    SELECT id, title, current_step, proof_token, updated_at
-    FROM election_setup_drafts
-    WHERE created_by_admin_user_id = ?
-    ORDER BY updated_at DESC
-  `).all(session.adminUserId) as SetupDraft[] : [];
+  const setupDrafts = canManageElections(session.role) ? (session.role === 'owner'
+    ? db.prepare(`
+        SELECT d.id, d.title, d.current_step, d.proof_token, d.updated_at,
+          d.created_by_admin_user_id, u.name AS creator_name, u.email AS creator_email
+        FROM election_setup_drafts d
+        JOIN admin_users u ON u.id = d.created_by_admin_user_id
+        ORDER BY d.updated_at DESC
+      `).all() as SetupDraft[]
+    : db.prepare(`
+        SELECT d.id, d.title, d.current_step, d.proof_token, d.updated_at,
+          d.created_by_admin_user_id, u.name AS creator_name, u.email AS creator_email
+        FROM election_setup_drafts d
+        JOIN admin_users u ON u.id = d.created_by_admin_user_id
+        WHERE d.created_by_admin_user_id = ?
+        ORDER BY d.updated_at DESC
+      `).all(session.adminUserId) as SetupDraft[]) : [];
   if (accessibleIds?.length === 0) return { plebiscites: [], archivedPlebiscites: [], setupDrafts, stats: { totalPlebiscites: 0, totalVoters: 0, totalVotes: 0, activePlebiscites: 0 } };
   const scope = accessibleIds
     ? `WHERE p.archived_at IS NULL AND p.id IN (${accessibleIds.map(() => '?').join(',')})`
@@ -235,7 +249,7 @@ export default async function AdminDashboard() {
           <div className="card">
             <div className="card-header">
               <h2 className="text-lg font-semibold text-gray-900">Election Setup Drafts</h2>
-              <p className="mt-1 text-sm text-gray-600">Autosaved and still fully editable. These are not published elections.</p>
+              <p className="mt-1 text-sm text-gray-600">Autosaved setup work. Drafts remain with their creator unless an Owner explicitly takes over.</p>
             </div>
             <div className="divide-y divide-gray-200">
               {setupDrafts.map(draft => (
@@ -245,14 +259,21 @@ export default async function AdminDashboard() {
                     <div className="text-sm text-gray-500">
                       Step {draft.current_step} of 4 · saved {formatDate(draft.updated_at)}
                     </div>
+                    <div className="text-sm text-gray-500">
+                      Created by {draft.creator_name || draft.creator_email}
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-4 text-sm font-medium">
                     <Link href={`/proof/${draft.proof_token}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
                       View proof
                     </Link>
-                    <Link href={`/admin/plebiscites/new?draft=${draft.id}`} className="text-primary hover:text-primary-dark">
-                      Continue editing
-                    </Link>
+                    {draft.created_by_admin_user_id === adminSession.adminUserId ? (
+                      <Link href={`/admin/plebiscites/new?draft=${draft.id}`} className="text-primary hover:text-primary-dark">
+                        Continue editing
+                      </Link>
+                    ) : adminSession.role === 'owner' ? (
+                      <DraftTakeoverButton draftId={draft.id} title={draft.title} creator={draft.creator_name || draft.creator_email} />
+                    ) : null}
                   </div>
                 </div>
               ))}

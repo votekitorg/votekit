@@ -37,6 +37,10 @@ Election setup and published election management are separate lifecycle stages.
   confirmed.
 - The proofing page tracks the latest autosaved version.
 - Another administrator cannot retrieve or edit a creator's draft.
+- Organisation Owners can see all setup drafts and their creators on the
+  dashboard for oversight and recovery. They can proof another creator's draft,
+  but must explicitly take ownership before editing it. Takeover is audited and
+  removes the previous creator's edit access.
 - Invalid drafts cannot publish.
 - Valid publication removes the setup draft atomically.
 - Core configuration edits are rejected after publication.
