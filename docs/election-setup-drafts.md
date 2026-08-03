@@ -31,9 +31,12 @@ Election setup and published election management are separate lifecycle stages.
 
 - Interrupted setup is recoverable from the dashboard.
 - Changes autosave while moving through all four steps.
+- Rapid changes are saved sequentially, and the server rejects an update based
+  on an older draft revision instead of overwriting newer work.
+- Save & Exit keeps the organiser on the form when the latest save is not
+  confirmed.
 - The proofing page tracks the latest autosaved version.
 - Another administrator cannot retrieve or edit a creator's draft.
 - Invalid drafts cannot publish.
 - Valid publication removes the setup draft atomically.
 - Core configuration edits are rejected after publication.
-

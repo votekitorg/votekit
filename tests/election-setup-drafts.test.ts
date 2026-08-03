@@ -103,11 +103,24 @@ describe('autosaved election setup drafts', () => {
     const updated = await draftPut(request('http://localhost/api/admin/election-drafts', 'PUT', 'draft-owner-session', {
       id: createdBody.draft.id,
       payload: payload('Updated draft title'),
-      currentStep: 4
+      currentStep: 4,
+      revision: createdBody.draft.revision
     }));
     expect(updated.status).toBe(200);
-    expect(db.prepare('SELECT title, current_step FROM election_setup_drafts WHERE id = ?').get(createdBody.draft.id))
-      .toEqual({ title: 'Updated draft title', current_step: 4 });
+    await expect(updated.json()).resolves.toMatchObject({ revision: 2 });
+    expect(db.prepare('SELECT title, current_step, revision FROM election_setup_drafts WHERE id = ?').get(createdBody.draft.id))
+      .toEqual({ title: 'Updated draft title', current_step: 4, revision: 2 });
+
+    const stale = await draftPut(request('http://localhost/api/admin/election-drafts', 'PUT', 'draft-owner-session', {
+      id: createdBody.draft.id,
+      payload: payload('Stale title must not win'),
+      currentStep: 1,
+      revision: createdBody.draft.revision
+    }));
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toMatchObject({ currentRevision: 2 });
+    expect(db.prepare('SELECT title, current_step, revision FROM election_setup_drafts WHERE id = ?').get(createdBody.draft.id))
+      .toEqual({ title: 'Updated draft title', current_step: 4, revision: 2 });
   });
 
   it('publishes valid setup atomically and keeps an invalid draft', async () => {
@@ -154,6 +167,7 @@ describe('autosaved election setup drafts', () => {
     expect(dashboard).toContain('Election Setup Drafts');
     expect(dashboard).toContain('Continue editing');
     expect(form).toContain('Draft autosaved');
+    expect(form).toContain('You are still on this page so nothing is lost.');
     expect(form).toContain('Copy proofing link');
     expect(form).toContain('Who can view the final results?');
     expect(form).toContain('Anyone with the results link');

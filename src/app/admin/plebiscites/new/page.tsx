@@ -19,7 +19,7 @@ export default async function CreatePlebiscitePage({ searchParams }: { searchPar
   const draftId = Number(draftParam);
   const row = Number.isInteger(draftId) && draftId > 0
     ? db.prepare(`
-        SELECT id, payload_json, current_step, proof_token
+        SELECT id, payload_json, current_step, proof_token, revision
         FROM election_setup_drafts
         WHERE id = ? AND created_by_admin_user_id = ?
       `).get(draftId, adminSession.adminUserId) as any
@@ -31,7 +31,8 @@ export default async function CreatePlebiscitePage({ searchParams }: { searchPar
         id: row.id,
         payload: JSON.parse(row.payload_json),
         currentStep: row.current_step,
-        proofToken: row.proof_token
+        proofToken: row.proof_token,
+        revision: row.revision
       };
     } catch {
       initialDraft = null;

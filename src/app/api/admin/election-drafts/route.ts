@@ -7,7 +7,7 @@ const MAX_DRAFT_BYTES = 300_000;
 
 function draftForUser(id: number, adminUserId: number) {
   return db.prepare(`
-    SELECT id, title, payload_json, current_step, proof_token, created_at, updated_at
+    SELECT id, title, payload_json, current_step, proof_token, revision, created_at, updated_at
     FROM election_setup_drafts
     WHERE id = ? AND created_by_admin_user_id = ?
   `).get(id, adminUserId) as any;
@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
       payload: JSON.parse(draft.payload_json),
       currentStep: draft.current_step,
       proofToken: draft.proof_token,
+      revision: draft.revision,
       createdAt: draft.created_at,
       updatedAt: draft.updated_at
     }
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
     targetId: id,
     details: { title: input.title }
   });
-  return NextResponse.json({ success: true, draft: { id, proofToken } });
+  return NextResponse.json({ success: true, draft: { id, proofToken, revision: 1 } });
 }
 
 export async function PUT(request: NextRequest) {
@@ -84,19 +85,27 @@ export async function PUT(request: NextRequest) {
   }
   const body = await request.json();
   const id = Number(body?.id);
+  const revision = Number(body?.revision);
   const input = parseDraftInput(body);
-  if (!Number.isInteger(id) || id < 1 || !input) {
+  if (!Number.isInteger(id) || id < 1 || !Number.isInteger(revision) || revision < 1 || !input) {
     return NextResponse.json({ error: 'Draft data is invalid or too large' }, { status: 400 });
   }
   if (!draftForUser(id, session.adminUserId)) {
     return NextResponse.json({ error: 'Draft not found' }, { status: 404 });
   }
-  db.prepare(`
+  const result = db.prepare(`
     UPDATE election_setup_drafts
-    SET title = ?, payload_json = ?, current_step = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND created_by_admin_user_id = ?
-  `).run(input.title, input.serialized, input.currentStep, id, session.adminUserId);
-  return NextResponse.json({ success: true });
+    SET title = ?, payload_json = ?, current_step = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND created_by_admin_user_id = ? AND revision = ?
+  `).run(input.title, input.serialized, input.currentStep, id, session.adminUserId, revision);
+  if (result.changes !== 1) {
+    const current = draftForUser(id, session.adminUserId);
+    return NextResponse.json({
+      error: 'This draft was updated elsewhere. Reload before saving again.',
+      currentRevision: current?.revision
+    }, { status: 409 });
+  }
+  return NextResponse.json({ success: true, revision: revision + 1 });
 }
 
 export async function DELETE(request: NextRequest) {

@@ -6,6 +6,7 @@ import AdminLayout from '@/components/AdminLayout';
 import LinkifiedText from '@/components/LinkifiedText';
 import { csrfFetch } from '@/lib/csrf-client';
 import { parseElectionCloseDate } from '@/lib/election-window';
+import { SerialTaskQueue } from '@/lib/serial-task-queue';
 
 interface Question {
   title: string;
@@ -20,6 +21,12 @@ interface SetupDraft {
   payload: { formData?: Record<string, unknown>; questions?: Question[] };
   currentStep: number;
   proofToken: string;
+  revision: number;
+}
+
+interface DraftSaveResult {
+  ok: boolean;
+  draftId: number | null;
 }
 
 export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
@@ -50,7 +57,11 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
   const [draftId, setDraftId] = useState<number | null>(initialDraft?.id || null);
   const [proofToken, setProofToken] = useState(initialDraft?.proofToken || '');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>(initialDraft ? 'saved' : 'idle');
-  const inFlightSave = useRef<Promise<number | null> | null>(null);
+  const [isExiting, setIsExiting] = useState(false);
+  const draftIdRef = useRef<number | null>(initialDraft?.id || null);
+  const revisionRef = useRef(initialDraft?.revision || 1);
+  const saveQueue = useRef(new SerialTaskQueue());
+  const newestSave = useRef(0);
   
   const router = useRouter();
 
@@ -61,23 +72,23 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
     { id: 4, name: 'Review', description: 'Confirm and create' }
   ];
 
-  const persistDraft = useCallback(async (step = currentStep) => {
-    let targetDraftId = draftId;
-    if (inFlightSave.current) {
-      targetDraftId = await inFlightSave.current;
-    }
+  const persistDraft = useCallback(async (step = currentStep): Promise<DraftSaveResult> => {
     const payload = { formData, questions };
     const hasContent = Boolean(formData.title.trim() || formData.description.trim() || formData.close_date || questions.length);
-    if (!targetDraftId && !hasContent) return null;
+    if (!draftIdRef.current && !hasContent) return { ok: true, draftId: null };
+    const saveNumber = ++newestSave.current;
     setSaveStatus('saving');
-    const save = (async (): Promise<number | null> => {
+    const save = saveQueue.current.enqueue(async (): Promise<number> => {
+      const targetDraftId = draftIdRef.current;
       if (targetDraftId) {
         const response = await csrfFetch('/api/admin/election-drafts', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: targetDraftId, payload, currentStep: step })
+          body: JSON.stringify({ id: targetDraftId, payload, currentStep: step, revision: revisionRef.current })
         });
-        if (!response.ok) throw new Error('Could not save draft');
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Could not save draft');
+        revisionRef.current = result.revision;
         return targetDraftId;
       } else {
         const response = await csrfFetch('/api/admin/election-drafts', {
@@ -87,24 +98,23 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Could not save draft');
+        draftIdRef.current = result.draft.id;
+        revisionRef.current = result.draft.revision;
         setDraftId(result.draft.id);
         setProofToken(result.draft.proofToken);
         router.replace(`/admin/plebiscites/new?draft=${result.draft.id}`);
         return result.draft.id;
       }
-    })();
-    inFlightSave.current = save;
+    });
     try {
       const savedId = await save;
-      setSaveStatus('saved');
-      return savedId;
-    } catch {
-      setSaveStatus('error');
-      return null;
-    } finally {
-      inFlightSave.current = null;
+      if (saveNumber === newestSave.current) setSaveStatus('saved');
+      return { ok: true, draftId: savedId };
+    } catch (saveError) {
+      if (saveNumber === newestSave.current) setSaveStatus('error');
+      return { ok: false, draftId: draftIdRef.current };
     }
-  }, [currentStep, draftId, formData, questions, router]);
+  }, [currentStep, formData, questions, router]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void persistDraft(); }, 700);
@@ -279,7 +289,11 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
     setSuccess('');
 
     try {
-      const savedDraftId = await persistDraft(4);
+      const savedDraft = await persistDraft(4);
+      if (!savedDraft.ok) {
+        setError('Your latest changes could not be saved. Reload the draft before publishing.');
+        return;
+      }
       const response = await csrfFetch('/api/admin/plebiscites', {
         method: 'POST',
         headers: {
@@ -288,7 +302,7 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
         body: JSON.stringify({
           ...formData,
           questions,
-          setup_draft_id: savedDraftId || draftId
+          setup_draft_id: savedDraft.draftId
         }),
       });
 
@@ -307,8 +321,15 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
   };
 
   const saveAndExit = async () => {
-    await persistDraft();
-    router.push('/admin');
+    setIsExiting(true);
+    setError('');
+    const savedDraft = await persistDraft();
+    if (savedDraft.ok) {
+      router.push('/admin');
+      return;
+    }
+    setError('Your latest changes could not be saved. You are still on this page so nothing is lost.');
+    setIsExiting(false);
   };
 
   const copyProofLink = async () => {
@@ -856,9 +877,10 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
               <button
                 type="button"
                 onClick={saveAndExit}
+                disabled={isExiting}
                 className="btn-secondary"
               >
-                Save & Exit
+                {isExiting ? 'Saving…' : 'Save & Exit'}
               </button>
             </div>
             

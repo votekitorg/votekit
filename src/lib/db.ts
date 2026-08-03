@@ -516,6 +516,7 @@ function runElectionSetupDraftMigrations(database: Database.Database): void {
       payload_json TEXT NOT NULL,
       current_step INTEGER NOT NULL DEFAULT 1 CHECK(current_step BETWEEN 1 AND 4),
       proof_token TEXT UNIQUE NOT NULL,
+      revision INTEGER NOT NULL DEFAULT 1,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (created_by_admin_user_id) REFERENCES admin_users(id) ON DELETE CASCADE
@@ -525,6 +526,9 @@ function runElectionSetupDraftMigrations(database: Database.Database): void {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_election_setup_drafts_proof
       ON election_setup_drafts(proof_token);
   `);
+  if (!hasColumn(database, 'election_setup_drafts', 'revision')) {
+    database.exec('ALTER TABLE election_setup_drafts ADD COLUMN revision INTEGER NOT NULL DEFAULT 1');
+  }
 }
 
 function runPrivacyMigrations(database: Database.Database): void {
