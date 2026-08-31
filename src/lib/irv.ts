@@ -9,6 +9,7 @@ export interface IRVRound {
   candidates: string[];
   votes: { [candidate: string]: number };
   eliminated: string[];
+  supplementary?: boolean;
   transfer?: IRVTransfer;
   winner?: string;
   tiedCandidates?: string[];
@@ -55,7 +56,13 @@ export interface IRVResult {
   rounds: IRVRound[];
   totalVotes: number;
   exhaustedBallots: number;
+  decisiveRound?: number;
+  continuedForReporting?: boolean;
   pendingTie?: IRVPendingTie;
+}
+
+export interface IRVTabulationOptions {
+  continueAfterMajority?: boolean;
 }
 
 function sortCandidatesByVotesThenName(entries: [string, number][]): [string, number][] {
@@ -95,7 +102,12 @@ function resolveExclusionByCountback(rounds: IRVRound[], tiedCandidates: string[
   return null;
 }
 
-export function tabulateIRV(votes: IRVVote[], candidates: string[], resolutions: IRVTieResolution[] = []): IRVResult {
+export function tabulateIRV(
+  votes: IRVVote[],
+  candidates: string[],
+  resolutions: IRVTieResolution[] = [],
+  options: IRVTabulationOptions = {}
+): IRVResult {
   if (votes.length === 0) {
     return {
       winner: null,
@@ -119,6 +131,7 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[], resolutions:
   }));
 
   let round = 1;
+  let supplementary = false;
 
   while (remainingCandidates.length > 0) {
     // Count first preferences for remaining candidates
@@ -154,7 +167,8 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[], resolutions:
       round,
       candidates: [...remainingCandidates],
       votes: { ...voteCounts },
-      eliminated: []
+      eliminated: [],
+      ...(supplementary ? { supplementary: true } : {})
     };
 
     // A sole continuing candidate is elected. Recounting this final round also
@@ -162,14 +176,30 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[], resolutions:
     if (remainingCandidates.length === 1) {
       roundData.winner = remainingCandidates[0];
       result.winner = remainingCandidates[0];
+      result.decisiveRound = round;
       result.rounds.push(roundData);
       break;
     }
 
-    // Check for winner
-    if (sortedCandidates[0][1] >= majority) {
+    // Freeze the official result at the first majority. An optional full
+    // distribution then repeats that decisive tally as the first supplementary
+    // round before excluding the lowest continuing option. This keeps the
+    // declaration and reporting-only preference flow unambiguous.
+    if (!result.winner && sortedCandidates[0][1] >= majority) {
       roundData.winner = sortedCandidates[0][0];
       result.winner = sortedCandidates[0][0];
+      result.decisiveRound = round;
+      result.rounds.push(roundData);
+      if (!options.continueAfterMajority || remainingCandidates.length <= 2) break;
+      result.continuedForReporting = true;
+      supplementary = true;
+      round++;
+      continue;
+    }
+
+    // A reporting-only distribution is complete when the final-two tally has
+    // been recorded. It never replaces or re-declares the official winner.
+    if (result.winner && remainingCandidates.length === 2) {
       result.rounds.push(roundData);
       break;
     }
@@ -184,6 +214,7 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[], resolutions:
           roundData.winner = resolution.selectedCandidate;
           roundData.tieBreak = { ...resolution };
           result.winner = resolution.selectedCandidate;
+          result.decisiveRound = round;
         } else {
           roundData.tiedCandidates = tiedCandidates;
           result.pendingTie = { round, type: 'winner', tiedCandidates };
@@ -195,6 +226,7 @@ export function tabulateIRV(votes: IRVVote[], candidates: string[], resolutions:
       const winner = sortedCandidates[0][0];
       roundData.winner = winner;
       result.winner = winner;
+      result.decisiveRound = round;
       result.rounds.push(roundData);
       break;
     }
@@ -298,11 +330,13 @@ export function formatIRVResults(result: IRVResult): string {
   }
 
   let output = `Winner: ${result.winner}\n`;
+  if (result.decisiveRound) output += `Official result declared: Round ${result.decisiveRound}\n`;
+  if (result.continuedForReporting) output += 'Supplementary distribution: Continued to a final-two tally for reporting only\n';
   output += `Total Votes: ${result.totalVotes}\n`;
   output += `Exhausted Ballots: ${result.exhaustedBallots}\n\n`;
 
   result.rounds.forEach(round => {
-    output += `Round ${round.round}:\n`;
+    output += `Round ${round.round}${round.supplementary ? ' (supplementary distribution)' : ''}:\n`;
     
     const sortedVotes = sortCandidatesByVotesThenName(Object.entries(round.votes));
     
@@ -338,7 +372,10 @@ export function exportIRVResultsCSV(result: IRVResult): string {
     if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
     return `"${text.replaceAll('"', '""')}"`;
   };
-  let csv = 'Round,Candidate,Votes,Percentage,Status\n';
+  let csv = `Official winner,${csvCell(result.winner || '')}\n`;
+  csv += `Decisive round,${result.decisiveRound || ''}\n`;
+  csv += `Continued for reporting,${result.continuedForReporting ? 'Yes' : 'No'}\n\n`;
+  csv += 'Round,Phase,Candidate,Votes,Percentage,Status\n';
   
   result.rounds.forEach(round => {
     const totalVotes = Object.values(round.votes).reduce((sum, count) => sum + count, 0);
@@ -354,7 +391,7 @@ export function exportIRVResultsCSV(result: IRVResult): string {
           status = 'Winner';
         }
         
-        csv += `${round.round},${csvCell(candidate)},${votes},${percentage}%,${status}\n`;
+        csv += `${round.round},${csvCell(round.supplementary ? 'Supplementary distribution' : 'Official count')},${csvCell(candidate)},${votes},${percentage}%,${status}\n`;
       });
 
     if (round.tieBreak) {
@@ -364,15 +401,15 @@ export function exportIRVResultsCSV(result: IRVResult): string {
       const method = round.tieBreak.method === 'countback'
         ? `Countback to round ${round.tieBreak.sourceRound}`
         : round.tieBreak.method === 'drawing_lots' ? 'Supervised drawing of lots' : 'Election governing rules';
-      csv += `${round.round},${csvCell('Tie resolution')},,,${csvCell(`${action}; ${method}${round.tieBreak.note ? `; ${round.tieBreak.note}` : ''}`)}\n`;
+      csv += `${round.round},${csvCell(round.supplementary ? 'Supplementary distribution' : 'Official count')},${csvCell('Tie resolution')},,,${csvCell(`${action}; ${method}${round.tieBreak.note ? `; ${round.tieBreak.note}` : ''}`)}\n`;
     }
     if (round.transfer) {
-      csv += `${round.round},${csvCell('Preference transfers')},,,${csvCell(formatIRVTransferSummary(round.transfer))}\n`;
+      csv += `${round.round},${csvCell(round.supplementary ? 'Supplementary distribution' : 'Official count')},${csvCell('Preference transfers')},,,${csvCell(formatIRVTransferSummary(round.transfer))}\n`;
     }
   });
 
   if (result.pendingTie) {
-    csv += `${result.pendingTie.round},${csvCell('Count paused')},,,${csvCell(`Unresolved ${result.pendingTie.type} tie: ${result.pendingTie.tiedCandidates.join(' | ')}`)}\n`;
+    csv += `${result.pendingTie.round},${csvCell(result.winner ? 'Supplementary distribution' : 'Official count')},${csvCell('Count paused')},,,${csvCell(`Unresolved ${result.pendingTie.type} tie: ${result.pendingTie.tiedCandidates.join(' | ')}`)}\n`;
   }
   
   return csv;

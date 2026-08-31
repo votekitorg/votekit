@@ -40,6 +40,7 @@ export interface PlebisciteResultsData {
     type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
     options: string[];
     preferentialType?: string;
+    continueAfterMajority?: boolean;
     totalVotes: number;
     results: any;
     publicBallots: Array<{
@@ -133,6 +134,7 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
       type: question.type,
       options,
       preferentialType: question.preferential_type,
+      continueAfterMajority: Boolean(question.continue_after_majority),
       totalVotes: votes.length,
       results: {} as any,
       publicBallots
@@ -185,12 +187,16 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
         note: row.note,
         resolvedAt: row.resolved_at
       }));
-      const irvResult = tabulateIRV(irvVotes, options, tieResolutions);
+      const irvResult = tabulateIRV(irvVotes, options, tieResolutions, {
+        continueAfterMajority: Boolean(question.continue_after_majority)
+      });
       questionResult.results = {
         winner: irvResult.winner,
         rounds: irvResult.rounds,
         totalVotes: irvResult.totalVotes,
         exhaustedBallots: irvResult.exhaustedBallots,
+        decisiveRound: irvResult.decisiveRound,
+        continuedForReporting: irvResult.continuedForReporting,
         pendingTie: irvResult.pendingTie
       };
     } else if (question.type === 'condorcet') {
@@ -324,10 +330,11 @@ export function buildResultsCsv(slug: string, data: PlebisciteResultsData): stri
   }
 
   if (data.countRuns.length > 0) {
-    csvData += `${csvCell('Alternative Count Runs')}\n`;
+    csvData += `${csvCell('Supplementary and Alternative Count Runs')}\n`;
     for (const run of data.countRuns) {
       csvData += `${csvCell(`Count run #${run.id}: ${run.questionTitle}`)}\n`;
-      csvData += `${csvCell('Method')},${csvCell(run.method.toUpperCase())}\n`;
+      csvData += `${csvCell('Method')},${csvCell(run.settings.continueAfterMajority ? 'IRV full preference distribution' : run.method.toUpperCase())}\n`;
+      csvData += `${csvCell('Reporting only')},${csvCell(run.settings.continueAfterMajority ? 'Yes - does not replace the declared result' : 'No')}\n`;
       csvData += `${csvCell('Status')},${csvCell(run.status)}\n`;
       csvData += `${csvCell('Created')},${csvCell(run.createdAt)}\n`;
       csvData += `${csvCell('Created by')},${csvCell(run.createdByName || 'Election official')}\n`;

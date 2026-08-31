@@ -13,6 +13,16 @@ const irv = tabulateIRV([
   { preferences: ['Sports Pavilion', 'Community Hall', 'Town Square'] }
 ], ['Community Hall', 'Town Square', 'Sports Pavilion']);
 
+const fullDistribution = tabulateIRV([
+  { preferences: ['Community Hall', 'Town Square', 'Sports Pavilion'] },
+  { preferences: ['Community Hall', 'Town Square', 'Sports Pavilion'] },
+  { preferences: ['Community Hall', 'Sports Pavilion', 'Town Square'] },
+  { preferences: ['Community Hall', 'Sports Pavilion', 'Town Square'] },
+  { preferences: ['Town Square', 'Community Hall', 'Sports Pavilion'] },
+  { preferences: ['Town Square', 'Community Hall', 'Sports Pavilion'] },
+  { preferences: ['Sports Pavilion', 'Town Square', 'Community Hall'] }
+], ['Community Hall', 'Town Square', 'Sports Pavilion'], [], { continueAfterMajority: true });
+
 const condorcet = tabulateCondorcet([
   { preferences: ['Option A', 'Option B', 'Option C'] },
   { preferences: ['Option A', 'Option B', 'Option C'] },
@@ -53,7 +63,27 @@ const fixture: PlebisciteResultsData = {
     inputHash: 'b'.repeat(64),
     outputHash: 'c'.repeat(64)
   },
-  countRuns: [],
+  countRuns: [{
+    id: 7,
+    plebisciteId: 42,
+    questionId: 3,
+    questionTitle: 'Rank the preferred location for the new community venue',
+    method: 'irv',
+    status: 'complete',
+    result: fullDistribution,
+    settings: {
+      primaryMethod: 'irv',
+      algorithm: 'votekit-irv-full-distribution-v1',
+      preferentialType: 'compulsory',
+      continueAfterMajority: true,
+      options: ['Community Hall', 'Town Square', 'Sports Pavilion'],
+      tieResolutions: []
+    },
+    sourceBallotHash: 'd'.repeat(64),
+    resultHash: 'e'.repeat(64),
+    createdByName: 'Returning Officer',
+    createdAt: '2026-07-20 03:00:00'
+  }],
   questions: [
     {
       id: 1,
@@ -124,7 +154,7 @@ describe('official results PDF', () => {
 
     expect(pdf.subarray(0, 5).toString('ascii')).toBe('%PDF-');
     expect(pdf.length).toBeGreaterThan(12_000);
-    expect((pdf.toString('latin1').match(/\/Type \/Page\b/g) || []).length).toBeGreaterThanOrEqual(6);
+    expect((pdf.toString('latin1').match(/\/Type \/Page\b/g) || []).length).toBeGreaterThanOrEqual(7);
     if (process.env.RESULTS_PDF_ALL_METHODS_OUTPUT) {
       fs.writeFileSync(process.env.RESULTS_PDF_ALL_METHODS_OUTPUT, pdf);
     }

@@ -46,9 +46,10 @@ function payload(title = 'Draft board election') {
     questions: [{
       title: 'Who should represent the board?',
       description: '',
-      type: 'multiple_choice',
+      type: 'ranked_choice',
       options: ['Alex', 'Blair'],
-      preferentialType: 'compulsory'
+      preferentialType: 'compulsory',
+      continueAfterMajority: true
     }]
   };
 }
@@ -139,6 +140,9 @@ describe('autosaved election setup drafts', () => {
     expect(db.prepare('SELECT id FROM election_setup_drafts WHERE id = ?').get(validDraft.id)).toBeUndefined();
     expect(db.prepare('SELECT status, results_visibility FROM plebiscites WHERE title = ?').get('Published from draft'))
       .toEqual({ status: 'draft', results_visibility: 'public' });
+    expect(db.prepare(`SELECT continue_after_majority FROM questions
+      WHERE plebiscite_id = (SELECT id FROM plebiscites WHERE title = ?)`)
+      .get('Published from draft')).toEqual({ continue_after_majority: 1 });
     const publishedBody = await published.json();
     const locked = await electionPut(request('http://localhost/api/admin/plebiscites', 'PUT', 'draft-owner-session', {
       id: publishedBody.plebiscite.id,
@@ -216,9 +220,12 @@ describe('autosaved election setup drafts', () => {
     expect(form).toContain('Who can view the final results?');
     expect(form).toContain('Anyone with the results link');
     expect(form).toContain('Eligible voters only');
+    expect(form).toContain('Continue to a final-two preference distribution');
+    expect(form).toContain('This never changes the declared winner.');
     expect(form).toContain("'Publish Election'");
     expect(proof).toContain('Private proofing copy');
     expect(proof).toContain('Voting is disabled');
     expect(proof).toContain('Final results');
+    expect(proof).toContain('final-two distribution for reporting only');
   });
 });

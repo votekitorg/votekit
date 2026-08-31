@@ -10,7 +10,7 @@ export const encryptedBallotsEnabled = process.env.VOTEKIT_ENCRYPTED_BALLOTS_ENA
 
 export function buildEncryptedManifest(plebiscite: any): EncryptedElectionManifest {
   const questions = db.prepare(`
-    SELECT public_id, type, options, preferential_type
+    SELECT public_id, type, options, preferential_type, continue_after_majority
     FROM questions WHERE plebiscite_id = ? ORDER BY display_order, id
   `).all(plebiscite.id) as any[];
   return {
@@ -23,7 +23,10 @@ export function buildEncryptedManifest(plebiscite: any): EncryptedElectionManife
       id: question.public_id,
       type: question.type,
       options: JSON.parse(question.options),
-      preferentialType: question.preferential_type || 'compulsory'
+      preferentialType: question.preferential_type || 'compulsory',
+      ...(question.type === 'ranked_choice' && question.continue_after_majority
+        ? { continueAfterMajority: true }
+        : {})
     }))
   };
 }
@@ -35,4 +38,3 @@ export async function buildAndHashEncryptedManifest(plebiscite: any): Promise<{
   const manifest = buildEncryptedManifest(plebiscite);
   return { manifest, manifestHash: await hashManifest(manifest) };
 }
-

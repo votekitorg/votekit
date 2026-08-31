@@ -52,7 +52,15 @@ function methodLabel(type: string): string {
 
 function outcomeSummary(question: QuestionResult): string {
   if (question.type === 'ranked_choice') {
-    if (question.results.winner) return `${question.results.winner} won after ${question.results.rounds?.length || 0} counting round${question.results.rounds?.length === 1 ? '' : 's'}.`;
+    if (question.results.winner) {
+      const decisiveRound = question.results.decisiveRound || question.results.rounds?.find((round: any) => round.winner)?.round || question.results.rounds?.length || 0;
+      const reporting = question.results.continuedForReporting
+        ? question.results.pendingTie
+          ? ' The supplementary preference distribution is paused for an audited tie decision.'
+          : ' Preferences were then distributed to a final-two tally for reporting.'
+        : '';
+      return `${question.results.winner} won in counting round ${decisiveRound}.${reporting}`;
+    }
     if (question.results.pendingTie) return `Count paused: tie-break required between ${question.results.pendingTie.tiedCandidates.join(', ')}.`;
     const tied = question.results.rounds?.find((round: any) => round.tiedCandidates?.length)?.tiedCandidates;
     return tied?.length ? `Tied result: ${tied.join(', ')}.` : 'No winner was determined.';
@@ -95,11 +103,20 @@ function IRVResultsDisplay({ results }: { results: any }) {
         </div>
       )}
 
-      {!results.winner && results.pendingTie && (
+      {results.continuedForReporting && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          <div className="font-semibold">Supplementary preference distribution</div>
+          <p className="mt-1">
+            The official winner was declared in round {results.decisiveRound}. Later rounds distribute preferences to a final-two tally for reporting only and do not change that result.
+          </p>
+        </div>
+      )}
+
+      {results.pendingTie && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <h4 className="text-lg font-semibold text-yellow-900">Count paused for tie-break</h4>
+          <h4 className="text-lg font-semibold text-yellow-900">{results.winner ? 'Supplementary distribution paused for tie-break' : 'Count paused for tie-break'}</h4>
           <p className="text-yellow-800">
-            {results.pendingTie.tiedCandidates.join(', ')} are tied {results.pendingTie.type === 'winner' ? 'for the final result' : 'for exclusion'}. The Returning Officer must apply the election’s declared tie-break rule before counting continues.
+            {results.pendingTie.tiedCandidates.join(', ')} are tied {results.pendingTie.type === 'winner' ? 'for the final result' : 'for exclusion'}. The Returning Officer must apply the election’s declared tie-break rule before {results.winner ? 'the reporting-only distribution' : 'counting'} continues.
           </p>
         </div>
       )}
@@ -110,8 +127,11 @@ function IRVResultsDisplay({ results }: { results: any }) {
         <div className="space-y-4">
           {results.rounds.map((round: any, index: number) => (
             <div key={index} className="border border-gray-200 rounded-lg p-4">
-              <div className="flex justify-between items-center mb-3">
-                <h5 className="font-medium text-gray-900">Round {round.round}</h5>
+              <div className="flex justify-between items-center mb-3 gap-3">
+                <h5 className="font-medium text-gray-900">
+                  Round {round.round}
+                  {round.supplementary && <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Supplementary</span>}
+                </h5>
                 {round.eliminated.length > 0 && (
                   <span className="text-sm text-red-600">
                     Eliminated: {round.eliminated.join(', ')}
@@ -457,7 +477,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
         {countRuns.length > 0 && (
           <section className="mt-14 space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Alternative count runs</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Supplementary and alternative count runs</h2>
               <p className="mt-2 text-gray-600">These audited counts use the same frozen ballots and do not replace the declared result above.</p>
             </div>
             {countRuns.map(run => {
@@ -468,9 +488,9 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <h3 className="text-lg font-semibold text-gray-900">Count run #{run.id}: {run.questionTitle}</h3>
-                        <p className="mt-1 text-sm text-gray-600">{run.method.toUpperCase()} · {run.status === 'pending_tie' ? 'Paused for an audited tie decision' : 'Complete'} · {formatAuditDate(run.createdAt)} · {run.createdByName || 'Election official'}</p>
+                        <p className="mt-1 text-sm text-gray-600">{run.settings.continueAfterMajority ? 'Full preference distribution' : run.method.toUpperCase()} · {run.status === 'pending_tie' ? 'Paused for an audited tie decision' : 'Complete'} · {formatAuditDate(run.createdAt)} · {run.createdByName || 'Election official'}</p>
                       </div>
-                      <span className="badge badge-gray">Alternative count</span>
+                      <span className="badge badge-gray">{run.settings.continueAfterMajority ? 'Supplementary distribution' : 'Alternative count'}</span>
                     </div>
                   </div>
                   <div className="card-body">

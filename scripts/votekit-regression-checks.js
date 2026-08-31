@@ -43,6 +43,7 @@ const createElectionForm = read('src/app/admin/plebiscites/new/CreatePlebisciteF
 const globalCss = read('src/app/globals.css');
 const countRuns = read('src/lib/result-count-runs.ts');
 const countRunsRoute = read('src/app/api/admin/result-count-runs/route.ts');
+const encryptedElectionServer = read('src/lib/encrypted-election-server.ts');
 
 const participationCreate = db.match(/CREATE TABLE IF NOT EXISTS participation \([\s\S]*?\);/);
 assert(Boolean(participationCreate), 'participation table definition exists');
@@ -75,6 +76,10 @@ assert(createElectionForm.includes("close_date: typeof savedForm.close_date === 
 assert(globalCss.includes('color-scheme: light') && globalCss.includes('bg-white text-gray-900'), 'form controls remain readable when the device prefers dark mode');
 assert(countRuns.includes('sourceBallotHash') && countRuns.includes('resultHash') && countRuns.includes('settings_json'), 'alternative count runs retain method settings and source/result fingerprints');
 assert(countRunsRoute.includes('canManageElection') && countRunsRoute.includes("['owner', 'returning_officer']"), 'alternative count creation is restricted to authorised election officials');
+assert(db.includes('continue_after_majority') && adminPlebiscitesRoute.includes('continueAfterMajority'), 'full preference distribution is an explicit persisted ranked-choice setting');
+assert(irv.includes('continueAfterMajority') && irv.includes('continuedForReporting') && irv.includes('decisiveRound'), 'IRV freezes the official majority before supplementary distribution');
+assert(countRuns.includes('votekit-irv-full-distribution-v1') && countRuns.includes('continueAfterMajority'), 'supplementary count runs fingerprint their full-distribution algorithm setting');
+assert(encryptedElectionServer.includes('continue_after_majority') && encryptedElectionServer.includes('continueAfterMajority: true'), 'encrypted election manifests bind an enabled full-distribution rule');
 assert(irv.includes('tiedCandidates'), 'IRV reports tied candidates instead of silently choosing a winner');
 assert(!irv.includes('remainingCandidates.sort()[0]'), 'IRV no longer selects alphabetical winner for full tie');
 assert(irv.includes('roundData.eliminated = [eliminatedCandidate]'), 'IRV excludes exactly one lowest candidate per round');

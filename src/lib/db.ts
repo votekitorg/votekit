@@ -345,6 +345,7 @@ function runMigrations() {
   runEmailDeliveryMigrations(database);
   runGitHubFeedbackMigrations(database);
   runElectionSetupDraftMigrations(database);
+  runFullPreferenceDistributionMigration(database);
 }
 
 function tableInfo(database: Database.Database, tableName: string): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {
@@ -358,6 +359,13 @@ function tableSql(database: Database.Database, tableName: string): string {
 
 function hasColumn(database: Database.Database, tableName: string, columnName: string): boolean {
   return tableInfo(database, tableName).some(column => column.name === columnName);
+}
+
+function runFullPreferenceDistributionMigration(database: Database.Database): void {
+  if (!hasColumn(database, 'questions', 'continue_after_majority')) {
+    database.exec(`ALTER TABLE questions ADD COLUMN continue_after_majority INTEGER
+      NOT NULL DEFAULT 0 CHECK(continue_after_majority IN (0, 1))`);
+  }
 }
 
 function runElectionArchiveMigration(database: Database.Database): void {

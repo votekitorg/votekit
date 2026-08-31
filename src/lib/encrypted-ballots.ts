@@ -7,6 +7,7 @@ export interface EncryptedQuestionManifest {
   type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
   options: string[];
   preferentialType: 'compulsory' | 'optional';
+  continueAfterMajority?: boolean;
 }
 
 export interface EncryptedElectionManifest {

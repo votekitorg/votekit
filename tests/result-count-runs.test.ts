@@ -14,11 +14,11 @@ let questionId: number;
 let sessionId: string;
 let getResults: typeof import('@/lib/results').getPlebisciteResults;
 
-function request(method: string) {
+function request(method: string, continueAfterMajority = false) {
   return new NextRequest('http://localhost/api/admin/result-count-runs', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-csrf-token': CSRF, cookie: `csrf-token=${CSRF}; admin-session=${sessionId}` },
-    body: JSON.stringify({ questionId, method })
+    body: JSON.stringify({ questionId, method, continueAfterMajority })
   });
 }
 
@@ -42,7 +42,8 @@ beforeAll(async () => {
   ).run(electionId, JSON.stringify(['A', 'B', 'C'])).lastInsertRowid);
   const insert = db.prepare('INSERT INTO votes (question_id, vote_data, receipt_code) VALUES (?, ?, ?)');
   [
-    ['A', 'B', 'C'], ['A', 'C', 'B'], ['B', 'C', 'A'], ['C', 'A', 'B'], ['C', 'A', 'B']
+    ['A', 'B', 'C'], ['A', 'C', 'B'], ['A', 'C', 'B'], ['A', 'B', 'C'],
+    ['B', 'C', 'A'], ['B', 'A', 'C'], ['C', 'B', 'A']
   ].forEach((preferences, index) => insert.run(questionId, JSON.stringify({ preferences }), `count-receipt-${index}`));
 });
 
@@ -76,5 +77,27 @@ describe('audited alternative count runs', () => {
     expect(body.run.id).not.toBe(firstId);
     expect(body.run.resultHash).toBe(firstHash);
     expect(db.prepare('SELECT COUNT(*) AS count FROM result_count_runs').get().count).toBe(2);
+  });
+
+  it('records a reporting-only full preference distribution without changing the primary result', async () => {
+    const primaryBefore = getResults('alternative-counts').questions[0].results;
+    expect(primaryBefore.winner).toBe('A');
+    expect(primaryBefore.rounds).toHaveLength(1);
+
+    const response = await post(request('irv', true));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.run.settings).toMatchObject({
+      algorithm: 'votekit-irv-full-distribution-v1',
+      continueAfterMajority: true
+    });
+    expect(body.run.result.winner).toBe('A');
+    expect(body.run.result.decisiveRound).toBe(1);
+    expect(body.run.result.continuedForReporting).toBe(true);
+    expect(body.run.result.rounds.some((round: any) => round.supplementary)).toBe(true);
+    expect(getResults('alternative-counts').questions[0].results).toEqual(primaryBefore);
+    expect(db.prepare('SELECT continue_after_majority FROM questions WHERE id = ?').get(questionId))
+      .toEqual({ continue_after_majority: 0 });
   });
 });

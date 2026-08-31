@@ -21,7 +21,7 @@ const manifest: EncryptedElectionManifest = {
   envelopePlaintextBytes: 4_096,
   questions: [
     { id: 'approve', type: 'yes_no', options: ['Yes', 'No'], preferentialType: 'compulsory' },
-    { id: 'rank', type: 'ranked_choice', options: ['A', 'B', 'C'], preferentialType: 'optional' }
+    { id: 'rank', type: 'ranked_choice', options: ['A', 'B', 'C'], preferentialType: 'optional', continueAfterMajority: true }
   ]
 };
 

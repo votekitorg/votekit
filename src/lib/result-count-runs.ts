@@ -16,8 +16,9 @@ export interface ResultCountRun {
   result: any;
   settings: {
     primaryMethod: ResultCountMethod;
-    algorithm: 'votekit-irv-v1' | 'votekit-condorcet-schulze-v1';
+    algorithm: 'votekit-irv-v1' | 'votekit-irv-full-distribution-v1' | 'votekit-condorcet-schulze-v1';
     preferentialType: 'compulsory' | 'optional';
+    continueAfterMajority: boolean;
     options: string[];
     tieResolutions: IRVTieResolution[];
   };
@@ -74,6 +75,7 @@ export function createResultCountRun(input: {
   questionId: number;
   method: ResultCountMethod;
   adminUserId: number;
+  continueAfterMajority?: boolean;
 }): ResultCountRun {
   const question = db.prepare(`
     SELECT q.*, p.id AS plebiscite_id, p.status AS election_status, p.privacy_mode
@@ -82,6 +84,9 @@ export function createResultCountRun(input: {
   `).get(input.questionId) as any;
   if (!question || !['ranked_choice', 'condorcet'].includes(question.type)) throw new Error('Compatible ranked question not found');
   if (question.election_status !== 'closed') throw new Error('Alternative counts can only be created after voting closes');
+  if (input.continueAfterMajority && (input.method !== 'irv' || question.type !== 'ranked_choice')) {
+    throw new Error('Full preference distribution is available only for ranked-choice IRV counts');
+  }
 
   const ballots = rankedBallots(question);
   const options = JSON.parse(question.options) as string[];
@@ -92,12 +97,21 @@ export function createResultCountRun(input: {
     ballots
   });
   const result: any = input.method === 'irv'
-    ? tabulateIRV(ballots.map(ballot => ({ preferences: ballot.preferences })), options, resolutions)
+    ? tabulateIRV(
+        ballots.map(ballot => ({ preferences: ballot.preferences })),
+        options,
+        resolutions,
+        { continueAfterMajority: input.continueAfterMajority === true }
+      )
     : tabulateCondorcet(ballots.map(ballot => ({ preferences: ballot.preferences })), options);
+  const continueAfterMajority = input.method === 'irv' && input.continueAfterMajority === true;
   const settings = {
     primaryMethod: (question.type === 'ranked_choice' ? 'irv' : 'condorcet') as ResultCountMethod,
-    algorithm: (input.method === 'irv' ? 'votekit-irv-v1' : 'votekit-condorcet-schulze-v1') as 'votekit-irv-v1' | 'votekit-condorcet-schulze-v1',
+    algorithm: (input.method === 'irv'
+      ? continueAfterMajority ? 'votekit-irv-full-distribution-v1' : 'votekit-irv-v1'
+      : 'votekit-condorcet-schulze-v1') as 'votekit-irv-v1' | 'votekit-irv-full-distribution-v1' | 'votekit-condorcet-schulze-v1',
     preferentialType: (question.preferential_type || 'compulsory') as 'compulsory' | 'optional',
+    continueAfterMajority,
     options,
     tieResolutions: input.method === 'irv' ? resolutions : []
   };

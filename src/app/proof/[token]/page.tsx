@@ -84,6 +84,11 @@ export default async function ElectionProofPage({ params }: { params: Promise<{ 
               {question.description && <p className="mt-2 text-sm text-gray-600">{question.description}</p>}
             </div>
             <div className="card-body space-y-3">
+              {question.type === 'ranked_choice' && question.continueAfterMajority === true && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                  After the official winner is declared, preferences continue to a final-two distribution for reporting only.
+                </div>
+              )}
               {(Array.isArray(question.options) ? question.options : []).map((option: string, optionIndex: number) => (
                 <div key={optionIndex} className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3">
                   <span className="flex h-5 w-5 items-center justify-center rounded-full border border-gray-400 text-xs text-gray-500">

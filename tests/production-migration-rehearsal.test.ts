@@ -17,6 +17,7 @@ describe.skipIf(!rehearsalDatabase)('production database migration rehearsal', (
     expect(db.pragma('foreign_key_check')).toHaveLength(0);
 
     const electionColumns = db.pragma('table_info(plebiscites)') as Array<{ name: string }>;
+    const questionColumns = db.pragma('table_info(questions)') as Array<{ name: string }>;
     const sessionColumns = db.pragma('table_info(sessions)') as Array<{ name: string }>;
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>;
 
@@ -25,6 +26,7 @@ describe.skipIf(!rehearsalDatabase)('production database migration rehearsal', (
       'ballot_publication_mode', 'privacy_threshold', 'results_visibility', 'configuration_published_at'
     ]));
     expect(sessionColumns.map((column) => column.name)).toEqual(expect.arrayContaining(['voter_roll_id', 'anonymous_code_id', 'credential_type']));
+    expect(questionColumns.map((column) => column.name)).toContain('continue_after_majority');
     expect(tables.map((table) => table.name)).toEqual(expect.arrayContaining([
       'anonymous_access_codes', 'voter_link_tokens', 'irv_tie_resolutions',
       'email_jobs', 'email_suppressions', 'email_webhook_events', 'result_count_runs',

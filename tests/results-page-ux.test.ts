@@ -17,4 +17,10 @@ describe('results page layout', () => {
     expect(resultsPage).toContain('Receipt Code');
     expect(resultsPage).toContain('Published Ballot');
   });
+
+  it('separates supplementary preference distributions from the declared result', () => {
+    expect(resultsPage).toContain('Supplementary preference distribution');
+    expect(resultsPage).toContain('for reporting only and do not change that result');
+    expect(resultsPage).toContain("run.settings.continueAfterMajority ? 'Supplementary distribution'");
+  });
 });

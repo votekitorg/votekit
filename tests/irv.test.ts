@@ -10,6 +10,49 @@ describe('tabulateIRV', () => {
     expect(result.winner).toBe('A');
     expect(result.rounds).toHaveLength(1);
     expect(result.rounds[0].votes).toEqual({ A: 2, B: 1 });
+    expect(result.decisiveRound).toBe(1);
+    expect(result.continuedForReporting).toBeUndefined();
+  });
+
+  it('can continue a first-round majority to a reporting-only final-two distribution', () => {
+    const repeat = (count: number, preferences: string[]) =>
+      Array.from({ length: count }, () => ({ preferences }));
+    const result = tabulateIRV([
+      ...repeat(246, ['In favour']),
+      ...repeat(61, ['Against']),
+      ...repeat(11, ['Formally abstain', 'Against']),
+      ...repeat(10, ['Formally abstain', 'In favour']),
+      ...repeat(6, ['Formally abstain'])
+    ], ['In favour', 'Against', 'Formally abstain'], [], { continueAfterMajority: true });
+
+    expect(result.winner).toBe('In favour');
+    expect(result.decisiveRound).toBe(1);
+    expect(result.continuedForReporting).toBe(true);
+    expect(result.rounds).toHaveLength(3);
+    expect(result.rounds[0]).toMatchObject({ round: 1, winner: 'In favour', votes: { 'In favour': 246, Against: 61, 'Formally abstain': 27 } });
+    expect(result.rounds[1]).toMatchObject({
+      round: 2,
+      supplementary: true,
+      eliminated: ['Formally abstain'],
+      transfer: { from: 'Formally abstain', to: { Against: 11, 'In favour': 10 }, exhausted: 6 }
+    });
+    expect(result.rounds[2]).toMatchObject({ round: 3, supplementary: true, votes: { 'In favour': 256, Against: 72 } });
+    expect(result.exhaustedBallots).toBe(6);
+    expect(formatIRVResults(result)).toContain('reporting only');
+    expect(exportIRVResultsCSV(result)).toContain('Supplementary distribution');
+  });
+
+  it('preserves the official winner when a supplementary exclusion needs a tie decision', () => {
+    const result = tabulateIRV([
+      { preferences: ['A'] }, { preferences: ['A'] },
+      { preferences: ['A'] }, { preferences: ['A'] },
+      { preferences: ['B'] }, { preferences: ['C'] }
+    ], ['A', 'B', 'C'], [], { continueAfterMajority: true });
+
+    expect(result.winner).toBe('A');
+    expect(result.decisiveRound).toBe(1);
+    expect(result.pendingTie).toEqual({ round: 2, type: 'exclusion', tiedCandidates: ['B', 'C'] });
+    expect(result.rounds[1]).toMatchObject({ supplementary: true, eliminated: [] });
   });
 
   it('transfers eliminated candidates’ ballots to next preferences', () => {

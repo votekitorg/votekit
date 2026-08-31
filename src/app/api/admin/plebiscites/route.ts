@@ -174,6 +174,12 @@ export async function POST(request: NextRequest) {
       if (question.preferentialType && !['compulsory', 'optional'].includes(question.preferentialType)) {
         return NextResponse.json({ error: 'Invalid preferential voting rule' }, { status: 400 });
       }
+      if (question.continueAfterMajority !== undefined && typeof question.continueAfterMajority !== 'boolean') {
+        return NextResponse.json({ error: 'Invalid full preference distribution setting' }, { status: 400 });
+      }
+      if (question.type !== 'ranked_choice' && question.continueAfterMajority === true) {
+        return NextResponse.json({ error: 'Full preference distribution is available only for ranked-choice questions' }, { status: 400 });
+      }
 
       if (question.type === 'yes_no' && question.options.length !== 2) {
         return NextResponse.json(
@@ -207,8 +213,8 @@ export async function POST(request: NextRequest) {
         ).run(plebisciteId, adminSession.adminUserId, adminSession.adminUserId);
       }
       const createQuestion = db.prepare(`
-        INSERT INTO questions (plebiscite_id, title, description, type, options, display_order, preferential_type, public_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO questions (plebiscite_id, title, description, type, options, display_order, preferential_type, public_id, continue_after_majority)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       questions.forEach((question: any, index: number) => {
@@ -220,7 +226,8 @@ export async function POST(request: NextRequest) {
           JSON.stringify(question.options.map((option: string) => option.trim())),
           index,
           question.preferentialType || 'compulsory',
-          randomUUID()
+          randomUUID(),
+          question.type === 'ranked_choice' && question.continueAfterMajority === true ? 1 : 0
         );
       });
 

@@ -64,7 +64,15 @@ function simpleOutcome(question: PlebisciteResultsData['questions'][number]): st
 
 function questionOutcome(question: PlebisciteResultsData['questions'][number]): string {
   if (question.type === 'ranked_choice') {
-    if (question.results.winner) return `${question.results.winner} won after ${question.results.rounds?.length || 0} counting round${question.results.rounds?.length === 1 ? '' : 's'}.`;
+    if (question.results.winner) {
+      const decisiveRound = question.results.decisiveRound || question.results.rounds?.find((round: any) => round.winner)?.round || question.results.rounds?.length || 0;
+      const reporting = question.results.continuedForReporting
+        ? question.results.pendingTie
+          ? ' The supplementary distribution is paused for an audited tie decision.'
+          : ' A final-two distribution followed for reporting only.'
+        : '';
+      return `${question.results.winner} won in counting round ${decisiveRound}.${reporting}`;
+    }
     if (question.results.pendingTie) return `Count paused: tie-break required between ${question.results.pendingTie.tiedCandidates.join(', ')}.`;
     const tied = question.results.rounds?.find((round: any) => round.tiedCandidates?.length)?.tiedCandidates;
     return tied?.length ? `Tied result: ${tied.join(', ')}.` : 'No winner was determined.';
@@ -212,12 +220,16 @@ export async function buildResultsPdf(data: PlebisciteResultsData, now: Date = n
     } else if (question.type === 'ranked_choice') {
       const rounds = question.results.rounds || [];
       heading('Counting rounds', 2);
+      if (question.results.continuedForReporting) {
+        body(`The official winner was declared in round ${question.results.decisiveRound}. Rounds labelled supplementary distribute preferences to a final-two tally for reporting only and do not change the result.`);
+        doc.moveDown(0.6);
+      }
       rounds.forEach((round: any) => {
         const entries = Object.entries(round.votes as Record<string, number>).sort((a, b) => b[1] - a[1]);
         const total = entries.reduce((sum, [, count]) => sum + count, 0);
         const rowHeight = 48 + entries.length * 14 + (round.transfer ? 14 : 0);
         ensureSpace(Math.min(rowHeight, 180));
-        doc.fillColor(COLOURS.ink).font('Helvetica-Bold').fontSize(10).text(`Round ${round.round}`);
+        doc.fillColor(COLOURS.ink).font('Helvetica-Bold').fontSize(10).text(`Round ${round.round}${round.supplementary ? ' · Supplementary distribution' : ''}`);
         const notes = [
           round.eliminated?.length ? `Eliminated: ${round.eliminated.join(', ')}` : '',
           round.tiedCandidates?.length ? `Tie: ${round.tiedCandidates.join(', ')}` : '',
@@ -290,12 +302,16 @@ export async function buildResultsPdf(data: PlebisciteResultsData, now: Date = n
 
   if (data.countRuns.length > 0) {
     doc.addPage();
-    heading('Alternative count runs');
+    heading('Supplementary and alternative count runs');
     body('These immutable audited counts use the same frozen anonymous ballots. They do not replace the declared results in the preceding section.');
     data.countRuns.forEach(run => {
       ensureSpace(130);
       heading(`Count run #${run.id}: ${run.questionTitle}`, 2);
-      labelledValue('Method', run.method.toUpperCase());
+      labelledValue('Method', run.settings.continueAfterMajority ? 'IRV full preference distribution' : run.method.toUpperCase());
+      if (run.settings.continueAfterMajority) {
+        body(`The official winner was declared in round ${run.result.decisiveRound}. Later rounds are a reporting-only final-two preference distribution and do not replace the declared result.`);
+        doc.moveDown(0.5);
+      }
       labelledValue('Status', run.status === 'pending_tie' ? 'Paused for audited tie decision' : 'Complete');
       labelledValue('Created', run.createdAt);
       labelledValue('Created by', run.createdByName || 'Election official');
@@ -303,6 +319,22 @@ export async function buildResultsPdf(data: PlebisciteResultsData, now: Date = n
       labelledValue('Outcome', run.result.winner || (run.result.pendingTie ? 'Pending tie decision' : 'Tie reported'));
       labelledValue('Source ballot fingerprint', run.sourceBallotHash);
       labelledValue('Result fingerprint', run.resultHash);
+      if (run.method === 'irv') {
+        heading('Count details', 2);
+        (run.result.rounds || []).forEach((round: any) => {
+          ensureSpace(35);
+          const counts = Object.entries(round.votes as Record<string, number>)
+            .sort(([, countA], [, countB]) => countB - countA)
+            .map(([candidate, count]) => `${candidate}: ${count}`)
+            .join(' · ');
+          doc.fillColor(COLOURS.ink).font('Helvetica-Bold').fontSize(9)
+            .text(`Round ${round.round}${round.supplementary ? ' · Supplementary distribution' : ''}`);
+          body(counts);
+          if (round.transfer) body(`Preference transfers: ${formatIRVTransferSummary(round.transfer)}`);
+          if (round.tiedCandidates?.length) body(`Paused tie: ${round.tiedCandidates.join(', ')}`);
+          doc.moveDown(0.4);
+        });
+      }
       doc.moveDown(0.8);
     });
   }

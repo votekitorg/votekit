@@ -15,7 +15,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const questionId = Number(body?.questionId);
     const method = body?.method as ResultCountMethod;
-    if (!Number.isSafeInteger(questionId) || questionId <= 0 || !['irv', 'condorcet'].includes(method)) {
+    const continueAfterMajority = body?.continueAfterMajority === true;
+    if (!Number.isSafeInteger(questionId) || questionId <= 0 || !['irv', 'condorcet'].includes(method) ||
+      (body?.continueAfterMajority !== undefined && typeof body.continueAfterMajority !== 'boolean') ||
+      (continueAfterMajority && method !== 'irv')) {
       return NextResponse.json({ error: 'Invalid count request' }, { status: 400 });
     }
     const question = db.prepare('SELECT plebiscite_id FROM questions WHERE id = ?').get(questionId) as { plebiscite_id: number } | undefined;
@@ -23,7 +26,7 @@ export async function POST(request: NextRequest) {
     if (!canManageElection(session, Number(question.plebiscite_id))) {
       return NextResponse.json({ error: 'You do not have permission to manage this election' }, { status: 403 });
     }
-    const run = createResultCountRun({ questionId, method, adminUserId: session.adminUserId });
+    const run = createResultCountRun({ questionId, method, adminUserId: session.adminUserId, continueAfterMajority });
     recordAdminAuditLog({
       adminUserId: session.adminUserId,
       action: 'result_count_run.create',
@@ -33,6 +36,7 @@ export async function POST(request: NextRequest) {
         plebisciteId: run.plebisciteId,
         questionId: run.questionId,
         method: run.method,
+        continueAfterMajority: run.settings.continueAfterMajority,
         status: run.status,
         sourceBallotHash: run.sourceBallotHash,
         resultHash: run.resultHash

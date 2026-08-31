@@ -14,6 +14,7 @@ interface Question {
   type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
   options: string[];
   preferentialType?: 'compulsory' | 'optional'; // Only applies to ranked_choice and condorcet
+  continueAfterMajority?: boolean; // Ranked-choice reporting only
 }
 
 interface SetupDraft {
@@ -132,7 +133,8 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
       description: '',
       type: 'yes_no',
       options: ['Yes', 'No'],
-      preferentialType: 'compulsory'
+      preferentialType: 'compulsory',
+      continueAfterMajority: false
     }]);
   };
 
@@ -152,6 +154,9 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
       if (!newQuestions[index].preferentialType) {
         newQuestions[index].preferentialType = 'compulsory';
       }
+    }
+    if (field === 'type' && value !== 'ranked_choice') {
+      newQuestions[index].continueAfterMajority = false;
     }
     
     setQuestions(newQuestions);
@@ -671,6 +676,25 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
                             </div>
                           )}
 
+                          {question.type === 'ranked_choice' && (
+                            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                              <label className="flex cursor-pointer items-start space-x-3">
+                                <input
+                                  type="checkbox"
+                                  checked={question.continueAfterMajority === true}
+                                  onChange={(event) => updateQuestion(qIndex, 'continueAfterMajority', event.target.checked)}
+                                  className="mt-1 h-4 w-4 text-primary"
+                                />
+                                <div>
+                                  <div className="font-medium text-emerald-950">Continue to a final-two preference distribution</div>
+                                  <div className="mt-1 text-sm text-emerald-800">
+                                    After the official winner reaches a majority, continue excluding lower options to publish preference flows for reporting only. This never changes the declared winner.
+                                  </div>
+                                </div>
+                              </label>
+                            </div>
+                          )}
+
                           <div>
                             <div className="flex justify-between items-center mb-3">
                               <label className="block text-sm font-medium text-gray-700">
@@ -853,6 +877,11 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
                             <span className="font-medium text-gray-700">Options: </span>
                             <span className="text-gray-600">{question.options.join(', ')}</span>
                           </div>
+                          {question.type === 'ranked_choice' && question.continueAfterMajority && (
+                            <div className="mt-2 text-sm font-medium text-emerald-800">
+                              Reporting: continue to a final-two preference distribution after the winner is declared
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

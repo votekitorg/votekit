@@ -92,6 +92,22 @@ describe('production lifecycle guardrails', () => {
     expect(db.prepare('SELECT COUNT(*) AS count FROM plebiscites').get().count).toBe(before);
   });
 
+  it('accepts full distribution only for ranked-choice questions', async () => {
+    const before = db.prepare('SELECT COUNT(*) AS count FROM plebiscites').get().count;
+    const response = await plebiscitesPost(adminRequest(
+      'http://localhost/api/admin/plebiscites',
+      'POST',
+      validElection({
+        questions: [{
+          title: 'Choose', type: 'multiple_choice', options: ['A', 'B'], continueAfterMajority: true
+        }]
+      })
+    ));
+
+    expect(response.status).toBe(400);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM plebiscites').get().count).toBe(before);
+  });
+
   it('requires a voter roll before opening and locks the roll after opening', async () => {
     const createResponse = await plebiscitesPost(adminRequest(
       'http://localhost/api/admin/plebiscites',
