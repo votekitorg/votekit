@@ -222,30 +222,42 @@ function PublicBallotsDisplay({ ballots, suppressed, threshold }: {
   }
 
   return (
-    <div className="mt-6 border-t border-gray-200 pt-6">
-      <h4 className="text-md font-semibold text-gray-900 mb-2">Anonymous Ballot Verification</h4>
-      <p className="text-sm text-gray-600 mb-4">
-        Find your saved receipt code below to confirm your ballot was included and recorded correctly. Receipt codes are published with ballots only, not with voter identities.
-      </p>
-      <div className="overflow-x-auto border border-gray-200 rounded-lg">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-700">Receipt Code</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-700">Published Ballot</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {ballots.map((ballot) => (
-              <tr key={ballot.receiptCode}>
-                <td className="px-4 py-3 font-mono text-xs text-gray-800 whitespace-nowrap">{ballot.receiptCode}</td>
-                <td className="px-4 py-3 text-gray-900">{formatBallot(ballot.ballot)}</td>
+    <details className="group mt-6 overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
+        <div>
+          <h4 className="font-semibold text-gray-900">Ballot receipts</h4>
+          <p className="mt-1 text-sm text-gray-600">
+            View {ballots.length.toLocaleString()} anonymous ballot receipt{ballots.length === 1 ? '' : 's'} for this question
+          </p>
+        </div>
+        <svg className="h-5 w-5 shrink-0 text-gray-500 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </summary>
+      <div className="border-t border-gray-200 p-4">
+        <p className="mb-4 text-sm text-gray-600">
+          Find your saved receipt code below to confirm your ballot was included and recorded correctly. Receipt codes are published with ballots only, not with voter identities.
+        </p>
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium text-gray-700">Receipt Code</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700">Published Ballot</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-100 bg-white">
+              {ballots.map((ballot) => (
+                <tr key={ballot.receiptCode}>
+                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-gray-800">{ballot.receiptCode}</td>
+                  <td className="px-4 py-3 text-gray-900">{formatBallot(ballot.ballot)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </details>
   );
 }
 

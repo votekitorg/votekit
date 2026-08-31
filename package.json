@@ -1,6 +1,6 @@
 {
   "name": "votekit",
-  "version": "0.12.9",
+  "version": "0.12.10",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -43,6 +43,8 @@
     "node": ">=20.9.0"
   },
   "overrides": {
+    "js-yaml": "4.3.2",
+    "nanoid": "3.3.18",
     "postcss": "8.5.24",
     "sharp": "0.35.3"
   },
