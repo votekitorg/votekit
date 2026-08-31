@@ -4,6 +4,7 @@ import { tabulateCondorcet, exportCondorcetResultsCSV } from '@/lib/condorcet';
 import { buildEncryptedManifest } from '@/lib/encrypted-election-server';
 import type { EncryptedElectionManifest } from '@/lib/encrypted-ballots';
 import { listResultCountRuns, type ResultCountRun } from '@/lib/result-count-runs';
+import { getBallotDistributionSummary, type BallotDistributionAdjustment } from '@/lib/ballot-distribution';
 
 export interface PlebisciteResultsData {
   plebiscite: {
@@ -23,7 +24,10 @@ export interface PlebisciteResultsData {
   participation: {
     totalVotes: number;
     eligibleCredentials: number;
+    ballotsDistributed: number;
+    ballotsDistributedSource: 'generated_credentials' | 'administrator_reported';
     participationRate: number | null;
+    distributionAdjustments: BallotDistributionAdjustment[];
   };
   encryptedAudit?: {
     manifest: EncryptedElectionManifest;
@@ -85,12 +89,7 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
     throw new ResultsUnavailableError('No questions found for this election', 404);
   }
 
-  const participationCount = db.prepare(`
-    SELECT COUNT(*) as count FROM participation WHERE plebiscite_id = ?
-  `).get(plebiscite.id) as { count: number };
-  const eligibleCredentials = plebiscite.access_mode === 'anonymous_codes'
-    ? (db.prepare('SELECT COUNT(*) AS count FROM anonymous_access_codes WHERE plebiscite_id = ?').get(plebiscite.id) as { count: number }).count
-    : (db.prepare('SELECT COUNT(*) AS count FROM voter_roll WHERE plebiscite_id = ?').get(plebiscite.id) as { count: number }).count;
+  const participation = getBallotDistributionSummary(plebiscite.id, plebiscite.access_mode);
 
   const encryptedPublishedBallots = plebiscite.privacy_mode === 'encrypted'
     ? db.prepare(`
@@ -119,7 +118,7 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
         `).all(question.id) as any[];
 
     const publicBallots = (plebiscite.ballot_publication_mode === 'always' ||
-      participationCount.count >= Number(plebiscite.privacy_threshold || 20))
+      participation.totalVotes >= Number(plebiscite.privacy_threshold || 20))
       ? votes.map((vote: any) => ({
           receiptCode: vote.receipt_code,
           ballot: JSON.parse(vote.vote_data)
@@ -242,11 +241,7 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
       privacyThreshold: Number(plebiscite.privacy_threshold || 20),
       ballotPublicationMode: plebiscite.ballot_publication_mode || 'threshold'
     },
-    participation: {
-      totalVotes: participationCount.count,
-      eligibleCredentials,
-      participationRate: eligibleCredentials > 0 ? (participationCount.count / eligibleCredentials) * 100 : null
-    },
+    participation,
     ...(encryptedArtifact ? {
       encryptedAudit: {
         manifest: buildEncryptedManifest(plebiscite),
@@ -277,6 +272,21 @@ export function buildResultsCsv(slug: string, data: PlebisciteResultsData): stri
     csvData += `${csvCell('Frozen input hash')},${csvCell(data.encryptedAudit.inputHash)}\n`;
     csvData += `${csvCell('Published output hash')},${csvCell(data.encryptedAudit.outputHash)}\n\n`;
   }
+
+  csvData += `${csvCell('Participation summary')}\n`;
+  csvData += `${csvCell('Ballots cast')},${csvCell(data.participation.totalVotes)}\n`;
+  csvData += `${csvCell('Voting credentials generated')},${csvCell(data.participation.eligibleCredentials)}\n`;
+  csvData += `${csvCell('Ballots distributed')},${csvCell(data.participation.ballotsDistributed)}\n`;
+  csvData += `${csvCell('Distribution source')},${csvCell(data.participation.ballotsDistributedSource === 'administrator_reported' ? 'Administrator reported' : 'Assumed from generated credentials')}\n`;
+  csvData += `${csvCell('Participation rate')},${csvCell(data.participation.participationRate === null ? '' : `${data.participation.participationRate.toFixed(1)}%`)}\n`;
+  if (data.participation.distributionAdjustments.length > 0) {
+    csvData += `${csvCell('Ballot distribution adjustment history')}\n`;
+    csvData += `${csvCell('Created')},${csvCell('Administrator')},${csvCell('Previous')},${csvCell('Updated')},${csvCell('Credentials generated')},${csvCell('Reason')}\n`;
+    for (const adjustment of data.participation.distributionAdjustments) {
+      csvData += `${csvCell(adjustment.createdAt)},${csvCell(adjustment.adjustedByName || 'Election administrator')},${csvCell(adjustment.previousBallotsDistributed)},${csvCell(adjustment.ballotsDistributed)},${csvCell(adjustment.generatedCredentials)},${csvCell(adjustment.reason)}\n`;
+    }
+  }
+  csvData += '\n';
 
   for (const question of data.questions) {
     if (question.type === 'yes_no') {

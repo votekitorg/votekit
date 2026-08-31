@@ -10,6 +10,7 @@ A privacy-conscious, auditable online election platform for member organisations
 - **Receipt Codes**: Verify recorded choices without linking a ballot to voter identity
 - **Privacy-aware publication**: Aggregate results remain available while individual anonymous ballots default to a minimum publication threshold of 20
 - **Audited alternative counts**: Run IRV or Condorcet against the same frozen ranked ballots without replacing the declared result
+- **Audited distribution reporting**: Report how many generated credentials were actually distributed and calculate participation from that disclosed denominator
 - **One Vote Per Member**: Enforced at database level with participation tracking
 
 ### 📊 **Multiple Question Types**

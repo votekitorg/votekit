@@ -15,6 +15,8 @@ import { getPlebisciteResults } from '@/lib/results';
 import { reconcileScheduledElection } from '@/lib/election-opening';
 import { listResultCountRuns } from '@/lib/result-count-runs';
 import ResultCountRunManager from '@/components/ResultCountRunManager';
+import BallotDistributionManager from '@/components/BallotDistributionManager';
+import { getBallotDistributionSummary } from '@/lib/ballot-distribution';
 
 interface Plebiscite {
   id: number;
@@ -68,16 +70,13 @@ async function getPlebiscite(id: string): Promise<{ plebiscite: Plebiscite; ques
     options: JSON.parse(q.options)
   })) as Question[];
 
-  // Get participation stats for this specific election
-  const participationCount = db.prepare('SELECT COUNT(*) as count FROM participation WHERE plebiscite_id = ?').get(id) as { count: number };
-  const voterRollCount = db.prepare('SELECT COUNT(*) as count FROM voter_roll WHERE plebiscite_id = ?').get(id) as { count: number };
-  const accessCodeCount = db.prepare('SELECT COUNT(*) as count FROM anonymous_access_codes WHERE plebiscite_id = ?').get(id) as { count: number };
-  const eligibleCount = plebiscite.access_mode === 'anonymous_codes' ? accessCodeCount.count : voterRollCount.count;
-  
+  const distribution = getBallotDistributionSummary(plebiscite.id, plebiscite.access_mode);
   const stats = {
-    totalVotes: participationCount.count,
-    totalVoters: eligibleCount,
-    participationRate: eligibleCount > 0 ? (participationCount.count / eligibleCount * 100).toFixed(1) : '0.0'
+    totalVotes: distribution.totalVotes,
+    totalVoters: distribution.eligibleCredentials,
+    ballotsDistributed: distribution.ballotsDistributed,
+    participationRate: distribution.participationRate === null ? '0.0' : distribution.participationRate.toFixed(1),
+    distribution
   };
 
   return { plebiscite, questions, stats };
@@ -303,7 +302,7 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-gray-900">{stats.totalVoters}</div>
-                  <div className="text-sm text-gray-600">Eligible Voters</div>
+                  <div className="text-sm text-gray-600">Credentials Generated</div>
                 </div>
               </div>
             </div>
@@ -414,6 +413,10 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
             </div>
           </div>
         </div>
+
+        {canManage && (
+          <BallotDistributionManager plebisciteId={plebiscite.id} summary={stats.distribution} />
+        )}
 
         {/* Voter Management */}
         {canManage ? (

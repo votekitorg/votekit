@@ -130,7 +130,14 @@ describe('GET /api/results/[slug]', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.participation).toEqual({ totalVotes: 1, eligibleCredentials: 1, participationRate: 100 });
+    expect(body.participation).toEqual({
+      totalVotes: 1,
+      eligibleCredentials: 1,
+      ballotsDistributed: 1,
+      ballotsDistributedSource: 'generated_credentials',
+      participationRate: 100,
+      distributionAdjustments: []
+    });
     const question = body.questions[0];
     expect(question.results).toEqual({ Alpha: 1, Beta: 1, Gamma: 1 });
     expect(question.publicBallots).toHaveLength(2);

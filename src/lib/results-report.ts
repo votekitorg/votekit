@@ -175,10 +175,16 @@ export async function buildResultsPdf(data: PlebisciteResultsData, now: Date = n
   const statWidth = (contentWidth - statGap * 3) / 4;
   const statY = doc.y + 4;
   stat('Ballots cast', data.participation.totalVotes.toLocaleString(), 48, statY, statWidth);
-  stat('Eligible credentials', data.participation.eligibleCredentials.toLocaleString(), 48 + statWidth + statGap, statY, statWidth);
+  stat('Ballots distributed', data.participation.ballotsDistributed.toLocaleString(), 48 + statWidth + statGap, statY, statWidth);
   stat('Participation', data.participation.participationRate === null ? '—' : `${data.participation.participationRate.toFixed(1)}%`, 48 + (statWidth + statGap) * 2, statY, statWidth);
   stat('Questions', data.questions.length.toLocaleString(), 48 + (statWidth + statGap) * 3, statY, statWidth);
   doc.y = statY + 88;
+  body(`${data.participation.eligibleCredentials.toLocaleString()} voting credentials were generated. ${
+    data.participation.ballotsDistributedSource === 'administrator_reported'
+      ? `${data.participation.ballotsDistributed.toLocaleString()} were reported as distributed by an election administrator.`
+      : 'No separate distribution figure was reported, so participation assumes every generated credential was distributed.'
+  }`);
+  doc.moveDown(0.5);
   heading('Result at a glance');
   data.questions.forEach((question, index) => {
     ensureSpace(42);
@@ -354,6 +360,21 @@ export async function buildResultsPdf(data: PlebisciteResultsData, now: Date = n
   labelledValue('Election reference', `${data.plebiscite.slug} · Internal election ${data.plebiscite.id}`);
   labelledValue('Access model', data.plebiscite.accessMode === 'anonymous_codes' ? 'Anonymous single-use codes and links' : 'Managed voter roll');
   labelledValue('Ballot privacy', data.plebiscite.privacyMode === 'encrypted' ? 'Browser-encrypted ballots, decrypted and shuffled at close' : 'Anonymous ballots separated from participation records');
+
+  heading('Ballot distribution record', 2);
+  labelledValue('Voting credentials generated', data.participation.eligibleCredentials.toLocaleString());
+  labelledValue('Ballots distributed', data.participation.ballotsDistributed.toLocaleString());
+  labelledValue('Participation denominator', data.participation.ballotsDistributedSource === 'administrator_reported' ? 'Administrator reported' : 'Assumed from generated credentials');
+  if (data.participation.distributionAdjustments.length === 0) {
+    body('No ballot distribution adjustment has been recorded.');
+  } else {
+    data.participation.distributionAdjustments.forEach(adjustment => {
+      ensureSpace(46);
+      body(`${adjustment.createdAt} · ${adjustment.adjustedByName || 'Election administrator'} · ${adjustment.previousBallotsDistributed.toLocaleString()} to ${adjustment.ballotsDistributed.toLocaleString()}`);
+      body(`Reason: ${adjustment.reason}`);
+      doc.moveDown(0.3);
+    });
+  }
 
   if (data.encryptedAudit) {
     heading('Encrypted ballot audit', 2);

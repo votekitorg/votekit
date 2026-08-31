@@ -48,7 +48,18 @@ const fixture: PlebisciteResultsData = {
   participation: {
     totalVotes: 75,
     eligibleCredentials: 100,
-    participationRate: 75
+    ballotsDistributed: 90,
+    ballotsDistributedSource: 'administrator_reported',
+    participationRate: 83.3333333333,
+    distributionAdjustments: [{
+      id: 1,
+      ballotsDistributed: 90,
+      previousBallotsDistributed: 100,
+      generatedCredentials: 100,
+      reason: 'Ten members opted out of email communications.',
+      adjustedByName: 'Returning Officer',
+      createdAt: '2026-07-16 03:00:00'
+    }]
   },
   encryptedAudit: {
     manifest: {

@@ -373,7 +373,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
           <div className="mx-auto mb-10 grid max-w-4xl grid-cols-2 gap-3 sm:grid-cols-4">
             {[
               ['Ballots cast', participation.totalVotes.toLocaleString()],
-              ['Eligible credentials', participation.eligibleCredentials.toLocaleString()],
+              ['Ballots distributed', participation.ballotsDistributed.toLocaleString()],
               ['Participation', participation.participationRate === null ? '—' : `${participation.participationRate.toFixed(1)}%`],
               ['Questions', questions.length.toLocaleString()]
             ].map(([label, value]) => (
@@ -382,6 +382,36 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
                 <div className="mt-1 text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
               </div>
             ))}
+          </div>
+
+          <div className="mx-auto mb-10 max-w-4xl rounded-xl border border-gray-200 bg-white p-5 text-sm text-gray-700 shadow-sm">
+            <div className="font-semibold text-gray-900">Ballot distribution record</div>
+            <p className="mt-1">
+              {participation.eligibleCredentials.toLocaleString()} voting credentials were generated.{' '}
+              {participation.ballotsDistributedSource === 'administrator_reported'
+                ? `${participation.ballotsDistributed.toLocaleString()} were reported as distributed by an election administrator.`
+                : 'No separate distribution figure was reported, so participation assumes every generated credential was distributed.'}
+            </p>
+            {participation.distributionAdjustments.length > 0 && (
+              <details className="mt-3">
+                <summary className="cursor-pointer font-medium text-primary">
+                  View adjustment history ({participation.distributionAdjustments.length})
+                </summary>
+                <div className="mt-3 space-y-3 border-l-2 border-gray-200 pl-4">
+                  {participation.distributionAdjustments.map(adjustment => (
+                    <div key={adjustment.id}>
+                      <div className="font-medium text-gray-900">
+                        {adjustment.previousBallotsDistributed.toLocaleString()} to {adjustment.ballotsDistributed.toLocaleString()}
+                      </div>
+                      <div>{adjustment.reason}</div>
+                      <div className="mt-1 text-xs text-gray-500">
+                        {adjustment.adjustedByName || 'Election administrator'} · {formatAuditDate(adjustment.createdAt)} AEST
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
           </div>
 
           <div className="mx-auto mb-10 max-w-4xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">

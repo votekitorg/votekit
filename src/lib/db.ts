@@ -346,6 +346,7 @@ function runMigrations() {
   runGitHubFeedbackMigrations(database);
   runElectionSetupDraftMigrations(database);
   runFullPreferenceDistributionMigration(database);
+  runBallotDistributionMigration(database);
 }
 
 function tableInfo(database: Database.Database, tableName: string): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {
@@ -366,6 +367,25 @@ function runFullPreferenceDistributionMigration(database: Database.Database): vo
     database.exec(`ALTER TABLE questions ADD COLUMN continue_after_majority INTEGER
       NOT NULL DEFAULT 0 CHECK(continue_after_majority IN (0, 1))`);
   }
+}
+
+function runBallotDistributionMigration(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS ballot_distribution_adjustments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plebiscite_id INTEGER NOT NULL,
+      ballots_distributed INTEGER NOT NULL CHECK(ballots_distributed >= 0),
+      previous_ballots_distributed INTEGER NOT NULL CHECK(previous_ballots_distributed >= 0),
+      generated_credentials INTEGER NOT NULL CHECK(generated_credentials >= 0),
+      reason TEXT NOT NULL CHECK(length(trim(reason)) > 0),
+      adjusted_by_admin_user_id INTEGER,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (plebiscite_id) REFERENCES plebiscites(id) ON DELETE CASCADE,
+      FOREIGN KEY (adjusted_by_admin_user_id) REFERENCES admin_users(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ballot_distribution_election
+      ON ballot_distribution_adjustments(plebiscite_id, id);
+  `);
 }
 
 function runElectionArchiveMigration(database: Database.Database): void {

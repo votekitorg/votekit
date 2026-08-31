@@ -8,7 +8,14 @@ const fixture: PlebisciteResultsData = {
     close_date: '2026-01-02T09:00', status: 'closed', accessMode: 'voter_roll', privacyMode: 'legacy', privacyThreshold: 20,
     ballotPublicationMode: 'threshold'
   },
-  participation: { totalVotes: 1, eligibleCredentials: 2, participationRate: 50 },
+  participation: {
+    totalVotes: 1,
+    eligibleCredentials: 2,
+    ballotsDistributed: 2,
+    ballotsDistributedSource: 'generated_credentials',
+    participationRate: 50,
+    distributionAdjustments: []
+  },
   countRuns: [],
   questions: [{
     id: 1, publicId: 'q1', title: 'Approve?', type: 'yes_no', options: ['Yes', 'No'], totalVotes: 1,
