@@ -9,6 +9,7 @@ interface RankedQuestion {
   id: number;
   title: string;
   type: 'ranked_choice' | 'condorcet';
+  sfc_rule?: string;
 }
 
 export default function ResultCountRunManager({ questions, runs }: { questions: RankedQuestion[]; runs: ResultCountRun[] }) {
@@ -50,7 +51,7 @@ export default function ResultCountRunManager({ questions, runs }: { questions: 
           <div key={question.id} className="rounded-lg border border-gray-200 p-4">
             <div className="font-medium text-gray-900">{question.title}</div>
             <div className="mt-3 flex flex-wrap gap-2">
-              {(['irv', 'condorcet'] as ResultCountMethod[]).map(method => (
+              {((question.sfc_rule ? ['condorcet'] : ['irv', 'condorcet']) as ResultCountMethod[]).map(method => (
                 <button key={method} type="button" className="btn-secondary" disabled={Boolean(loading)} onClick={() => createRun(question.id, method, false)}>
                   {loading === `${question.id}-${method}-standard` ? 'Counting…' : `Run ${method === 'irv' ? 'IRV' : 'Condorcet'} count`}
                 </button>
@@ -70,7 +71,7 @@ export default function ResultCountRunManager({ questions, runs }: { questions: 
               {runs.map(run => (
                 <div key={run.id} className="rounded-lg bg-gray-50 px-4 py-3 text-sm">
                   <div className="font-medium text-gray-900">#{run.id} · {run.questionTitle} · {run.settings.continueAfterMajority ? 'Full preference distribution' : run.method.toUpperCase()}</div>
-                  <div className="mt-1 text-gray-600">{run.status === 'pending_tie' ? 'Paused for an audited tie decision' : `Winner: ${run.result.winner || 'Tie reported'}`}</div>
+                  <div className="mt-1 text-gray-600">{run.status === 'pending_tie' ? 'Paused for an audited tie decision' : `Winner: ${run.result.winner || (run.result.noQualifiedCandidates ? 'No qualifying candidate' : 'Tie reported')}`}</div>
                   <div className="mt-1 break-all font-mono text-xs text-gray-500">Result {run.resultHash}</div>
                 </div>
               ))}

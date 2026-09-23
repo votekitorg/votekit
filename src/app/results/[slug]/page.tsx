@@ -1,3 +1,4 @@
+import DeadlineHistory from '@/components/DeadlineHistory';
 import Link from 'next/link';
 import { parseElectionCloseDate } from '@/lib/election-window';
 import ResultsChart from '@/components/ResultsChart';
@@ -66,6 +67,7 @@ function outcomeSummary(question: QuestionResult): string {
     return tied?.length ? `Tied result: ${tied.join(', ')}.` : 'No winner was determined.';
   }
   if (question.type === 'condorcet') {
+    if (question.results.noQualifiedCandidates) return 'No candidate qualified against Seek Further Candidates. Nobody is elected.';
     if (question.results.winner) return `${question.results.winner} is the ${question.results.condorcetWinner ? 'Condorcet winner' : 'Schulze-method winner'}.`;
     return question.results.tiedCandidates?.length ? `Tied result: ${question.results.tiedCandidates.join(', ')}.` : 'No winner was determined.';
   }
@@ -348,6 +350,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <DeadlineHistory extensions={data.deadlineExtensions || []} />
         {/* Plebiscite Information */}
         <div className="mb-8">
           <div className="text-center mb-8">

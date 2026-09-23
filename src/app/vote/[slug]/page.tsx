@@ -2,6 +2,9 @@
 
 import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import DeadlineHistory from '@/components/DeadlineHistory';
+import type { DeadlineExtension } from '@/lib/deadline-extensions';
+import type { SfcRule } from '@/lib/sfc';
 import VoteForm from '@/components/VoteForm';
 import LinkifiedText from '@/components/LinkifiedText';
 import { csrfFetch } from '@/lib/csrf-client';
@@ -11,6 +14,7 @@ import type { EncryptedBallotPackage, EncryptedElectionManifest } from '@/lib/en
 import { confirmSmsCode, sendSmsCode } from '@/lib/firebase';
 
 interface Plebiscite {
+  deadlineExtensions?: DeadlineExtension[];
   id: number;
   slug: string;
   title: string;
@@ -32,6 +36,7 @@ interface Plebiscite {
 }
 
 interface Question {
+  sfcRule?: SfcRule;
   id: number;
   publicId: string;
   title: string;
@@ -51,6 +56,8 @@ export default function VotingPage({ params }: VotingPageProps) {
   const [plebiscite, setPlebiscite] = useState<Plebiscite | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [error, setError] = useState('');
+  const [unavailableExtensions, setUnavailableExtensions] = useState<DeadlineExtension[]>([]);
+  const [unavailableState, setUnavailableState] = useState<'closed' | 'missing' | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [preOpeningPreview, setPreOpeningPreview] = useState(false);
   const [previewOpeningMode, setPreviewOpeningMode] = useState<'immediate' | 'scheduled'>('scheduled');
@@ -107,7 +114,9 @@ export default function VotingPage({ params }: VotingPageProps) {
           }
 
           if (!result.plebiscite.voting_available) {
-            setError('Voting has closed for this election. Results will be published after the election is formally closed.');
+            setUnavailableExtensions(result.plebiscite.deadlineExtensions || []);
+            setUnavailableState('closed');
+            setError('The voting period has ended. Results will be available once the election has been finalised and the votes counted.');
             return;
           }
           
@@ -115,6 +124,7 @@ export default function VotingPage({ params }: VotingPageProps) {
           setQuestions(result.questions.map((q: any) => ({
             id: q.id,
             publicId: q.publicId,
+            sfcRule: q.sfcRule,
             title: q.title,
             description: q.description,
             type: q.type,
@@ -155,7 +165,8 @@ export default function VotingPage({ params }: VotingPageProps) {
               return;
             }
           }
-          setError('Election not found or not available');
+          setUnavailableState(response.status === 404 ? 'missing' : null);
+          setError(response.status === 404 ? 'Check your ballot link. This election could not be found.' : 'Failed to load election information. Please try again.');
         }
       } catch (error) {
         setError('Failed to load election information');
@@ -485,13 +496,14 @@ export default function VotingPage({ params }: VotingPageProps) {
     return (
       <div className="min-h-screen bg-gray-50 flex justify-center items-center">
         <div className="text-center">
-          <div className="w-16 h-16 bg-red-200 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className={`w-16 h-16 ${unavailableState ? 'bg-blue-100' : 'bg-red-200'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+            <svg className={`w-8 h-8 ${unavailableState ? 'text-blue-600' : 'text-red-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Unable to Load Election</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">{unavailableState === 'closed' ? 'Voting has closed' : unavailableState === 'missing' ? 'Election not found' : 'Unable to load election'}</h2>
           <p className="text-gray-600 mb-4">{error}</p>
+          <DeadlineHistory extensions={unavailableExtensions} />
           <button
             onClick={() => router.push('/')}
             className="btn-primary"
@@ -543,6 +555,7 @@ export default function VotingPage({ params }: VotingPageProps) {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <DeadlineHistory extensions={plebiscite.deadlineExtensions || []} />
         {/* Election Information */}
         {step === 'info' && (
           <div className="space-y-8">

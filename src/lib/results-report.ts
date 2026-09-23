@@ -1,3 +1,4 @@
+import { sfcRuleDescription } from './sfc';
 import PDFDocument from 'pdfkit';
 import { parseElectionCloseDate } from '@/lib/election-window';
 import type { PlebisciteResultsData } from '@/lib/results';
@@ -78,6 +79,7 @@ function questionOutcome(question: PlebisciteResultsData['questions'][number]): 
     return tied?.length ? `Tied result: ${tied.join(', ')}.` : 'No winner was determined.';
   }
   if (question.type === 'condorcet') {
+    if (question.results.noQualifiedCandidates) return 'No candidate qualified against Seek Further Candidates. Nobody is elected.';
     if (question.results.winner) return `${question.results.winner} is the ${question.results.condorcetWinner ? 'Condorcet winner' : 'Schulze-method winner'}.`;
     return question.results.tiedCandidates?.length ? `Tied result: ${question.results.tiedCandidates.join(', ')}.` : 'No winner was determined.';
   }
@@ -169,6 +171,11 @@ export async function buildResultsPdf(data: PlebisciteResultsData, now: Date = n
   doc.moveDown(1.2);
   rule(COLOURS.green);
   labelledValue('Voting period', `${electionDate(data.plebiscite.open_date)} to ${electionDate(data.plebiscite.close_date)} AEST`);
+  for (const extension of data.deadlineExtensions || []) {
+    ensureSpace(85);
+    labelledValue('Deadline extended', `${electionDate(extension.previous_deadline)} to ${electionDate(extension.new_deadline)} AEST`);
+    body(`${extension.administrator_name} · ${extension.created_at} · ${extension.reason}`);
+  }
   labelledValue('Report identity', `${reportId} · Generated ${generatedDate(now)} AEST`);
 
   const statGap = 10;
@@ -263,6 +270,15 @@ export async function buildResultsPdf(data: PlebisciteResultsData, now: Date = n
       ensureSpace(40);
       body(`Total ballots: ${question.results.totalVotes ?? question.totalVotes}. Exhausted ballots: ${question.results.exhaustedBallots ?? 0}. A candidate wins after receiving a majority of active ballots; otherwise one lowest candidate is eliminated and preferences transfer. Tied exclusions use countback, then an audited election-rule decision if countback cannot separate them.`);
     } else if (question.type === 'condorcet') {
+      if (question.results.sfcRule) {
+        heading('Candidate qualification', 2);
+        body(sfcRuleDescription(question.results.sfcRule));
+        body('Ranked beats omitted; both omitted count neither side. Zero pairwise votes fails. Exact fractions, not rounded percentages, determine qualification.');
+        for (const row of question.results.qualification || []) {
+          ensureSpace(50);
+          body(`${row.candidate}: ${row.passed ? 'PASS' : 'FAIL'}. ${row.preferred} preferred candidate; ${row.opposed} preferred reference option. Support ${row.preferred}/${row.denominator} (${row.denominator ? (100 * row.preferred / row.denominator).toFixed(2) + '%' : 'no pairwise votes'}).`);
+        }
+      }
       heading('Overall ranking', 2);
       const rankings = question.results.rankings || [];
       rankings.forEach((ranking: any, rank: number) => {

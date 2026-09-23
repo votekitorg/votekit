@@ -1,3 +1,4 @@
+import { sfcRuleDescription } from '@/lib/sfc';
 import { notFound } from 'next/navigation';
 import LinkifiedText from '@/components/LinkifiedText';
 import db from '@/lib/db';
@@ -84,6 +85,7 @@ export default async function ElectionProofPage({ params }: { params: Promise<{ 
               {question.description && <p className="mt-2 text-sm text-gray-600">{question.description}</p>}
             </div>
             <div className="card-body space-y-3">
+              {question.sfcRule && <p className="text-sm text-blue-900">{sfcRuleDescription(question.sfcRule)}</p>}
               {question.type === 'ranked_choice' && question.continueAfterMajority === true && (
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
                   After the official winner is declared, preferences continue to a final-two distribution for reporting only.

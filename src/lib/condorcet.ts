@@ -1,3 +1,5 @@
+import { qualifyAgainstSfc, validateSfcRule, sfcRuleDescription, type SfcRule, type SfcQualification } from './sfc';
+
 // Condorcet Voting with Schulze Method Fallback
 
 export interface CondorcetVote {
@@ -21,6 +23,9 @@ export interface CondorcetRound {
 }
 
 export interface CondorcetResult {
+  sfcRule?: SfcRule;
+  qualification?: SfcQualification[];
+  noQualifiedCandidates?: boolean;
   winner: string | null;
   condorcetWinner: boolean; // true = pure Condorcet winner, false = Schulze resolution
   method: 'condorcet' | 'schulze';
@@ -146,7 +151,22 @@ function schulze(
   return wins;
 }
 
-export function tabulateCondorcet(votes: CondorcetVote[], candidates: string[]): CondorcetResult {
+export function tabulateCondorcet(votes: CondorcetVote[], candidates: string[], sfcRule?: SfcRule): CondorcetResult {
+  if (sfcRule) {
+    const invalid = validateSfcRule(sfcRule, 'condorcet', candidates);
+    if (invalid) throw new Error(invalid);
+    const matrix = buildPairwiseMatrix(votes, candidates);
+    const qualification = qualifyAgainstSfc(matrix, candidates, sfcRule);
+    const eligible = qualification.filter(row => row.passed).map(row => row.candidate);
+    const result: CondorcetResult = eligible.length
+      ? tabulateCondorcet(votes, eligible)
+      : { winner: null, condorcetWinner: false, method: 'condorcet', pairwiseMatrix: {}, rounds: [], totalVotes: votes.length, rankings: [] };
+    const pairwise: PairwiseResult[] = [];
+    candidates.forEach((a, i) => candidates.slice(i + 1).forEach(b => pairwise.push({ candidateA: a, candidateB: b, winsA: matrix[a][b], winsB: matrix[b][a] })));
+    return { ...result, pairwiseMatrix: matrix, sfcRule, qualification, noQualifiedCandidates: eligible.length === 0,
+      rounds: [{ round: 1, description: sfcRuleDescription(sfcRule), pairwise, eliminated: qualification.filter(row => !row.passed).map(row => row.candidate) },
+        ...result.rounds.map(round => ({ ...round, round: round.round + 1 }))] };
+  }
   if (votes.length === 0) {
     return {
       winner: null,
@@ -275,6 +295,7 @@ export function validateCondorcetVote(vote: string[], candidates: string[]): boo
 }
 
 export function exportCondorcetResultsCSV(result: CondorcetResult): string {
+  const cell = (value: unknown) => { let text = String(value ?? ''); if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`; return `"${text.replaceAll('"', '""')}"`; };
   let csv = 'Candidate A,Candidate B,Votes for A,Votes for B,Head-to-Head Winner\n';
   
   if (result.rounds[0]?.pairwise) {
@@ -282,18 +303,24 @@ export function exportCondorcetResultsCSV(result: CondorcetResult): string {
       const winner = pair.winsA > pair.winsB ? pair.candidateA 
         : pair.winsB > pair.winsA ? pair.candidateB 
         : 'Tie';
-      csv += `"${pair.candidateA}","${pair.candidateB}",${pair.winsA},${pair.winsB},"${winner}"\n`;
+      csv += `${cell(pair.candidateA)},${cell(pair.candidateB)},${pair.winsA},${pair.winsB},${cell(winner)}\n`;
     }
   }
 
   csv += '\nRanking,Candidate,Head-to-Head Wins,Losses,Ties\n';
   result.rankings.forEach((r, i) => {
-    csv += `${i + 1},"${r.candidate}",${r.wins},${r.losses},${r.ties}\n`;
+    csv += `${i + 1},${cell(r.candidate)},${r.wins},${r.losses},${r.ties}\n`;
   });
 
   const winnerCell = result.tiedCandidates && result.tiedCandidates.length > 0
     ? `Tie: ${result.tiedCandidates.join(' / ')}`
     : `${result.winner}`;
-  csv += `\nMethod,Winner\n"${result.method}","${winnerCell}"\n`;
+  csv += `\nMethod,Winner\n${cell(result.method)},${cell(winnerCell)}\n`;
+  if (result.sfcRule) {
+    csv += `\nSFC qualification rule,${cell(sfcRuleDescription(result.sfcRule))}\n`;
+    csv += 'Candidate,Preferred over SFC,SFC preferred,Pairwise denominator,Candidate percentage,Qualification\n';
+    for (const row of result.qualification || []) csv += `${cell(row.candidate)},${row.preferred},${row.opposed},${row.denominator},${row.denominator ? (100 * row.preferred / row.denominator).toFixed(4) : 'N/A'},${row.passed ? 'Pass' : 'Fail'}\n`;
+    if (result.noQualifiedCandidates) csv += 'Outcome,No candidate qualified - nobody elected\n';
+  }
   return csv;
 }

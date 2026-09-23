@@ -84,6 +84,7 @@ export function createResultCountRun(input: {
   `).get(input.questionId) as any;
   if (!question || !['ranked_choice', 'condorcet'].includes(question.type)) throw new Error('Compatible ranked question not found');
   if (question.election_status !== 'closed') throw new Error('Alternative counts can only be created after voting closes');
+  if (question.sfc_rule && input.method !== 'condorcet') throw new Error('SFC-qualified questions support Condorcet recounts only');
   if (input.continueAfterMajority && (input.method !== 'irv' || question.type !== 'ranked_choice')) {
     throw new Error('Full preference distribution is available only for ranked-choice IRV counts');
   }
@@ -103,9 +104,10 @@ export function createResultCountRun(input: {
         resolutions,
         { continueAfterMajority: input.continueAfterMajority === true }
       )
-    : tabulateCondorcet(ballots.map(ballot => ({ preferences: ballot.preferences })), options);
+    : tabulateCondorcet(ballots.map(ballot => ({ preferences: ballot.preferences })), options, question.sfc_rule ? JSON.parse(question.sfc_rule) : undefined);
   const continueAfterMajority = input.method === 'irv' && input.continueAfterMajority === true;
   const settings = {
+    ...(question.sfc_rule ? { sfcRule: JSON.parse(question.sfc_rule) } : {}),
     primaryMethod: (question.type === 'ranked_choice' ? 'irv' : 'condorcet') as ResultCountMethod,
     algorithm: (input.method === 'irv'
       ? continueAfterMajority ? 'votekit-irv-full-distribution-v1' : 'votekit-irv-v1'

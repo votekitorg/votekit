@@ -347,6 +347,7 @@ function runMigrations() {
   runElectionSetupDraftMigrations(database);
   runFullPreferenceDistributionMigration(database);
   runBallotDistributionMigration(database);
+  runPostElectionMigration(database);
 }
 
 function tableInfo(database: Database.Database, tableName: string): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {
@@ -367,6 +368,27 @@ function runFullPreferenceDistributionMigration(database: Database.Database): vo
     database.exec(`ALTER TABLE questions ADD COLUMN continue_after_majority INTEGER
       NOT NULL DEFAULT 0 CHECK(continue_after_majority IN (0, 1))`);
   }
+}
+
+function runPostElectionMigration(database: Database.Database): void {
+  if (!hasColumn(database, 'questions', 'sfc_rule')) database.exec('ALTER TABLE questions ADD COLUMN sfc_rule TEXT');
+  if (!hasColumn(database, 'plebiscites', 'manifest_close_date')) database.exec('ALTER TABLE plebiscites ADD COLUMN manifest_close_date TEXT');
+  database.exec(`CREATE TABLE IF NOT EXISTS election_deadline_extensions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plebiscite_id INTEGER NOT NULL REFERENCES plebiscites(id) ON DELETE CASCADE,
+    previous_deadline TEXT NOT NULL,
+    new_deadline TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    administrator_id INTEGER REFERENCES admin_users(id) ON DELETE SET NULL,
+    administrator_name TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_deadline_extensions_election ON election_deadline_extensions(plebiscite_id, id);
+  CREATE TRIGGER IF NOT EXISTS deadline_extensions_no_update BEFORE UPDATE ON election_deadline_extensions
+    BEGIN SELECT RAISE(ABORT, 'Deadline history is immutable'); END;
+  CREATE TRIGGER IF NOT EXISTS deadline_extensions_no_delete BEFORE DELETE ON election_deadline_extensions
+    WHEN EXISTS (SELECT 1 FROM plebiscites WHERE id = OLD.plebiscite_id)
+    BEGIN SELECT RAISE(ABORT, 'Deadline history is immutable'); END;`);
 }
 
 function runBallotDistributionMigration(database: Database.Database): void {

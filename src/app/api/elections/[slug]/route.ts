@@ -1,3 +1,4 @@
+import { listDeadlineExtensions } from '@/lib/deadline-extensions';
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { votingClosedError } from '@/lib/election-window';
@@ -41,7 +42,8 @@ export async function GET(
       description: q.description,
       type: q.type,
       options: q.options,
-      preferentialType: q.preferential_type || 'compulsory'
+      preferentialType: q.preferential_type || 'compulsory',
+      sfcRule: q.sfc_rule ? JSON.parse(q.sfc_rule) : undefined
     }));
 
     const encryptionKey = plebiscite.privacy_mode === 'encrypted' && encryptedBallotsEnabled
@@ -58,6 +60,8 @@ export async function GET(
         open_date: plebiscite.open_date,
         close_date: plebiscite.close_date,
         status: plebiscite.status,
+        voting_state: plebiscite.status === 'closed' ? 'finalised' : votingClosedError(plebiscite) ? 'voting_ended' : 'open',
+        deadlineExtensions: listDeadlineExtensions(plebiscite.id),
         voting_available: plebiscite.status === 'open' && !votingClosedError(plebiscite),
         privacy_mode: plebiscite.privacy_mode,
         access_mode: plebiscite.access_mode || 'voter_roll',

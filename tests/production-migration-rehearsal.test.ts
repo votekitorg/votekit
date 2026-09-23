@@ -23,14 +23,14 @@ describe.skipIf(!rehearsalDatabase)('production database migration rehearsal', (
 
     expect(electionColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
       'access_mode', 'sms_enabled', 'opening_mode', 'actual_opened_at', 'scheduled_open_attempted_at', 'scheduled_open_error',
-      'ballot_publication_mode', 'privacy_threshold', 'results_visibility', 'configuration_published_at'
+      'manifest_close_date', 'ballot_publication_mode', 'privacy_threshold', 'results_visibility', 'configuration_published_at'
     ]));
     expect(sessionColumns.map((column) => column.name)).toEqual(expect.arrayContaining(['voter_roll_id', 'anonymous_code_id', 'credential_type']));
-    expect(questionColumns.map((column) => column.name)).toContain('continue_after_majority');
+    expect(questionColumns.map((column) => column.name)).toEqual(expect.arrayContaining(['continue_after_majority', 'sfc_rule']));
     expect(tables.map((table) => table.name)).toEqual(expect.arrayContaining([
       'anonymous_access_codes', 'voter_link_tokens', 'irv_tie_resolutions',
       'email_jobs', 'email_suppressions', 'email_webhook_events', 'result_count_runs',
-      'election_setup_drafts'
+      'election_setup_drafts', 'election_deadline_extensions'
     ]));
   });
 });

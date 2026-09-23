@@ -19,6 +19,7 @@ interface Plebiscite {
   title: string;
   status: 'draft' | 'open' | 'closed';
   open_date: string;
+  close_date: string;
   opening_mode?: 'immediate' | 'scheduled';
   scheduled_open_error?: string | null;
   privacy_mode: 'legacy' | 'encrypted';
@@ -386,6 +387,7 @@ export default function PlebisciteManager({
 
       {!plebiscite.archived_at && canManage && statusInfo.canClose && (
         <>
+          <p className="text-sm text-gray-700">The deadline stops voting. Finalisation shuffles ballots and counts votes so results can be published. Encrypted elections require the offline recovery kit. Any unresolved counting tie still requires an election-rule decision. Finalisation cannot be undone.</p>
           <button
             onClick={copyUrl}
             className="btn-secondary w-full"
@@ -403,7 +405,7 @@ export default function PlebisciteManager({
                 disabled={loading}
                 className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
-                {loading ? 'Decrypting and Shuffling...' : 'Close, Shuffle and Publish'}
+                {loading ? 'Decrypting and Shuffling...' : (parseElectionCloseDate(plebiscite.close_date) < new Date() ? 'Finalise and Count Votes' : 'Close Voting Early')}
               </button>
             </div>
           ) : (
@@ -412,7 +414,7 @@ export default function PlebisciteManager({
               disabled={loading}
               className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
             >
-              {loading ? 'Closing...' : 'Close Voting'}
+              {loading ? 'Closing...' : (parseElectionCloseDate(plebiscite.close_date) < new Date() ? 'Finalise and Count Votes' : 'Close Voting Early')}
             </button>
           )}
         </>

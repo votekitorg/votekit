@@ -6,6 +6,8 @@ import AdminLayout from '@/components/AdminLayout';
 import LinkifiedText from '@/components/LinkifiedText';
 import { csrfFetch } from '@/lib/csrf-client';
 import { parseElectionCloseDate } from '@/lib/election-window';
+import SfcRuleEditor from '@/components/SfcRuleEditor';
+import { sfcRuleDescription, validateSfcRule, type SfcRule } from '@/lib/sfc';
 import { SerialTaskQueue } from '@/lib/serial-task-queue';
 
 interface Question {
@@ -14,6 +16,7 @@ interface Question {
   type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
   options: string[];
   preferentialType?: 'compulsory' | 'optional'; // Only applies to ranked_choice and condorcet
+  sfcRule?: SfcRule;
   continueAfterMajority?: boolean; // Ranked-choice reporting only
 }
 
@@ -155,6 +158,7 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
         newQuestions[index].preferentialType = 'compulsory';
       }
     }
+    if (field === 'type' && value !== 'condorcet') newQuestions[index].sfcRule = undefined;
     if (field === 'type' && value !== 'ranked_choice') {
       newQuestions[index].continueAfterMajority = false;
     }
@@ -174,6 +178,8 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
 
   const updateOption = (questionIndex: number, optionIndex: number, value: string) => {
     const newQuestions = [...questions];
+    const old = newQuestions[questionIndex].options[optionIndex];
+    if (newQuestions[questionIndex].sfcRule?.referenceOption === old) newQuestions[questionIndex].sfcRule = { ...newQuestions[questionIndex].sfcRule!, referenceOption: value };
     newQuestions[questionIndex].options[optionIndex] = value;
     setQuestions(newQuestions);
   };
@@ -289,6 +295,10 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
       return;
     }
 
+    for (const question of questions) {
+      const invalid = validateSfcRule(question.sfcRule, question.type, question.options.map(option => option.trim()));
+      if (invalid) { setError(invalid); return; }
+    }
     setIsSubmitting(true);
     setError('');
     setSuccess('');
@@ -676,6 +686,7 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
                             </div>
                           )}
 
+                          {question.type === 'condorcet' && <SfcRuleEditor options={question.options} value={question.sfcRule} onChange={value => updateQuestion(qIndex, 'sfcRule', value)} />}
                           {question.type === 'ranked_choice' && (
                             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                               <label className="flex cursor-pointer items-start space-x-3">
@@ -877,7 +888,8 @@ export default function CreatePlebisciteForm({ currentUser, initialDraft }: {
                             <span className="font-medium text-gray-700">Options: </span>
                             <span className="text-gray-600">{question.options.join(', ')}</span>
                           </div>
-                          {question.type === 'ranked_choice' && question.continueAfterMajority && (
+                          {question.sfcRule && <p className="mt-2 text-sm text-blue-900">{sfcRuleDescription(question.sfcRule)}</p>}
+                            {question.type === 'ranked_choice' && question.continueAfterMajority && (
                             <div className="mt-2 text-sm font-medium text-emerald-800">
                               Reporting: continue to a final-two preference distribution after the winner is declared
                             </div>

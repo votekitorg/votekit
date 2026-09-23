@@ -1,3 +1,5 @@
+import type { SfcRule } from './sfc';
+
 export const ENCRYPTED_BALLOT_PROTOCOL = 'votekit-encrypted-ballot-v1';
 export const DEFAULT_ENVELOPE_PLAINTEXT_BYTES = 16_384;
 export const DEFAULT_PRIVACY_THRESHOLD = 20;
@@ -8,6 +10,7 @@ export interface EncryptedQuestionManifest {
   options: string[];
   preferentialType: 'compulsory' | 'optional';
   continueAfterMajority?: boolean;
+  sfcRule?: SfcRule;
 }
 
 export interface EncryptedElectionManifest {

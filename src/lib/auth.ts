@@ -407,7 +407,7 @@ export function getAdminInvitationByToken(token: string): AdminInvitation | null
 export async function acceptAdminInvitation(token: string, password: string): Promise<AdminUser> {
   const invitation = getAdminInvitationByToken(token);
   if (!invitation) throw new Error('This invitation is invalid or has expired');
-  if (typeof password !== 'string' || password.length < 12 || password.length > 128) {
+  if (typeof password !== 'string' || password.length < (invitation.existing_account ? 1 : 12) || password.length > 128) {
     throw new Error('Password must be between 12 and 128 characters');
   }
   const passwordHash = await bcrypt.hash(password, 12);

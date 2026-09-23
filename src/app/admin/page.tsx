@@ -115,14 +115,16 @@ function formatDate(dateString: string): string {
   });
 }
 
-function getStatusBadge(status: string) {
+function getStatusBadge(status: string, closeDate?: string) {
   switch (status) {
     case 'draft':
       return <span className="badge badge-gray">Published · not open</span>;
     case 'open':
-      return <span className="badge badge-green">Open</span>;
+      return closeDate && new Date() > parseElectionCloseDate(closeDate)
+        ? <span className="badge badge-blue">Voting ended · Finalise votes</span>
+        : <span className="badge badge-green">Open</span>;
     case 'closed':
-      return <span className="badge badge-red">Closed</span>;
+      return <span className="badge badge-blue">Finalised</span>;
     default:
       return <span className="badge badge-gray">{status}</span>;
   }
@@ -342,7 +344,7 @@ export default async function AdminDashboard() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {getStatusBadge(plebiscite.status)}
+                          {getStatusBadge(plebiscite.status, plebiscite.close_date)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {plebiscite.question_count}
@@ -401,7 +403,7 @@ export default async function AdminDashboard() {
                 <div key={plebiscite.id} className="flex items-center justify-between gap-4 px-6 py-4">
                   <div>
                     <div className="font-medium text-gray-900">{plebiscite.title}</div>
-                    <div className="text-sm text-gray-500">{plebiscite.vote_count} votes · {getStatusBadge(plebiscite.status)}</div>
+                    <div className="text-sm text-gray-500">{plebiscite.vote_count} votes · {getStatusBadge(plebiscite.status, plebiscite.close_date)}</div>
                   </div>
                   <Link href={`/admin/plebiscites/${plebiscite.id}`} className="text-primary hover:text-primary-dark">
                     View or restore

@@ -1,3 +1,4 @@
+import { listDeadlineExtensions, type DeadlineExtension } from './deadline-extensions';
 import db from '@/lib/db';
 import { tabulateIRV, exportIRVResultsCSV, type IRVTieResolution } from '@/lib/irv';
 import { tabulateCondorcet, exportCondorcetResultsCSV } from '@/lib/condorcet';
@@ -21,6 +22,7 @@ export interface PlebisciteResultsData {
     privacyThreshold: number;
     ballotPublicationMode: 'threshold' | 'always';
   };
+  deadlineExtensions?: DeadlineExtension[];
   participation: {
     totalVotes: number;
     eligibleCredentials: number;
@@ -204,8 +206,9 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
         return { preferences: voteData.preferences || [] };
       });
 
-      const condorcetResult = tabulateCondorcet(condorcetVotes, options);
+      const condorcetResult = tabulateCondorcet(condorcetVotes, options, question.sfc_rule ? JSON.parse(question.sfc_rule) : undefined);
       questionResult.results = {
+        ...condorcetResult,
         winner: condorcetResult.winner,
         condorcetWinner: condorcetResult.condorcetWinner,
         method: condorcetResult.method,
@@ -226,6 +229,7 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
       `).get(plebiscite.id) as { input_hash: string; output_hash: string } | undefined
     : undefined;
 
+  const deadlineExtensions = listDeadlineExtensions(plebiscite.id);
   return {
     plebiscite: {
       id: plebiscite.id,
@@ -241,6 +245,7 @@ export function getPlebisciteResults(slug: string): PlebisciteResultsData {
       privacyThreshold: Number(plebiscite.privacy_threshold || 20),
       ballotPublicationMode: plebiscite.ballot_publication_mode || 'threshold'
     },
+    ...(deadlineExtensions.length ? { deadlineExtensions } : {}),
     participation,
     ...(encryptedArtifact ? {
       encryptedAudit: {
@@ -273,6 +278,9 @@ export function buildResultsCsv(slug: string, data: PlebisciteResultsData): stri
     csvData += `${csvCell('Published output hash')},${csvCell(data.encryptedAudit.outputHash)}\n\n`;
   }
 
+  for (const extension of data.deadlineExtensions || []) {
+    csvData += `${csvCell('Deadline extension')},${csvCell(extension.previous_deadline)},${csvCell(extension.new_deadline)},${csvCell(extension.administrator_name)},${csvCell(extension.created_at)},${csvCell(extension.reason)}\n`;
+  }
   csvData += `${csvCell('Participation summary')}\n`;
   csvData += `${csvCell('Ballots cast')},${csvCell(data.participation.totalVotes)}\n`;
   csvData += `${csvCell('Voting credentials generated')},${csvCell(data.participation.eligibleCredentials)}\n`;

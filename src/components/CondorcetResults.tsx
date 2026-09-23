@@ -1,4 +1,6 @@
 'use client';
+import SfcQualificationResults from './SfcQualificationResults';
+import type { SfcRule, SfcQualification } from '@/lib/sfc';
 
 interface PairwiseResult {
   candidateA: string;
@@ -25,6 +27,8 @@ interface Ranking {
 interface CondorcetResultsProps {
   title: string;
   results: {
+    sfcRule?: SfcRule;
+    qualification?: SfcQualification[];
     winner: string | null;
     condorcetWinner: boolean;
     method: string;
@@ -38,7 +42,7 @@ interface CondorcetResultsProps {
 }
 
 export default function CondorcetResults({ title, results, options }: CondorcetResultsProps) {
-  if (results.totalVotes === 0) {
+  if (results.totalVotes === 0 && !results.sfcRule) {
     return (
       <div className="card">
         <div className="card-header">
@@ -59,6 +63,7 @@ export default function CondorcetResults({ title, results, options }: CondorcetR
       </div>
 
       <div className="card-body space-y-8">
+        {results.sfcRule && <SfcQualificationResults rule={results.sfcRule} qualification={results.qualification || []} />}
         {/* Winner */}
         {results.winner && (
           <div className="text-center bg-green-50 border border-green-200 rounded-lg p-6">
@@ -68,7 +73,7 @@ export default function CondorcetResults({ title, results, options }: CondorcetR
             <div className="text-2xl font-bold text-green-800">{results.winner}</div>
             <div className="text-sm text-green-600 mt-1">
               {results.condorcetWinner
-                ? 'Beats every other option in head-to-head comparison'
+                ? (results.sfcRule ? 'Beats every other qualifying candidate in head-to-head comparison' : 'Beats every other option in head-to-head comparison')
                 : 'No option beats all others; resolved via strongest paths'}
             </div>
           </div>

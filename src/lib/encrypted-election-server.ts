@@ -10,19 +10,20 @@ export const encryptedBallotsEnabled = process.env.VOTEKIT_ENCRYPTED_BALLOTS_ENA
 
 export function buildEncryptedManifest(plebiscite: any): EncryptedElectionManifest {
   const questions = db.prepare(`
-    SELECT public_id, type, options, preferential_type, continue_after_majority
+    SELECT public_id, type, options, preferential_type, continue_after_majority, sfc_rule
     FROM questions WHERE plebiscite_id = ? ORDER BY display_order, id
   `).all(plebiscite.id) as any[];
   return {
     protocol: ENCRYPTED_BALLOT_PROTOCOL,
     electionId: Number(plebiscite.id),
     electionSlug: plebiscite.slug,
-    closeDate: plebiscite.close_date,
+    closeDate: plebiscite.manifest_close_date || plebiscite.close_date,
     envelopePlaintextBytes: Number(plebiscite.envelope_plaintext_bytes || DEFAULT_ENVELOPE_PLAINTEXT_BYTES),
     questions: questions.map(question => ({
       id: question.public_id,
       type: question.type,
       options: JSON.parse(question.options),
+      ...(question.sfc_rule ? { sfcRule: JSON.parse(question.sfc_rule) } : {}),
       preferentialType: question.preferential_type || 'compulsory',
       ...(question.type === 'ranked_choice' && question.continue_after_majority
         ? { continueAfterMajority: true }

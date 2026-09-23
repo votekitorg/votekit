@@ -49,11 +49,11 @@ export default function AcceptAdminInvitationPage() {
   async function acceptInvitation(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (password.length < 12) {
+    if (!invitation?.existingAccount && password.length < 12) {
       setError('Use at least 12 characters for your password');
       return;
     }
-    if (password !== confirmation) {
+    if (!invitation?.existingAccount && password !== confirmation) {
       setError('The passwords do not match');
       return;
     }
@@ -103,14 +103,15 @@ export default function AcceptAdminInvitationPage() {
               <span className="mt-3 inline-flex badge badge-green">{invitation.roleLabel}</span>
             </div>
             <form onSubmit={acceptInvitation} className="space-y-4">
+              <input type="email" name="username" autoComplete="username" value={invitation.email} readOnly className="sr-only" aria-label="Account email" />
               <div>
-                <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-1">{invitation.existingAccount ? 'Existing VoteKit password' : 'Create password'}</label>
-                <input id="new-password" type="password" minLength={12} maxLength={128} required autoComplete={invitation.existingAccount ? 'current-password' : 'new-password'} value={password} onChange={e => setPassword(e.target.value)} className="input-field" placeholder="At least 12 characters" />
+                <label htmlFor={invitation.existingAccount ? 'current-password' : 'new-password'} className="block text-sm font-medium text-gray-700 mb-1">{invitation.existingAccount ? 'Existing VoteKit password' : 'Create password'}</label>
+                <input id={invitation.existingAccount ? 'current-password' : 'new-password'} name="password" type="password" minLength={invitation.existingAccount ? 1 : 12} maxLength={128} required autoComplete={invitation.existingAccount ? 'current-password' : 'new-password'} value={password} onChange={e => setPassword(e.target.value)} className="input-field" placeholder={invitation.existingAccount ? 'Your existing password' : 'At least 12 characters'} />
               </div>
-              <div>
+              {!invitation.existingAccount && <div>
                 <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
                 <input id="confirm-password" type="password" minLength={12} maxLength={128} required autoComplete={invitation.existingAccount ? 'current-password' : 'new-password'} value={confirmation} onChange={e => setConfirmation(e.target.value)} className="input-field" />
-              </div>
+              </div>}
               {error && <div className="alert-error" role="alert">{error}</div>}
               <button type="submit" disabled={status === 'submitting'} className="btn-primary w-full">
                 {status === 'submitting' ? 'Accepting invitation...' : 'Accept invitation'}

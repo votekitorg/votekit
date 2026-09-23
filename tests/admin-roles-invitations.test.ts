@@ -160,3 +160,19 @@ describe('administrative role hierarchy and invitations', () => {
       .toMatchObject({ role: 'admin', authority_role: 'owner', active: 1 });
   });
 });
+
+it('accepts an existing-account invitation only with its current password and never resets it', async () => {
+  const bcrypt = await import('bcryptjs');
+  const originalHash = await bcrypt.hash('legacy-pass', 4);
+  db.prepare(`INSERT INTO admin_users(email,password_hash,role,authority_role,active)
+    VALUES ('existing-invite@example.invalid',?,'observer','observer',1)`).run(originalHash);
+  const electionId = Number(db.prepare(`INSERT INTO plebiscites(slug,title,description,open_date,close_date,status)
+    VALUES ('existing-invite-election','Fixture','Fixture','2026-01-01','2030-01-01','draft')`).run().lastInsertRowid);
+  const invite = await auth.createAdminInvitation({ email: 'existing-invite@example.invalid', role: 'admin', plebisciteId: electionId }, sessionFor('jud@example.com'));
+  expect(auth.getAdminInvitationByToken(invite.token)?.existing_account).toBe(true);
+  await expect(auth.acceptAdminInvitation(invite.token, 'wrong-current-password')).rejects.toThrow('existing VoteKit password');
+  expect(auth.getAdminInvitationByToken(invite.token)).not.toBeNull();
+  await auth.acceptAdminInvitation(invite.token, 'legacy-pass');
+  expect(db.prepare("SELECT password_hash FROM admin_users WHERE email='existing-invite@example.invalid'").get().password_hash).toBe(originalHash);
+  expect(auth.getAdminInvitationByToken(invite.token)).toBeNull();
+});

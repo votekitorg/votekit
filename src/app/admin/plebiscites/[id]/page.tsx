@@ -1,3 +1,7 @@
+import DeadlineHistory from '@/components/DeadlineHistory';
+import DeadlineExtensionManager from '@/components/DeadlineExtensionManager';
+import { listDeadlineExtensions } from '@/lib/deadline-extensions';
+import { sfcRuleDescription } from '@/lib/sfc';
 import { redirect } from 'next/navigation';
 import { canAccessElection, canManageElection, canManageElectionTeam, getAdminSessionFromCookies, listAdminUsers, listElectionTeam, listPendingAdminInvitations } from '@/lib/auth';
 import AdminLayout from '@/components/AdminLayout';
@@ -50,6 +54,7 @@ interface Question {
   type: 'yes_no' | 'multiple_choice' | 'ranked_choice' | 'condorcet';
   options: string[];
   display_order: number;
+  sfc_rule?: string;
 }
 
 export const dynamic = 'force-dynamic';
@@ -135,16 +140,16 @@ function getStatusInfo(plebiscite: Plebiscite) {
     };
   } else if (plebiscite.status === 'open') {
     return {
-      status: 'Open',
-      color: 'green',
+      status: now > closeDate ? 'Voting ended' : 'Open',
+      color: now > closeDate ? 'blue' : 'green',
       canOpen: false,
       canClose: true,
-      message: now >= closeDate ? 'Voting period has ended' : 'Voting is active'
+      message: now > closeDate ? 'Voting has ended. Finalise and count votes to make results available.' : 'Voting is active'
     };
   } else {
     return {
-      status: 'Closed',
-      color: 'red',
+      status: 'Finalised',
+      color: 'blue',
       canOpen: false,
       canClose: false,
       message: 'Results are available'
@@ -257,6 +262,8 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
 
         <ElectionTeamManager plebisciteId={electionId} members={team} returningOfficers={returningOfficers} pendingInvitations={pendingInvitations} canManage={canManageTeam} />
 
+        <DeadlineHistory extensions={listDeadlineExtensions(electionId)} />
+        {canManage && plebiscite.status === 'open' && plebiscite.close_state === 'none' && !plebiscite.archived_at && <DeadlineExtensionManager electionId={electionId} currentDeadline={plebiscite.close_date} />}
         {/* Voter Roll Warning */}
         {stats.totalVoters === 0 && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -391,7 +398,7 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
               <PlebisciteManager 
                 plebiscite={{
                   id: plebiscite.id, slug: plebiscite.slug, title: plebiscite.title,
-                  status: plebiscite.status, open_date: plebiscite.open_date,
+                  status: plebiscite.status, open_date: plebiscite.open_date, close_date: plebiscite.close_date,
                   opening_mode: plebiscite.opening_mode,
                   scheduled_open_error: plebiscite.scheduled_open_error,
                   privacy_mode: plebiscite.privacy_mode,
@@ -454,7 +461,8 @@ export default async function ManagePlebiscite({ params }: { params: Promise<{ i
                         <h3 className="text-md font-medium text-gray-900">
                           {index + 1}. {question.title}
                         </h3>
-                        {question.description && (
+                        {question.sfc_rule && <p className="text-sm text-blue-900">{sfcRuleDescription(JSON.parse(question.sfc_rule))}</p>}
+                    {question.description && (
                           <p className="text-sm text-gray-600 mt-1">{question.description}</p>
                         )}
                       </div>

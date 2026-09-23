@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { sfcRuleDescription, type SfcRule } from '@/lib/sfc';
 import RankedChoiceInput from './RankedChoiceInput';
 
 interface Question {
+  sfcRule?: SfcRule;
   id: number;
   title: string;
   description?: string;
@@ -19,6 +21,8 @@ interface VoteFormProps {
 }
 
 export default function VoteForm({ questions, onSubmit, disabled = false }: VoteFormProps) {
+  const [submissionError, setSubmissionError] = useState('');
+  const questionRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const [votes, setVotes] = useState<{ [questionId: number]: any }>({});
   const [showReview, setShowReview] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -69,30 +73,41 @@ export default function VoteForm({ questions, onSubmit, disabled = false }: Vote
     });
 
     setErrors(newErrors);
+    const firstMissing = questions.find(question => newErrors[question.id]);
+    if (firstMissing) {
+      requestAnimationFrame(() => {
+        questionRefs.current[firstMissing.id]?.focus();
+        questionRefs.current[firstMissing.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
     return isValid;
   };
 
   const handleSubmit = async () => {
     if (!validateVotes()) return;
 
+    setSubmissionError('');
     setIsSubmitting(true);
     try {
       await onSubmit(votes);
     } catch (error) {
-      console.error('Failed to submit votes:', error);
+      setSubmissionError(error instanceof Error ? error.message : 'Your vote could not be submitted. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const renderQuestion = (question: Question) => {
+  const renderQuestion = (question: Question, index: number) => {
     const vote = votes[question.id];
     const error = errors[question.id];
 
     return (
-      <div key={question.id} className="card">
+      <div key={question.id} ref={element => { questionRefs.current[question.id] = element; }} tabIndex={-1} aria-labelledby={`question-title-${question.id}`} aria-describedby={error ? `question-error-${question.id}` : undefined} className={`card scroll-mt-24 ${error ? 'border-2 border-red-600' : ''}`}>
         <div className="card-header">
-          <h3 className="text-lg font-semibold text-gray-900">{question.title}</h3>
+          <p className="text-sm text-gray-600">Question {index + 1} of {questions.length} · Required</p>
+          <h3 id={`question-title-${question.id}`} className="text-lg font-semibold text-gray-900">{question.title}</h3>
+          {error && <p id={`question-error-${question.id}`} className="mt-2 text-red-700" role="alert">{error}</p>}
+          {question.sfcRule && <p className="text-sm text-blue-900 mt-2">{sfcRuleDescription(question.sfcRule)}</p>}
           {question.description && (
             <p className="text-sm text-gray-600 mt-1">{question.description}</p>
           )}
@@ -223,11 +238,12 @@ export default function VoteForm({ questions, onSubmit, disabled = false }: Vote
           );
         })}
 
-        <div className="flex justify-center space-x-4">
+        {submissionError && <div className="alert-error" role="alert">{submissionError}</div>}
+        <div className="flex flex-col sm:flex-row justify-center gap-4">
           <button
             type="button"
             onClick={() => setShowReview(false)}
-            disabled={isSubmitting}
+            disabled={disabled || isSubmitting}
             className="btn-secondary px-8"
           >
             Back to Edit
@@ -235,8 +251,8 @@ export default function VoteForm({ questions, onSubmit, disabled = false }: Vote
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="btn-primary px-8"
+            disabled={disabled || isSubmitting}
+            className="btn-primary w-full sm:w-auto px-8"
           >
             {isSubmitting ? (
               <>
@@ -254,7 +270,17 @@ export default function VoteForm({ questions, onSubmit, disabled = false }: Vote
 
   return (
     <div className="space-y-6">
+      <div className="sticky top-0 z-10 bg-white border rounded-lg p-3" role="status">
+        {questions.filter(question => {
+          const value = votes[question.id];
+          if (question.type === 'ranked_choice' || question.type === 'condorcet') return Array.isArray(value) && (question.preferentialType === 'optional' ? value.length > 0 : value.length === question.options.length);
+          return Array.isArray(value) ? value.length > 0 : Boolean(value);
+        }).length} of {questions.length} questions answered
+      </div>
       {questions.map(renderQuestion)}
+      {Object.keys(errors).length > 0 && <div className="alert-error" role="alert">
+        Your ballot has not been submitted. Please complete Question {questions.findIndex(question => Boolean(errors[question.id])) + 1} before reviewing your votes.
+      </div>}
       
       <div className="flex justify-center">
         <button
@@ -264,8 +290,8 @@ export default function VoteForm({ questions, onSubmit, disabled = false }: Vote
               setShowReview(true);
             }
           }}
-          disabled={disabled || Object.keys(votes).length === 0}
-          className="btn-primary px-8"
+          disabled={disabled}
+          className="btn-primary w-full sm:w-auto px-8"
         >
           Review Votes
         </button>

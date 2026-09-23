@@ -1,3 +1,4 @@
+import { validateSfcRule } from '@/lib/sfc';
 import { NextRequest, NextResponse } from 'next/server';
 import { canAccessElection, canManageElection, canManageElections, getAdminSessionFromRequest, listAccessibleElectionIds, recordAdminAuditLog,
   validateCSRFRequest
@@ -168,6 +169,8 @@ export async function POST(request: NextRequest) {
       }
 
       const normalizedOptions = question.options.map((option: string) => option.trim());
+      const sfcError = validateSfcRule(question.sfcRule, question.type, normalizedOptions);
+      if (sfcError) return NextResponse.json({ error: sfcError }, { status: 400 });
       if (new Set(normalizedOptions).size !== normalizedOptions.length) {
         return NextResponse.json({ error: 'Question options must be unique' }, { status: 400 });
       }
@@ -213,8 +216,8 @@ export async function POST(request: NextRequest) {
         ).run(plebisciteId, adminSession.adminUserId, adminSession.adminUserId);
       }
       const createQuestion = db.prepare(`
-        INSERT INTO questions (plebiscite_id, title, description, type, options, display_order, preferential_type, public_id, continue_after_majority)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO questions (plebiscite_id, title, description, type, options, display_order, preferential_type, public_id, continue_after_majority, sfc_rule)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       questions.forEach((question: any, index: number) => {
@@ -227,7 +230,8 @@ export async function POST(request: NextRequest) {
           index,
           question.preferentialType || 'compulsory',
           randomUUID(),
-          question.type === 'ranked_choice' && question.continueAfterMajority === true ? 1 : 0
+          question.type === 'ranked_choice' && question.continueAfterMajority === true ? 1 : 0,
+          question.sfcRule ? JSON.stringify(question.sfcRule) : null
         );
       });
 
