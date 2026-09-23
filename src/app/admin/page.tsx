@@ -1,419 +1,58 @@
 import { redirect } from 'next/navigation';
-import { canManageElections, getAdminSessionFromCookies, listAccessibleElectionIds, type AdminSession } from '@/lib/auth';
+import { canManageElection, canManageElections, getAdminSessionFromCookies, listAccessibleElectionIds } from '@/lib/auth';
 import AdminLayout from '@/components/AdminLayout';
 import db from '@/lib/db';
-import Link from 'next/link';
-import { parseElectionCloseDate } from '@/lib/election-window';
 import { reconcileScheduledElections } from '@/lib/election-opening';
-import DraftTakeoverButton from './DraftTakeoverButton';
-
-interface Plebiscite {
-  id: number;
-  slug: string;
-  title: string;
-  description: string;
-  open_date: string;
-  close_date: string;
-  status: 'draft' | 'open' | 'closed';
-  created_at: string;
-  vote_count: number;
-  question_count: number;
-  archived_at?: string | null;
-}
-
-interface SetupDraft {
-  id: number;
-  title: string;
-  current_step: number;
-  proof_token: string;
-  updated_at: string;
-  created_by_admin_user_id: number;
-  creator_name: string | null;
-  creator_email: string;
-}
+import ElectionList, { type ElectionListEntry } from './ElectionList';
 
 export const dynamic = 'force-dynamic';
 
-async function getDashboardData(session: AdminSession) {
-  const accessibleIds = listAccessibleElectionIds(session);
-  const setupDrafts = canManageElections(session.role) ? (session.role === 'owner'
-    ? db.prepare(`
-        SELECT d.id, d.title, d.current_step, d.proof_token, d.updated_at,
-          d.created_by_admin_user_id, u.name AS creator_name, u.email AS creator_email
-        FROM election_setup_drafts d
-        JOIN admin_users u ON u.id = d.created_by_admin_user_id
-        ORDER BY d.updated_at DESC
-      `).all() as SetupDraft[]
-    : db.prepare(`
-        SELECT d.id, d.title, d.current_step, d.proof_token, d.updated_at,
-          d.created_by_admin_user_id, u.name AS creator_name, u.email AS creator_email
-        FROM election_setup_drafts d
-        JOIN admin_users u ON u.id = d.created_by_admin_user_id
-        WHERE d.created_by_admin_user_id = ?
-        ORDER BY d.updated_at DESC
-      `).all(session.adminUserId) as SetupDraft[]) : [];
-  if (accessibleIds?.length === 0) return { plebiscites: [], archivedPlebiscites: [], setupDrafts, stats: { totalPlebiscites: 0, totalVoters: 0, totalVotes: 0, activePlebiscites: 0 } };
-  const scope = accessibleIds
-    ? `WHERE p.archived_at IS NULL AND p.id IN (${accessibleIds.map(() => '?').join(',')})`
-    : 'WHERE p.archived_at IS NULL';
-  const params = accessibleIds || [];
-  // Get plebiscites with stats
-  const plebiscites = db.prepare(`
-    SELECT 
-      p.*,
-      (SELECT COUNT(*) FROM participation WHERE plebiscite_id = p.id) as vote_count,
-      (SELECT COUNT(*) FROM questions WHERE plebiscite_id = p.id) as question_count
-    FROM plebiscites p
-    ${scope}
-    ORDER BY p.created_at DESC
-    LIMIT 10
-  `).all(...params) as Plebiscite[];
-
-  const archivedPlebiscites = session.role === 'owner' ? db.prepare(`
-    SELECT p.*,
-      (SELECT COUNT(*) FROM participation WHERE plebiscite_id = p.id) as vote_count,
-      (SELECT COUNT(*) FROM questions WHERE plebiscite_id = p.id) as question_count
-    FROM plebiscites p
-    WHERE p.archived_at IS NOT NULL
-    ORDER BY p.archived_at DESC
-  `).all() as Plebiscite[] : [];
-
-  // Get overall stats
-  const idScope = accessibleIds
-    ? `WHERE archived_at IS NULL AND id IN (${accessibleIds.map(() => '?').join(',')})`
-    : 'WHERE archived_at IS NULL';
-  const childScope = accessibleIds
-    ? `WHERE plebiscite_id IN (${accessibleIds.map(() => '?').join(',')})`
-    : 'WHERE plebiscite_id IN (SELECT id FROM plebiscites WHERE archived_at IS NULL)';
-  const totalPlebiscites = db.prepare(`SELECT COUNT(*) as count FROM plebiscites ${idScope}`).get(...params) as { count: number };
-  const totalVoters = db.prepare(`SELECT COUNT(DISTINCT email) as count FROM voter_roll ${childScope}`).get(...params) as { count: number };
-  const totalVotes = db.prepare(`SELECT COUNT(*) as count FROM participation ${childScope}`).get(...params) as { count: number };
-  const activeWhere = accessibleIds ? `archived_at IS NULL AND status = 'open' AND id IN (${accessibleIds.map(() => '?').join(',')})` : `archived_at IS NULL AND status = 'open'`;
-  const activePlebiscites = db.prepare(`SELECT COUNT(*) as count FROM plebiscites WHERE ${activeWhere}`).get(...params) as { count: number };
-
-  return {
-    plebiscites,
-    archivedPlebiscites,
-    setupDrafts,
-    stats: {
-      totalPlebiscites: totalPlebiscites.count,
-      totalVoters: totalVoters.count,
-      totalVotes: totalVotes.count,
-      activePlebiscites: activePlebiscites.count
-    }
-  };
-}
-
-function formatDate(dateString: string): string {
-  return parseElectionCloseDate(dateString).toLocaleDateString('en-AU', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Australia/Brisbane'
-  });
-}
-
-function getStatusBadge(status: string, closeDate?: string) {
-  switch (status) {
-    case 'draft':
-      return <span className="badge badge-gray">Published · not open</span>;
-    case 'open':
-      return closeDate && new Date() > parseElectionCloseDate(closeDate)
-        ? <span className="badge badge-blue">Voting ended · Finalise votes</span>
-        : <span className="badge badge-green">Open</span>;
-    case 'closed':
-      return <span className="badge badge-blue">Finalised</span>;
-    default:
-      return <span className="badge badge-gray">{status}</span>;
-  }
-}
-
-export default async function AdminDashboard() {
-  // Check admin authentication
-  const adminSession = await getAdminSessionFromCookies();
-  if (!adminSession) {
-    redirect('/admin/login');
-  }
-
+export default async function AdminElections() {
+  const session = await getAdminSessionFromCookies();
+  if (!session) redirect('/admin/login');
   await reconcileScheduledElections();
 
-  const { plebiscites, archivedPlebiscites, setupDrafts, stats } = await getDashboardData(adminSession);
-  const canManage = canManageElections(adminSession.role);
+  const accessibleIds = listAccessibleElectionIds(session);
+  const fields = 'id, slug, title, status, open_date, close_date, close_state, created_at, archived_at';
+  const elections = accessibleIds?.length === 0 ? [] : db.prepare(`
+    SELECT ${fields} FROM plebiscites
+    WHERE ${session.role === 'owner' ? '1 = 1' : `archived_at IS NULL AND id IN (${accessibleIds!.map(() => '?').join(',')})`}
+    ORDER BY created_at DESC, id DESC
+  `).all(...(accessibleIds || [])) as Array<{
+    id: number; slug: string; title: string; status: 'draft' | 'open' | 'closed';
+    open_date: string; close_date: string; close_state: string; created_at: string; archived_at: string | null;
+  }>;
 
-  return (
-    <AdminLayout currentUser={adminSession}>
-      <div className="min-w-0 space-y-8">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600">Overview of your elections and voting activity</p>
-        </div>
+  const entries: ElectionListEntry[] = elections.map(election => ({
+    key: `election-${election.id}`, kind: 'election', id: election.id,
+    title: election.title, slug: election.slug, status: election.status,
+    openDate: election.open_date, closeDate: election.close_date,
+    closeState: election.close_state, updatedAt: election.created_at,
+    archived: !!election.archived_at, canManage: canManageElection(session, election.id),
+  }));
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="card">
-            <div className="card-body">
-              <div className="flex items-center">
-                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center mr-3">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-gray-900">{stats.totalPlebiscites}</div>
-                  <div className="text-sm text-gray-600">Total Elections</div>
-                </div>
-              </div>
-            </div>
-          </div>
+  if (canManageElections(session.role)) {
+    const drafts = db.prepare(`
+      SELECT d.id, d.title, d.current_step, d.proof_token, d.updated_at,
+        d.created_by_admin_user_id, u.name AS creator_name, u.email AS creator_email
+      FROM election_setup_drafts d JOIN admin_users u ON u.id = d.created_by_admin_user_id
+      ${session.role === 'owner' ? '' : 'WHERE d.created_by_admin_user_id = ?'}
+      ORDER BY d.updated_at DESC
+    `).all(...(session.role === 'owner' ? [] : [session.adminUserId])) as Array<{
+      id: number; title: string; current_step: number; proof_token: string; updated_at: string;
+      created_by_admin_user_id: number; creator_name: string | null; creator_email: string;
+    }>;
+    entries.push(...drafts.map(draft => ({
+      key: `draft-${draft.id}`, kind: 'setup' as const, id: draft.id, title: draft.title,
+      updatedAt: draft.updated_at, archived: false, canManage: true,
+      step: draft.current_step, proofToken: draft.proof_token,
+      creator: draft.creator_name || draft.creator_email,
+      ownDraft: draft.created_by_admin_user_id === session.adminUserId,
+    })));
+  }
 
-          <div className="card">
-            <div className="card-body">
-              <div className="flex items-center">
-                <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center mr-3">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-gray-900">{stats.activePlebiscites}</div>
-                  <div className="text-sm text-gray-600">Active Elections</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-body">
-              <div className="flex items-center">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mr-3">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-gray-900">{stats.totalVoters}</div>
-                  <div className="text-sm text-gray-600">Registered Voters</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-body">
-              <div className="flex items-center">
-                <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center mr-3">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 00-2-2z" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-gray-900">{stats.totalVotes}</div>
-                  <div className="text-sm text-gray-600">Total Votes Cast</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {canManage && (
-          <Link href="/admin/plebiscites/new" className="card hover:shadow-lg transition-shadow duration-200">
-            <div className="card-body text-center">
-              <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center mx-auto mb-4">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Create Election</h3>
-              <p className="text-gray-600">Set up a new election with questions and voting options</p>
-            </div>
-          </Link>
-          )}
-
-          <div className="card">
-            <div className="card-body text-center">
-              <div className="w-12 h-12 bg-gray-400 rounded-lg flex items-center justify-center mx-auto mb-4">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2-2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 00-2-2z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">View Reports</h3>
-              <p className="text-gray-600">Analyze participation and results across all elections</p>
-            </div>
-          </div>
-        </div>
-
-        {setupDrafts.length > 0 && (
-          <div className="card">
-            <div className="card-header">
-              <h2 className="text-lg font-semibold text-gray-900">Election Setup Drafts</h2>
-              <p className="mt-1 text-sm text-gray-600">Autosaved setup work. Drafts remain with their creator unless an Owner explicitly takes over.</p>
-            </div>
-            <div className="divide-y divide-gray-200">
-              {setupDrafts.map(draft => (
-                <div key={draft.id} className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="font-medium text-gray-900">{draft.title}</div>
-                    <div className="text-sm text-gray-500">
-                      Step {draft.current_step} of 4 · saved {formatDate(draft.updated_at)}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      Created by {draft.creator_name || draft.creator_email}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-4 text-sm font-medium">
-                    <Link href={`/proof/${draft.proof_token}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
-                      View proof
-                    </Link>
-                    {draft.created_by_admin_user_id === adminSession.adminUserId ? (
-                      <Link href={`/admin/plebiscites/new?draft=${draft.id}`} className="text-primary hover:text-primary-dark">
-                        Continue editing
-                      </Link>
-                    ) : adminSession.role === 'owner' ? (
-                      <DraftTakeoverButton draftId={draft.id} title={draft.title} creator={draft.creator_name || draft.creator_email} />
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Recent Elections */}
-        <div className="card min-w-0 overflow-hidden">
-          <div className="card-header">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold text-gray-900">Recent Elections</h2>
-              {canManage && (
-                <Link href="/admin/plebiscites/new" className="btn-primary">
-                  Create New
-                </Link>
-              )}
-            </div>
-          </div>
-          <div className="card-body p-0">
-            {plebiscites.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="text-gray-500 mb-4">No elections created yet</div>
-                {canManage ? (
-                  <Link href="/admin/plebiscites/new" className="btn-primary">
-                    Create Your First Election
-                  </Link>
-                ) : (
-                  <p className="text-sm text-gray-600">Ask an admin to create the first election.</p>
-                )}
-              </div>
-            ) : (
-              <div className="w-full max-w-full overflow-x-auto overscroll-x-contain">
-                <table className="min-w-[900px] divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Title
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Questions
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Votes
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Closes
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {plebiscites.map((plebiscite) => (
-                      <tr key={plebiscite.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">{plebiscite.title}</div>
-                            <div className="text-sm text-gray-500 truncate max-w-xs">
-                              {plebiscite.description}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {getStatusBadge(plebiscite.status, plebiscite.close_date)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {plebiscite.question_count}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {plebiscite.vote_count}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatDate(plebiscite.close_date)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                          <Link
-                            href={`/admin/plebiscites/${plebiscite.id}`}
-                            className="text-primary hover:text-primary-dark"
-                          >
-                            Manage
-                          </Link>
-                          {plebiscite.status === 'open' && (
-                            <Link
-                              href={`/vote/${plebiscite.slug}`}
-                              className="text-blue-600 hover:text-blue-800"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              View
-                            </Link>
-                          )}
-                          {plebiscite.status === 'closed' && (
-                            <Link
-                              href={`/results/${plebiscite.slug}`}
-                              className="text-purple-600 hover:text-purple-800"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              Results
-                            </Link>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {adminSession.role === 'owner' && archivedPlebiscites.length > 0 && (
-          <div className="card">
-            <div className="card-header">
-              <h2 className="text-lg font-semibold text-gray-900">Archived Elections</h2>
-              <p className="mt-1 text-sm text-gray-600">Hidden from Returning Officers, Admins and Observers.</p>
-            </div>
-            <div className="divide-y divide-gray-200">
-              {archivedPlebiscites.map((plebiscite) => (
-                <div key={plebiscite.id} className="flex items-center justify-between gap-4 px-6 py-4">
-                  <div>
-                    <div className="font-medium text-gray-900">{plebiscite.title}</div>
-                    <div className="text-sm text-gray-500">{plebiscite.vote_count} votes · {getStatusBadge(plebiscite.status, plebiscite.close_date)}</div>
-                  </div>
-                  <Link href={`/admin/plebiscites/${plebiscite.id}`} className="text-primary hover:text-primary-dark">
-                    View or restore
-                  </Link>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </AdminLayout>
-  );
+  return <AdminLayout currentUser={session}>
+    <ElectionList entries={entries} canCreate={canManageElections(session.role)}
+      canViewArchive={session.role === 'owner'} initialNow={Date.now()} />
+  </AdminLayout>;
 }

@@ -203,13 +203,13 @@ describe('autosaved election setup drafts', () => {
     expect(ownerCanEdit.status).toBe(200);
   });
 
-  it('renders the dashboard and proofing affordances in source', () => {
-    const dashboard = fs.readFileSync(path.join(process.cwd(), 'src/app/admin/page.tsx'), 'utf8');
+  it('retains setup continuation, ownership and proofing affordances in the election list', () => {
+    const dashboard = fs.readFileSync(path.join(process.cwd(), 'src/app/admin/ElectionList.tsx'), 'utf8');
     const form = fs.readFileSync(path.join(process.cwd(), 'src/app/admin/plebiscites/new/CreatePlebisciteForm.tsx'), 'utf8');
     const proof = fs.readFileSync(path.join(process.cwd(), 'src/app/proof/[token]/page.tsx'), 'utf8');
-    expect(dashboard).toContain('Election Setup Drafts');
-    expect(dashboard).toContain('Continue editing');
-    expect(dashboard).toContain('Created by');
+    expect(dashboard).toContain('entry.ownDraft');
+    expect(dashboard).toContain('Continue setup');
+    expect(dashboard).toContain('entry.creator');
     expect(dashboard).toContain('DraftTakeoverButton');
     const takeover = fs.readFileSync(path.join(process.cwd(), 'src/app/admin/DraftTakeoverButton.tsx'), 'utf8');
     expect(takeover).toContain('Take over draft');

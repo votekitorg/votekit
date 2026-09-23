@@ -602,6 +602,9 @@ function runPrivacyMigrations(database: Database.Database): void {
 
 function runAdministrativeRoleMigrations(database: Database.Database): void {
   const migrateRoles = database.transaction(() => {
+    // Only the first transition from organisation-wide roles may seed access.
+    // Re-running this backfill would restore revoked access on every restart.
+    const seedLegacyElectionTeams = !tableSql(database, 'election_team_members');
     if (!hasColumn(database, 'admin_users', 'authority_role')) {
       database.exec(`
         ALTER TABLE admin_users ADD COLUMN authority_role TEXT
@@ -674,7 +677,7 @@ function runAdministrativeRoleMigrations(database: Database.Database): void {
 
     // v0.3 roles were organisation-wide. Seed every existing election with the
     // same access before enforcing election scopes, making the migration lossless.
-    database.exec(`
+    if (seedLegacyElectionTeams) database.exec(`
       INSERT OR IGNORE INTO election_team_members
         (plebiscite_id, admin_user_id, role, assigned_by_admin_user_id)
       SELECT p.id, u.id,

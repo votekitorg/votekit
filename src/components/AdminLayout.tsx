@@ -15,7 +15,7 @@ interface AdminLayoutProps {
 }
 
 const navigation = [
-  { name: 'Dashboard', href: '/admin', icon: 'home', roles: ['owner', 'returning_officer', 'admin', 'observer'] },
+  { name: 'Elections', href: '/admin', icon: 'home', roles: ['owner', 'returning_officer', 'admin', 'observer'] },
   { name: 'Create Election', href: '/admin/plebiscites/new', icon: 'plus', roles: ['owner', 'returning_officer'] },
   { name: 'Organisation Roles', href: '/admin/users', icon: 'users', roles: ['owner'] },
 ];
@@ -152,7 +152,7 @@ export default function AdminLayout({ children, currentUser }: AdminLayoutProps)
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={mobileMenuOpen ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'} />
                 </svg>
               </button>
-              <h2 className="truncate text-lg font-medium text-gray-900">
+              <h2 className={`truncate text-lg font-medium text-gray-900 ${pathname === "/admin" ? "lg:sr-only" : ""}`}>
                 {navigation.find(item => item.href === pathname)?.name || 'Admin Panel'}
               </h2>
             </div>
