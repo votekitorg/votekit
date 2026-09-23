@@ -155,16 +155,23 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Owner or Returning Officer role required' }, { status: 403 });
   }
   const id = Number(new URL(request.url).searchParams.get('id'));
-  const draft = Number.isInteger(id) ? draftForUser(id, session.adminUserId) : null;
-  if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 });
-  db.prepare('DELETE FROM election_setup_drafts WHERE id = ? AND created_by_admin_user_id = ?')
-    .run(id, session.adminUserId);
-  recordAdminAuditLog({
-    adminUserId: session.adminUserId,
-    action: 'election_setup_draft.delete',
-    targetType: 'election_setup_draft',
-    targetId: id,
-    details: { title: draft.title }
-  });
+  if (!Number.isInteger(id) || id < 1) {
+    return NextResponse.json({ error: 'Draft ID is required' }, { status: 400 });
+  }
+  const deleted = db.transaction(() => {
+    const draft = draftForUser(id, session.adminUserId);
+    if (!draft) return false;
+    db.prepare('DELETE FROM election_setup_drafts WHERE id = ? AND created_by_admin_user_id = ?')
+      .run(id, session.adminUserId);
+    recordAdminAuditLog({
+      adminUserId: session.adminUserId,
+      action: 'election_setup_draft.delete',
+      targetType: 'election_setup_draft',
+      targetId: id,
+      details: { title: draft.title }
+    });
+    return true;
+  }).immediate();
+  if (!deleted) return NextResponse.json({ error: 'Draft not found. It may have been published, deleted or transferred. Refresh the list.' }, { status: 404 });
   return NextResponse.json({ success: true });
 }

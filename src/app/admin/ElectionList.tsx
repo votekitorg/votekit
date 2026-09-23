@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { parseElectionCloseDate, votingClosedError } from '@/lib/election-window';
 import DraftTakeoverButton from './DraftTakeoverButton';
+import DeleteDraftButton from './DeleteDraftButton';
 
 export interface ElectionListEntry {
   key: string; kind: 'election' | 'setup'; id: number; title: string;
@@ -44,8 +45,10 @@ export default function ElectionList({ entries, canCreate, canViewArchive, initi
   const [filter, setFilter] = useState<'all' | Stage>('all');
   const [archive, setArchive] = useState(false);
   const [now, setNow] = useState(initialNow);
+  const [deletedKeys, setDeletedKeys] = useState<string[]>([]);
+  const [notice, setNotice] = useState('');
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(timer); }, []);
-  const scoped = entries.filter(entry => entry.archived === archive);
+  const scoped = entries.filter(entry => entry.archived === archive && !deletedKeys.includes(entry.key));
   const visible = scoped.filter(entry => (filter === 'all' || stageOf(entry, now) === filter)
     && entry.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .sort((a, b) => priority[stageOf(a, now)] - priority[stageOf(b, now)] || b.updatedAt.localeCompare(a.updatedAt));
@@ -70,6 +73,7 @@ export default function ElectionList({ entries, canCreate, canViewArchive, initi
         </button>)}
       </div>
     </div>
+    <div role="status" className={notice ? 'text-sm text-primary-dark' : 'sr-only'}>{notice}</div>
     <div role="table" aria-label={archive ? 'Archived elections' : 'Elections'} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
       <div role="rowgroup" className="sr-only xl:not-sr-only">
         <div role="row" className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-5 border-b border-gray-200 px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -103,6 +107,10 @@ export default function ElectionList({ entries, canCreate, canViewArchive, initi
                 {entry.ownDraft ? <Link href={`/admin/plebiscites/new?draft=${entry.id}`} className={secondary}>Continue setup</Link>
                   : <DraftTakeoverButton draftId={entry.id} title={entry.title} creator={entry.creator || 'its creator'} />}
                 <Link href={`/proof/${entry.proofToken}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center text-sm font-medium text-primary hover:underline">View proof</Link>
+                {entry.ownDraft && <DeleteDraftButton draftId={entry.id} title={entry.title} onDeleted={() => {
+                  setDeletedKeys(keys => [...keys, entry.key]);
+                  setNotice(`Draft “${entry.title}” deleted.`);
+                }} />}
               </> : <>
                 <Link href={primaryUrl} className={stage === 'ended' && entry.canManage && !archive ? 'btn-primary inline-flex min-h-11 items-center text-sm' : secondary}>{primaryLabel}</Link>
                 {stage === 'finalised' && !archive && <Link href={managementUrl} className="inline-flex min-h-11 items-center text-sm font-medium text-primary hover:underline">{entry.canManage ? 'Manage' : 'View election'}</Link>}

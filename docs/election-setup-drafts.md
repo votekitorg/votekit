@@ -44,3 +44,24 @@ Election setup and published election management are separate lifecycle stages.
 - Invalid drafts cannot publish.
 - Valid publication removes the setup draft atomically.
 - Core configuration edits are rejected after publication.
+
+## Unpublished draft deletion (v0.15.2)
+
+ROs and Owners can delete their own saved setup drafts from the Elections list.
+The action is labelled **Delete draft**, names the draft in a confirmation, and
+explains that deletion is permanent and invalidates its proof link. Cancelling
+does nothing. Pending requests disable the action; errors remain visible and
+successful deletion removes the row with a status announcement.
+
+This uses only `DELETE /api/admin/election-drafts?id=...`, with CSRF, role and
+current ownership enforced server-side. Deletion and its audit entry run in one
+transaction. Published elections (including not-yet-open ones) live in a separate
+table and are never touched by this operation. Owner takeover remains required
+before deleting another organiser's draft. No archive policy or election-delete
+permissions change; ROs cannot delete active or finalised elections.
+
+Implementation/checklist: add the list action; verify cancellation, success,
+failure and mobile layout in a browser; test own/other/unauthorised deletion,
+CSRF, audit persistence, stale requests after publication and protection of
+published/open/closed election records; run release gates and deploy v0.15.2.
+No schema migration or automatic deletion is involved.

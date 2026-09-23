@@ -15,8 +15,10 @@ let draftPost: any;
 let draftGet: any;
 let draftPut: any;
 let draftPatch: any;
+let draftDelete: any;
 let electionPost: any;
 let electionPut: any;
+let electionDelete: any;
 
 function request(url: string, method: string, session: string, body?: unknown) {
   return new NextRequest(url, {
@@ -56,8 +58,8 @@ function payload(title = 'Draft board election') {
 
 beforeAll(async () => {
   db = (await import('@/lib/db')).default;
-  ({ POST: draftPost, GET: draftGet, PUT: draftPut, PATCH: draftPatch } = await import('@/app/api/admin/election-drafts/route'));
-  ({ POST: electionPost, PUT: electionPut } = await import('@/app/api/admin/plebiscites/route'));
+  ({ POST: draftPost, GET: draftGet, PUT: draftPut, PATCH: draftPatch, DELETE: draftDelete } = await import('@/app/api/admin/election-drafts/route'));
+  ({ POST: electionPost, PUT: electionPut, DELETE: electionDelete } = await import('@/app/api/admin/plebiscites/route'));
   ownerId = Number(db.prepare(`INSERT INTO admin_users
     (email, name, password_hash, role, authority_role, active)
     VALUES ('draft-owner@example.invalid', 'Draft Owner', 'hash', 'admin', 'owner', 1)`).run().lastInsertRowid);
@@ -77,6 +79,75 @@ afterAll(() => {
 });
 
 describe('autosaved election setup drafts', () => {
+  it('deletes an RO own setup draft once, removes its proof and records the actor without touching other drafts', async () => {
+    const makeDraft = async (session: string) => (await (await draftPost(request(
+      'http://localhost/api/admin/election-drafts', 'POST', session,
+      { payload: payload('Disposable test draft'), currentStep: 2 }
+    ))).json()).draft;
+    const own = await makeDraft('draft-other-session');
+    const another = await makeDraft('draft-owner-session');
+    const ownUrl = `http://localhost/api/admin/election-drafts?id=${own.id}`;
+    expect((await draftDelete(request(
+      `http://localhost/api/admin/election-drafts?id=${another.id}`, 'DELETE', 'draft-other-session'
+    ))).status).toBe(404);
+    expect((await draftDelete(request(ownUrl, 'DELETE', 'draft-other-session'))).status).toBe(200);
+    expect(db.prepare('SELECT id FROM election_setup_drafts WHERE proof_token = ?').get(own.proofToken)).toBeUndefined();
+    expect(db.prepare('SELECT id FROM election_setup_drafts WHERE id = ?').get(another.id)).toBeTruthy();
+    expect((await draftDelete(request(ownUrl, 'DELETE', 'draft-other-session'))).status).toBe(404);
+    const audits = db.prepare(`SELECT admin_user_id, details FROM admin_audit_log
+      WHERE action = 'election_setup_draft.delete' AND target_id = ?`).all(String(own.id));
+    expect(audits).toHaveLength(1);
+    expect(audits[0].admin_user_id).toBe(otherId);
+    expect(JSON.parse(audits[0].details)).toMatchObject({ title: 'Disposable test draft' });
+    const staleSave = await draftPut(request('http://localhost/api/admin/election-drafts', 'PUT', 'draft-other-session', {
+      id: own.id, revision: 1, currentStep: 2, payload: payload()
+    }));
+    expect(staleSave.status).toBe(404);
+  });
+
+  it('rejects draft deletion without valid CSRF, session, role or draft identifier', async () => {
+    const created = await draftPost(request('http://localhost/api/admin/election-drafts', 'POST', 'draft-other-session', {
+      payload: payload('Protected setup draft'), currentStep: 1
+    }));
+    const draft = (await created.json()).draft;
+    const url = `http://localhost/api/admin/election-drafts?id=${draft.id}`;
+    const noCsrf = request(url, 'DELETE', 'draft-other-session');
+    noCsrf.headers.delete('x-csrf-token');
+    expect((await draftDelete(noCsrf)).status).toBe(403);
+    expect((await draftDelete(request(url, 'DELETE', 'missing-session'))).status).toBe(403);
+    for (const role of ['observer', 'admin']) {
+      db.prepare('UPDATE admin_users SET authority_role = ? WHERE id = ?').run(role, otherId);
+      expect((await draftDelete(request(url, 'DELETE', 'draft-other-session'))).status).toBe(403);
+    }
+    db.prepare("UPDATE admin_users SET authority_role = 'returning_officer' WHERE id = ?").run(otherId);
+    for (const id of ['', '0', '-1', '1.5', 'invalid']) {
+      expect((await draftDelete(request(`http://localhost/api/admin/election-drafts?id=${id}`, 'DELETE', 'draft-other-session'))).status).toBe(400);
+    }
+    expect(db.prepare('SELECT id FROM election_setup_drafts WHERE id = ?').get(draft.id)).toBeTruthy();
+    expect(db.prepare(`SELECT count(*) AS n FROM admin_audit_log WHERE action = 'election_setup_draft.delete' AND target_id = ?`).get(String(draft.id)).n).toBe(0);
+  });
+
+  it('does not delete published, active or finalised elections through either deletion endpoint', async () => {
+    const created = await draftPost(request('http://localhost/api/admin/election-drafts', 'POST', 'draft-other-session', {
+      payload: payload('Publication protects election'), currentStep: 4
+    }));
+    const draft = (await created.json()).draft;
+    const published = await electionPost(request('http://localhost/api/admin/plebiscites', 'POST', 'draft-other-session', {
+      ...payload('Publication protects election').formData, questions: payload().questions, setup_draft_id: draft.id
+    }));
+    expect(published.status).toBe(200);
+    const electionId = (await published.json()).plebiscite.id;
+    for (const status of ['draft', 'open', 'closed']) {
+      db.prepare('UPDATE plebiscites SET status = ? WHERE id = ?').run(status, electionId);
+      const before = db.prepare('SELECT * FROM plebiscites WHERE id = ?').get(electionId);
+      const questionsBefore = db.prepare('SELECT * FROM questions WHERE plebiscite_id = ?').all(electionId);
+      expect((await draftDelete(request(`http://localhost/api/admin/election-drafts?id=${draft.id}`, 'DELETE', 'draft-other-session'))).status).toBe(404);
+      expect((await electionDelete(request(`http://localhost/api/admin/plebiscites?id=${electionId}`, 'DELETE', 'draft-other-session'))).status).toBe(403);
+      expect(db.prepare('SELECT * FROM plebiscites WHERE id = ?').get(electionId)).toEqual(before);
+      expect(db.prepare('SELECT * FROM questions WHERE plebiscite_id = ?').all(electionId)).toEqual(questionsBefore);
+    }
+  });
+
   it('creates, resumes, updates and isolates a private setup draft', async () => {
     const created = await draftPost(request('http://localhost/api/admin/election-drafts', 'POST', 'draft-owner-session', {
       payload: payload(),
