@@ -6,7 +6,7 @@ import { recordAdminAuditLog, type AdminSession } from './auth';
 export class PasswordResetError extends Error {
   constructor(message: string, public status = 400) { super(message); }
 }
-const invalid = () => new PasswordResetError('This reset link is invalid or has expired. Ask the Owner to send a new one.');
+const invalid = () => new PasswordResetError('This reset link is invalid or has expired. Request a new link using Forgot password on the sign-in page.');
 const digest = (value: string) => crypto.createHash('sha256').update(value).digest('hex');
 const fingerprint = (user: any) => digest(JSON.stringify([user.email, user.password_hash, user.authority_role || user.role, user.active]));
 
@@ -38,6 +38,25 @@ export function createPasswordReset(targetId: number, actor: AdminSession) {
   }).immediate();
 }
 
+// Public requests are not authenticated actions. NULL issuer is intentional.
+// Do not invalidate someone else's usable link just because this address was submitted.
+export function createSelfServicePasswordReset(email: string) {
+  return db.transaction(() => {
+    const user = db.prepare('SELECT * FROM admin_users WHERE lower(email) = ? AND active = 1').get(email) as any;
+    if (!user) return null;
+    const now = Date.now();
+    const recent = db.prepare('SELECT created_at FROM admin_password_resets WHERE admin_user_id = ? AND created_at > ? ORDER BY created_at DESC')
+      .all(user.id, now - 3_600_000) as Array<{created_at:number}>;
+    if (recent.length >= 5 || (recent[0] && recent[0].created_at > now - 60_000)) return null;
+    const token = crypto.randomBytes(32).toString('base64url');
+    const result = db.prepare(`INSERT INTO admin_password_resets
+      (admin_user_id, requested_by, token_hash, account_fingerprint, created_at, expires_at) VALUES (?, NULL, ?, ?, ?, ?)`)
+      .run(user.id, digest(token), fingerprint(user), now, now + 30 * 60_000);
+    recordAdminAuditLog({adminUserId:null, action:'admin_password_reset.self_request', targetType:'admin_user', targetId:user.id, details:null});
+    return {id:Number(result.lastInsertRowid), userId:user.id as number, token, email:user.email as string, name:user.name as string | null};
+  }).immediate();
+}
+
 export function revokePasswordReset(id: number) {
   db.prepare('UPDATE admin_password_resets SET revoked_at = ? WHERE id = ? AND used_at IS NULL').run(Date.now(), id);
 }
@@ -46,11 +65,11 @@ function validReset(token: unknown) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw invalid();
   const reset = db.prepare(`SELECT r.*, u.email, u.name, u.password_hash, u.role, u.authority_role, u.active
     FROM admin_password_resets r JOIN admin_users u ON u.id = r.admin_user_id
-    JOIN admin_users issuer ON issuer.id = r.requested_by
+    LEFT JOIN admin_users issuer ON issuer.id = r.requested_by
     WHERE r.token_hash = ? AND r.used_at IS NULL AND r.revoked_at IS NULL AND r.expires_at > ?
-      AND u.active = 1 AND issuer.active = 1 AND issuer.authority_role = 'owner'`)
+      AND u.active = 1 AND (r.requested_by IS NULL OR (issuer.active = 1 AND issuer.authority_role = 'owner'))`)
     .get(digest(token), Date.now()) as any;
-  if (!reset || (reset.authority_role || reset.role) === 'owner' || fingerprint(reset) !== reset.account_fingerprint) throw invalid();
+  if (!reset || (reset.requested_by !== null && (reset.authority_role || reset.role) === 'owner') || fingerprint(reset) !== reset.account_fingerprint) throw invalid();
   return reset;
 }
 

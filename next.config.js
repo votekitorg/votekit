@@ -29,7 +29,7 @@ const nextConfig = {
         headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }]
       },
       {
-        source: '/admin/reset-password',
+        source: '/admin/:page(reset-password|forgot-password)',
         headers: [
           { key: 'Referrer-Policy', value: 'no-referrer' },
           { key: 'Cache-Control', value: 'no-store, max-age=0' }

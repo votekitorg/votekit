@@ -5,8 +5,8 @@ Owner selects **Send password reset** for an active non-Owner account in
 Organisation Roles and confirms the recipient. The existing email address is
 used; no manual password entry or account deactivation. Recipient opens a link,
 enters and confirms a new password, then signs in normally. No automatic email
-is sent to Guy or any real account during release/testing. No public reset-request
-endpoint, Owner-account recovery or changes to invitation/role permissions.
+is sent to Guy or any real account during release/testing. Self-service recovery and Owner-account recovery were added in v0.15.4; see
+[self-service recovery](self-service-password-reset.md). Invitation and role permissions remain unchanged.
 
 ## Security and data design
 - Additive `admin_password_resets` table; 256-bit random token, SHA-256 digest

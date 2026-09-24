@@ -4,12 +4,16 @@ import path from 'node:path';
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import bcrypt from 'bcryptjs';
+import Database from 'better-sqlite3';
+import crypto from 'node:crypto';
+const background = vi.hoisted(() => [] as Array<() => Promise<void>>);
+vi.mock('next/server', async original => ({...await original<any>(), after:vi.fn((fn:() => Promise<void>) => background.push(fn))}));
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'votekit-reset-'));
 process.env.DATABASE_PATH = path.join(tmp, 'test.db');
 process.env.VOTEKIT_PUBLIC_URL = 'https://votekit.example.invalid';
 vi.mock('@/lib/email', async original => ({...await original<any>(), sendAdminPasswordResetEmail:vi.fn(async () => ({success:true}))}));
-let db:any, auth:any, reset:any, send:any, complete:any, mail:any;
+let db:any, auth:any, reset:any, send:any, complete:any, mail:any, requestReset:any, migrate:any;
 const ids:Record<string,number> = {};
 const initialPassword = 'test-only-'.repeat(3);
 const replacement = 'new-test-only-'.repeat(3);
@@ -27,8 +31,9 @@ async function issue() {
 }
 function ageRequests() { db.prepare('UPDATE admin_password_resets SET created_at = created_at - 61000').run(); }
 beforeAll(async()=>{
-  db=(await import('@/lib/db')).default;auth=await import('@/lib/auth');reset=await import('@/lib/admin-password-reset');
+  db=(await import('@/lib/db')).default;migrate=(await import('@/lib/db')).runPasswordResetMigration;auth=await import('@/lib/auth');reset=await import('@/lib/admin-password-reset');
   send=(await import('@/app/api/admin/password-resets/route')).POST;
+  requestReset=(await import('@/app/api/admin/password-resets/request/route')).POST;
   complete=(await import('@/app/api/admin/password-resets/complete/route')).POST;
   mail=(await import('@/lib/email')).sendAdminPasswordResetEmail;
   oldHash=await bcrypt.hash(initialPassword,4);
@@ -38,6 +43,7 @@ beforeAll(async()=>{
   }
 });
 beforeEach(()=>{
+  background.length=0;
   mail.mockReset();mail.mockResolvedValue({success:true});
   db.prepare('DELETE FROM admin_password_resets').run();db.prepare('DELETE FROM email_rate_limits').run();
   db.prepare('DELETE FROM admin_audit_log').run();db.prepare('DELETE FROM sessions').run();
@@ -152,5 +158,111 @@ describe('Owner-assisted password resets',()=>{
     db.prepare('DELETE FROM email_rate_limits').run();db.prepare('INSERT INTO email_rate_limits(email,attempt_count,reset_time) VALUES (?,?,?)').run(key,100,new Date(Date.now()+3600000).toISOString());
     expect((await complete(req({action:'inspect',token:'invalid'},'missing'))).status).toBe(429);
     expect(db.prepare('SELECT count(*) AS n FROM admin_login_attempts').get().n).toBe(0);
+  });
+});
+
+
+async function publicRequest(email: string, flush=true) {
+  const response = await requestReset(req({email}, 'missing', true, '/request'));
+  if (flush) await flushBackground();
+  return response;
+}
+async function flushBackground() { while (background.length) await background.shift()!(); }
+function mailedToken() { return new URLSearchParams(new URL(mail.mock.calls.at(-1)[0].resetUrl).hash.slice(1)).get('token')!; }
+
+describe('Self-service password recovery', () => {
+  it('responds before account lookup or delivery, identically for active, inactive and unknown accounts', async () => {
+    const replies=[];
+    for (const email of ['ro@example.invalid','inactive@example.invalid','missing@example.invalid']) {
+      const response=await publicRequest(email,false);
+      expect(response.status).toBe(200);replies.push(await response.json());
+    }
+    expect(replies[0]).toEqual(replies[1]);expect(replies[0]).toEqual(replies[2]);
+    expect(mail).not.toHaveBeenCalled();expect(db.prepare('SELECT count(*) AS n FROM admin_password_resets').get().n).toBe(0);
+    await flushBackground();expect(mail).toHaveBeenCalledTimes(1);
+    expect(mail.mock.calls[0][0].selfService).toBe(true);
+    expect(db.prepare('SELECT requested_by FROM admin_password_resets').get().requested_by).toBeNull();
+    expect(db.prepare("SELECT admin_user_id FROM admin_audit_log WHERE action='admin_password_reset.self_request'").get().admin_user_id).toBeNull();
+  });
+  it('allows every active role including Owner to recover without role or assignment changes', async () => {
+    const teams=JSON.stringify(db.prepare('SELECT * FROM election_team_members').all());
+    for (const name of ['owner','ro','admin','observer']) {
+      const before=db.prepare('SELECT * FROM admin_users WHERE id=?').get(ids[name]);
+      expect((await publicRequest('  '+name.toUpperCase()+'@EXAMPLE.INVALID  ')).status).toBe(200);
+      const token=mailedToken();
+      expect(db.prepare('SELECT * FROM admin_users WHERE id=?').get(ids[name])).toEqual(before);
+      const result=await complete(req({action:'complete',token,password:replacement,confirmation:replacement},'missing'));
+      expect(result.status).toBe(200);
+      const after=db.prepare('SELECT * FROM admin_users WHERE id=?').get(ids[name]);
+      expect(after.authority_role).toBe(before.authority_role);expect(after.active).toBe(before.active);
+      expect(auth.getAdminSession('reset-fixture-'+name)).toBeNull();
+      expect(await auth.verifyAdminLogin(name+'@example.invalid',replacement)).toBeTruthy();
+    }
+    expect(JSON.stringify(db.prepare('SELECT * FROM election_team_members').all())).toBe(teams);
+  });
+  it('rejects CSRF, malformed and oversized email input without scheduling delivery', async () => {
+    expect((await requestReset(req({email:'ro@example.invalid'},'missing',false))).status).toBe(403);
+    for (const email of ['',null,7,'invalid','x'.repeat(260)+'@example.invalid']) expect((await requestReset(req({email},'missing'))).status).toBe(400);
+    expect(background.length).toBe(0);expect(mail).not.toHaveBeenCalled();
+  });
+  it('keeps older links valid through repeated requests but consumes all links on completion', async () => {
+    const original=await issue();ageRequests();
+    await publicRequest('ro@example.invalid');const newer=mailedToken();
+    expect(reset.inspectPasswordReset(original)).toBeTruthy();expect(reset.inspectPasswordReset(newer)).toBeTruthy();
+    await reset.completePasswordReset(original,replacement,replacement);
+    expect(()=>reset.inspectPasswordReset(original)).toThrow();expect(()=>reset.inspectPasswordReset(newer)).toThrow();
+  });
+  it('revokes failed deliveries, does not expose failure or disturb another valid link', async () => {
+    const original=await issue();ageRequests();mail.mockResolvedValue({success:false});
+    const response=await publicRequest('ro@example.invalid');const failed=mailedToken();
+    expect(response.status).toBe(200);expect((await response.json()).success).toBe(true);
+    expect(()=>reset.inspectPasswordReset(failed)).toThrow();expect(reset.inspectPasswordReset(original)).toBeTruthy();
+    expect(auth.getAdminSession('reset-fixture-ro')).toBeTruthy();
+  });
+  it('limits IP, address and global requests without changing the public response or login counters', async () => {
+    const email='ro@example.invalid';
+    const normal=await (await publicRequest('missing@example.invalid')).json();
+    const keys=[['password-reset-request:ip:'+auth.getTrustedRequestIp(req({})),20],
+      ['password-reset-request:email:'+crypto.createHash('sha256').update(email).digest('hex'),5],
+      ['password-reset-request:global',200]];
+    for (const [key,limit] of keys) {
+      db.prepare('DELETE FROM email_rate_limits').run();
+      db.prepare('INSERT INTO email_rate_limits(email,attempt_count,reset_time) VALUES (?,?,?)').run(key,limit,new Date(Date.now()+3600000).toISOString());
+      const response=await publicRequest(email);expect(response.status).toBe(200);expect(await response.json()).toEqual(normal);
+    }
+    expect(mail).not.toHaveBeenCalled();expect(db.prepare('SELECT count(*) AS n FROM admin_login_attempts').get().n).toBe(0);
+  });
+  it('atomically limits concurrent requests and enforces account cooldown across assisted and public requests', async () => {
+    await Promise.all(Array.from({length:8},()=>publicRequest('ro@example.invalid',false)));
+    await Promise.all(background.splice(0).map(fn=>fn()));
+    expect(mail).toHaveBeenCalledTimes(1);
+    expect((await send(req({id:ids.ro}))).status).toBe(429);
+    expect(db.prepare('SELECT count(*) AS n FROM admin_password_resets').get().n).toBe(1);
+  });
+  it('self-service links are independent of another Owner but invalidated by target changes', async () => {
+    await publicRequest('ro@example.invalid');const token=mailedToken();
+    db.prepare('UPDATE admin_users SET active=0 WHERE id=?').run(ids.owner);
+    expect(reset.inspectPasswordReset(token)).toBeTruthy();
+    db.prepare('UPDATE admin_users SET active=0 WHERE id=?').run(ids.ro);
+    expect(()=>reset.inspectPasswordReset(token)).toThrow();
+  });
+  it('preserves populated legacy reset records, indexes and sequence through idempotent migration', () => {
+    const legacy=new Database(':memory:');legacy.pragma('foreign_keys=ON');
+    legacy.exec(`CREATE TABLE admin_users(id INTEGER PRIMARY KEY); INSERT INTO admin_users VALUES(1),(2);
+      CREATE TABLE admin_password_resets(id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL REFERENCES admin_users(id),
+      requested_by INTEGER NOT NULL REFERENCES admin_users(id), token_hash TEXT NOT NULL UNIQUE, account_fingerprint TEXT NOT NULL,
+      created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER, revoked_at INTEGER);
+      CREATE INDEX idx_password_resets_user ON admin_password_resets(admin_user_id,created_at);
+      CREATE INDEX idx_password_resets_actor ON admin_password_resets(requested_by,created_at);
+      INSERT INTO admin_password_resets VALUES(4,2,1,'hash','fingerprint',1,2,NULL,NULL);
+      UPDATE sqlite_sequence SET seq=99 WHERE name='admin_password_resets';`);
+    const before=legacy.prepare('SELECT * FROM admin_password_resets').all();
+    migrate(legacy);migrate(legacy);
+    expect(legacy.prepare('SELECT * FROM admin_password_resets').all()).toEqual(before);
+    expect(legacy.prepare("SELECT seq FROM sqlite_sequence WHERE name='admin_password_resets'").get()).toEqual({seq:99});
+    expect(legacy.pragma('foreign_key_check')).toEqual([]);
+    expect(legacy.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='index' AND name LIKE 'idx_password_resets_%'").get()).toEqual({n:2});
+    expect(legacy.prepare("INSERT INTO admin_password_resets(admin_user_id,requested_by,token_hash,account_fingerprint,created_at,expires_at) VALUES(1,NULL,'next','fp',1,2)").run().lastInsertRowid).toBe(100);
+    legacy.close();
   });
 });

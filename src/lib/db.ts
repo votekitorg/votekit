@@ -348,19 +348,35 @@ function runMigrations() {
   runFullPreferenceDistributionMigration(database);
   runBallotDistributionMigration(database);
   runPostElectionMigration(database);
-  database.exec(`CREATE TABLE IF NOT EXISTS admin_password_resets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    admin_user_id INTEGER NOT NULL REFERENCES admin_users(id),
-    requested_by INTEGER NOT NULL REFERENCES admin_users(id),
-    token_hash TEXT NOT NULL UNIQUE,
-    account_fingerprint TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL,
-    used_at INTEGER,
-    revoked_at INTEGER
-  );
-  CREATE INDEX IF NOT EXISTS idx_password_resets_user ON admin_password_resets(admin_user_id, created_at);
-  CREATE INDEX IF NOT EXISTS idx_password_resets_actor ON admin_password_resets(requested_by, created_at);`);
+  runPasswordResetMigration(database);
+}
+
+export function runPasswordResetMigration(database: Database.Database) {
+  database.transaction(() => {
+    const columns = database.prepare('PRAGMA table_info(admin_password_resets)').all() as Array<{name:string;notnull:number}>;
+    const rebuild = columns.some(c => c.name === 'requested_by' && c.notnull === 1);
+    const table = rebuild ? 'admin_password_resets_v2' : 'admin_password_resets';
+    database.exec(`CREATE TABLE IF NOT EXISTS ${table} (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      admin_user_id INTEGER NOT NULL REFERENCES admin_users(id),
+      requested_by INTEGER REFERENCES admin_users(id),
+      token_hash TEXT NOT NULL UNIQUE,
+      account_fingerprint TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER,
+      revoked_at INTEGER
+    )`);
+    if (rebuild) {
+      const sequence = database.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'admin_password_resets'").get() as {seq:number} | undefined;
+      database.exec(`INSERT INTO admin_password_resets_v2 SELECT * FROM admin_password_resets;
+        DROP TABLE admin_password_resets;
+        ALTER TABLE admin_password_resets_v2 RENAME TO admin_password_resets;`);
+      if (sequence) database.prepare("UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'admin_password_resets'").run(sequence.seq);
+    }
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_password_resets_user ON admin_password_resets(admin_user_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_password_resets_actor ON admin_password_resets(requested_by, created_at);`);
+  }).immediate();
 }
 
 function tableInfo(database: Database.Database, tableName: string): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {

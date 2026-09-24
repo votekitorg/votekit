@@ -134,6 +134,7 @@ export default function AdminLogin() {
               </button>
             </div>
           </form>
+          <div className="mt-4 text-center"><Link href="/admin/forgot-password" className="text-primary hover:text-primary-dark text-sm font-medium underline">Forgot password?</Link></div>
 
           <div className="mt-8">
             <div className="relative">
@@ -147,7 +148,7 @@ export default function AdminLogin() {
 
             <div className="mt-4 text-center">
               <p className="text-sm text-gray-600">
-                Contact your election organiser or account administrator if you need access or have forgotten your password.
+                Contact your election organiser or account administrator if you need access to VoteKit.
               </p>
             </div>
           </div>

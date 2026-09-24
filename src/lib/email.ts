@@ -295,14 +295,14 @@ export function generateVerificationCode(): string {
 
 // Never log transport errors for recovery mail: they can contain the link payload.
 export async function sendAdminPasswordResetEmail(input: {
-  email: string; name: string | null; resetUrl?: string;
+  email: string; name: string | null; resetUrl?: string; selfService?: boolean;
 }): Promise<EmailResult> {
   if (isRecipientSuppressed(input.email)) return { success: false };
   const changed = !input.resetUrl;
   const heading = changed ? 'Your VoteKit password was changed' : 'Reset your VoteKit password';
   const copy = changed
     ? 'Your password has been changed and existing sessions have been signed out. If you did not make this change, contact your VoteKit Owner immediately.'
-    : 'Your VoteKit Owner requested a password reset for your account. This single-use link expires in 30 minutes. If you were not expecting this, you can ignore it; your password has not changed.';
+    : `${input.selfService ? 'A password reset was requested from the VoteKit sign-in page.' : 'Your VoteKit Owner requested a password reset for your account.'} This single-use link expires in 30 minutes. If you were not expecting this, you can ignore it; your password has not changed.`;
   try {
     const result = await getResend().emails.send({
       ...senderOptions(), to: input.email, subject: heading,

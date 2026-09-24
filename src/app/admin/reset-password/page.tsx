@@ -20,7 +20,7 @@ export default function ResetPasswordPage() {
     window.history.replaceState(null, '', window.location.pathname);
     setToken(resetToken);
     if (!resetToken) {
-      setError('This reset link is incomplete. Open the link in your reset email, or ask the Owner for a new one.');
+      setError('This reset link is incomplete. Open the link in your reset email, or request a new one below.');
       setStatus('invalid');
       return;
     }
@@ -56,7 +56,7 @@ export default function ResetPasswordPage() {
       <div className="bg-primary p-6 text-white"><p className="text-sm text-green-100">VoteKit Election Platform</p><h1 className="mt-1 text-2xl font-bold">Reset your password</h1></div>
       <div className="p-6 sm:p-8">
         {status === 'loading' && <p role="status">Checking your reset link…</p>}
-        {status === 'invalid' && <><div role="alert" className="alert-error">{error}</div><Link href="/admin/login" className="mt-5 inline-block text-primary">Back to sign in</Link></>}
+        {status === 'invalid' && <><div role="alert" className="alert-error">{error}</div><Link href="/admin/forgot-password" className="mt-5 inline-block text-primary underline">Request a new reset link</Link></>}
         {status === 'complete' && <div role="status">
           <h2 className="text-xl font-semibold">Password updated</h2>
           <p className="mt-3 text-gray-600">Your existing sessions have been signed out. Sign in with your new password. Your role and election access have not changed.</p>
