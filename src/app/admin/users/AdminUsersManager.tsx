@@ -110,6 +110,22 @@ export default function AdminUsersManager({
     return user.role === 'admin' || user.role === 'observer';
   }
 
+  async function sendPasswordReset(user: AdminUser) {
+    if (!window.confirm(`Send a password reset email to ${user.email}? The link will expire in 30 minutes. Their password and access will stay unchanged until they use it.`)) return;
+    resetMessages();
+    setLoadingAction(`reset-${user.id}`);
+    try {
+      const response = await csrfFetch('/api/admin/password-resets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: user.id })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not send password reset');
+      setSuccess(`Password reset email sent to ${user.email}. The link expires in 30 minutes.`);
+    } catch (err: any) {
+      setError(err.message || 'Could not send password reset');
+    } finally { setLoadingAction(''); }
+  }
+
   async function updateUser(id: number, changes: Partial<AdminUser>) {
     resetMessages();
     setLoadingAction(`user-${id}`);
@@ -223,6 +239,11 @@ export default function AdminUsersManager({
                   <td className="px-6 py-4"><span className={`badge ${user.active ? 'badge-green' : 'badge-gray'}`}>{user.active ? 'Active' : 'Inactive'}</span></td>
                   <td className="px-6 py-4 text-sm text-gray-600">{user.last_login_at ? new Date(user.last_login_at).toLocaleString('en-AU') : 'Never'}</td>
                   <td className="px-6 py-4 text-sm">
+                    {currentUser.role === 'owner' && user.active && user.role !== 'owner' && <button type="button"
+                      disabled={Boolean(loadingAction)} onClick={() => sendPasswordReset(user)}
+                      className="mb-2 block min-h-11 text-left font-medium text-primary hover:underline disabled:opacity-50">
+                      {loadingAction === `reset-${user.id}` ? 'Sending reset…' : 'Send password reset'}
+                    </button>}
                     {manageable ? <button type="button" disabled={Boolean(loadingAction)} onClick={() => updateUser(user.id, { active: !user.active })} className={user.active ? 'text-red-700 hover:text-red-900' : 'text-primary hover:text-primary-dark'}>{user.active ? 'Deactivate' : 'Reactivate'}</button>
                       : <span className="text-gray-400">{user.id === currentUser.adminUserId ? 'Your account' : 'Protected'}</span>}
                   </td>

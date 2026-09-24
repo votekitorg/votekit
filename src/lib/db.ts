@@ -348,6 +348,19 @@ function runMigrations() {
   runFullPreferenceDistributionMigration(database);
   runBallotDistributionMigration(database);
   runPostElectionMigration(database);
+  database.exec(`CREATE TABLE IF NOT EXISTS admin_password_resets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_user_id INTEGER NOT NULL REFERENCES admin_users(id),
+    requested_by INTEGER NOT NULL REFERENCES admin_users(id),
+    token_hash TEXT NOT NULL UNIQUE,
+    account_fingerprint TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    used_at INTEGER,
+    revoked_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_password_resets_user ON admin_password_resets(admin_user_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_password_resets_actor ON admin_password_resets(requested_by, created_at);`);
 }
 
 function tableInfo(database: Database.Database, tableName: string): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {

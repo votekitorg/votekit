@@ -27,6 +27,13 @@ const nextConfig = {
       {
         source: '/admin/:path*',
         headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }]
+      },
+      {
+        source: '/admin/reset-password',
+        headers: [
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'Cache-Control', value: 'no-store, max-age=0' }
+        ]
       }
     ];
   },

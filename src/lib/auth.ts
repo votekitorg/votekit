@@ -273,6 +273,11 @@ export async function updateAdminUser(
   if (input.password || input.role !== undefined || input.active === false) {
     db.prepare('DELETE FROM sessions WHERE admin_user_id = ?').run(id);
   }
+  if (input.password || input.role !== undefined || input.email !== undefined || input.active !== undefined) {
+    db.prepare(`UPDATE admin_password_resets SET revoked_at = ?
+      WHERE (admin_user_id = ? OR requested_by = ?) AND used_at IS NULL AND revoked_at IS NULL`)
+      .run(Date.now(), id, id);
+  }
 
   const user = db.prepare('SELECT * FROM admin_users WHERE id = ?').get(id) as any;
   return publicAdminUser(user);

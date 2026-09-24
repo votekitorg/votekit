@@ -292,3 +292,23 @@ export function cleanupEmailRateLimit(): void {
 export function generateVerificationCode(): string {
   return crypto.randomInt(100000, 1000000).toString();
 }
+
+// Never log transport errors for recovery mail: they can contain the link payload.
+export async function sendAdminPasswordResetEmail(input: {
+  email: string; name: string | null; resetUrl?: string;
+}): Promise<EmailResult> {
+  if (isRecipientSuppressed(input.email)) return { success: false };
+  const changed = !input.resetUrl;
+  const heading = changed ? 'Your VoteKit password was changed' : 'Reset your VoteKit password';
+  const copy = changed
+    ? 'Your password has been changed and existing sessions have been signed out. If you did not make this change, contact your VoteKit Owner immediately.'
+    : 'Your VoteKit Owner requested a password reset for your account. This single-use link expires in 30 minutes. If you were not expecting this, you can ignore it; your password has not changed.';
+  try {
+    const result = await getResend().emails.send({
+      ...senderOptions(), to: input.email, subject: heading,
+      html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px"><h1 style="color:#00843D">VoteKit</h1><h2>${heading}</h2><p>Hello ${escapeHtml(input.name || 'there')},</p><p>${copy}</p>${input.resetUrl ? `<p><a href="${escapeHtml(input.resetUrl)}" style="background:#00843D;color:white;padding:12px 20px;display:inline-block;border-radius:6px">Reset password</a></p>` : ''}</div>`,
+      text: `${heading}\n\nHello ${input.name || 'there'},\n\n${copy}${input.resetUrl ? '\n\nReset password: ' + input.resetUrl : ''}`
+    });
+    return result.error ? {success:false} : {success:true, messageId:result.data?.id};
+  } catch { return {success:false}; }
+}
