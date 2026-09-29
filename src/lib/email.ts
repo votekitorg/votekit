@@ -320,8 +320,8 @@ export async function sendPublicPollConfirmation(input:{email:string;title:strin
   try {
     const result=await getResend().emails.send({
       ...senderOptions(),to:input.email,subject:heading,
-      html:`<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px"><h1 style="color:#00843D">VoteKit</h1><h2>${heading}</h2><p>A ballot was submitted for ${escapeHtml(input.title)} using this email address.</p><p>If you submitted it, open the link and press Confirm ballot before ${escapeHtml(deadline)}. If you did not submit it, ignore this email. Your email is not used for campaign mail.</p><p><a href="${escapeHtml(input.url)}">Confirm ballot</a></p><p>Only the first ballot you confirm for this poll will count as email-confirmed.</p></div>`,
-      text:`${heading}\n\nA ballot was submitted for ${input.title} using this email address. If you submitted it, open the link and press Confirm ballot before ${deadline}. Otherwise ignore this email. Only the first ballot you confirm will count as email-confirmed.\n\n${input.url}`
+      html:`<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px"><h1 style="color:#00843D">VoteKit</h1><h2>${heading}</h2><p>A ballot was submitted for ${escapeHtml(input.title)} using this email address.</p><p>If you submitted it, click Confirm ballot below before ${escapeHtml(deadline)}. If you did not submit it, ignore this email. Your email is not used for campaign mail.</p><p><a href="${escapeHtml(input.url)}" style="background:#00843D;color:white;padding:12px 20px;display:inline-block;border-radius:6px;text-decoration:none">Confirm ballot</a></p><p>Only the first ballot you confirm for this poll will count as email-confirmed.</p></div>`,
+      text:`${heading}\n\nA ballot was submitted for ${input.title} using this email address. If you submitted it, click Confirm ballot below before ${deadline}. The confirmation page will show when it is complete. Otherwise ignore this email. Only the first ballot you confirm will count as email-confirmed.\n\n${input.url}`
     });
     return result.error?{success:false}:{success:true};
   }catch{return {success:false};}
