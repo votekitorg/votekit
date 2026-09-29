@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { runPublicPollMigration } from './public-poll-schema';
 
 // Only initialize database if not in build process
 let db: Database.Database | null = null;
@@ -349,6 +350,7 @@ function runMigrations() {
   runBallotDistributionMigration(database);
   runPostElectionMigration(database);
   runPasswordResetMigration(database);
+  runPublicPollMigration(database);
 }
 
 export function runPasswordResetMigration(database: Database.Database) {

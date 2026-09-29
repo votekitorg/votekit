@@ -21,6 +21,13 @@ const nextConfig = {
         ]
       },
       {
+        source: '/poll/:path*',
+        headers: [
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'Cache-Control', value: 'no-store, max-age=0' }
+        ]
+      },
+      {
         source: '/api/:path*',
         headers: [{ key: 'Cache-Control', value: 'no-store, max-age=0' }]
       },
