@@ -308,7 +308,9 @@ must not be approved for a real election until the operational gates in
 
 ## License
 
-This project is open source. Please ensure compliance with local election laws and regulations when deploying for official use.
+VoteKit is licensed under the [ISC License](LICENSE). Copyright (c) 2026 VoteKit contributors.
+
+Please ensure compliance with local election laws and regulations when deploying for official use.
 
 ## Support
 
