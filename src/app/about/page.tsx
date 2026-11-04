@@ -129,9 +129,9 @@ export default function AboutPage() {
               <div className="ml-5">
                 <h4 className="text-lg font-semibold text-gray-900">Results after close</h4>
                 <p className="text-gray-600 mt-1">
-                  Results are only revealed after the voting period ends. No one -- not even
-                  administrators -- can see results while voting is still open. This prevents
-                  tactical voting and ensures everyone votes based on their own views.
+                  VoteKit doesn&apos;t show results to anyone, including admins, until voting
+                  closes. This prevents tactical voting and ensures everyone votes based on
+                  their own views.
                 </p>
               </div>
             </div>
@@ -400,10 +400,8 @@ export default function AboutPage() {
               </div>
               <h4 className="text-lg font-semibold text-gray-900 mb-2">Anonymous Voting</h4>
               <p className="text-gray-600 text-sm">
-                Your vote is stored separately from your identity. The system records
-                <em> that</em> you voted (to prevent double-voting) but cannot link your
-                identity to <em>how</em> you voted. Not even administrators can see
-                individual votes.
+                Your ballot is stored separately from the record that you voted, so nobody
+                using VoteKit, including admins, can see who cast which ballot.
               </p>
             </div>
 
@@ -415,8 +413,8 @@ export default function AboutPage() {
               </div>
               <h4 className="text-lg font-semibold text-gray-900 mb-2">One Voter, One Vote</h4>
               <p className="text-gray-600 text-sm">
-                Only verified voters on the electoral roll can vote. Each voter can only
-                vote once per election, enforced at the database level. Email verification
+                Each registered voter, or each single-use code, can vote once per election,
+                enforced at the database level. Email verification
                 codes expire after 10 minutes and are limited to 3 per hour.
               </p>
             </div>
@@ -443,9 +441,8 @@ export default function AboutPage() {
               </div>
               <h4 className="text-lg font-semibold text-gray-900 mb-2">Open Source</h4>
               <p className="text-gray-600 text-sm mb-3">
-                The entire platform is open source. Anyone can inspect the code to
-                verify that it works correctly and that votes are handled securely.
-                Transparency builds trust.
+                The entire platform is open source. The code is public for anyone to
+                review. Transparency builds trust.
               </p>
               <a
                 href="https://github.com/votekitorg/votekit"
@@ -489,9 +486,9 @@ export default function AboutPage() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h4 className="font-semibold text-gray-900 mb-2">Can administrators see how I voted?</h4>
               <p className="text-gray-600 text-sm">
-                No. The system is designed so that your identity (that you voted) is stored
-                separately from your actual vote. There is no technical way for anyone -- including
-                administrators or developers -- to link a specific vote to a specific voter.
+                Not through VoteKit. The admin screens never show who cast which ballot. Your
+                ballot is stored separately from the record that you voted, and the ballots are
+                shuffled when voting closes.
               </p>
             </div>
 
